@@ -45,7 +45,7 @@ served over http, not file://)
 | look (full 360) | mouse (click once to take hold of the view) |
 | pick a flower | look at it, come close, click (or `E`) |
 | the studio / the field | `Tab` |
-| look around the studio | drag; scroll to come closer |
+| look around the studio | drag; scroll to come closer or step far back |
 | see a stem properly | rest on it in the bag at the bottom |
 | take a stem | click it in the bag |
 | place a stem | carry it near the vessel — it previews how it will stand — click to set |
@@ -54,15 +54,18 @@ served over http, not file://)
 | put a held stem back in the bag | right-click |
 | photograph | `P` — saves a print, bordered and grained |
 | let the arrangement go | press and hold the words in the corner |
-| wind on/off | `M` |
+| sound on/off | `M` — wind in the field; in the studio, a small radio plays a slow programme (synthesized, like everything else) |
 
 There is a quiet back door for the impatient: `[` and `]` move the sky.
 
 ## what it is made of
 
 Everything is procedural — every flower is grown from a seed, every vessel
-is turned on a lathe in code, the sky is one shader. Three.js (vendored in
-`lib/`), five small source files, and no other machinery.
+is turned on a lathe in code, the sky is one shader, the cloth's weave and
+the walls' plaster are drawn onto canvases at load, the studio's light
+comes from a painted environment baked at startup, and the radio programme
+is composed as it plays. Three.js (vendored in `lib/`), five small source
+files, and no other machinery.
 
 - `src/sky.js` — the colour score and the sky dome
 - `src/flower.js` — flowers and whips, grown from seeds

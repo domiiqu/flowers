@@ -5,8 +5,87 @@ import { samplePalette } from './sky.js';
 const TABLE_Y = 1.02; // top of the cloth
 const TARGET = new THREE.Vector3(0, 1.18, 0);
 
+// ---- procedural surfaces — every material here is drawn, not downloaded
+function canvasTex(size, draw, repX = 1, repY = 1) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repX, repY);
+  return t;
+}
+
+function linenTex(repX, repY) {
+  return canvasTex(256, (ctx, s) => {
+    const img = ctx.createImageData(s, s);
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const over = ((x >> 1) + (y >> 2)) % 2; // a simple over-under weave
+        let v = 226 + over * 14 + (Math.random() - 0.5) * 16;
+        if (Math.random() < 0.002) v -= 30; // a slub in the thread
+        const i = (y * s + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, repX, repY);
+}
+
+function plasterTex() {
+  return canvasTex(256, (ctx, s) => {
+    ctx.fillStyle = 'rgb(128,128,128)';
+    ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 900; i++) {
+      const g = 100 + Math.random() * 56;
+      ctx.fillStyle = `rgba(${g},${g},${g},${0.04 + Math.random() * 0.08})`;
+      ctx.beginPath();
+      ctx.ellipse(Math.random() * s, Math.random() * s,
+        1 + Math.random() * 10, 1 + Math.random() * 10, Math.random() * 3, 0, 7);
+      ctx.fill();
+    }
+  }, 5, 3);
+}
+
+function clayTex() {
+  return canvasTex(256, (ctx, s) => {
+    ctx.fillStyle = 'rgb(128,128,128)';
+    ctx.fillRect(0, 0, s, s);
+    // faint throwing rings
+    for (let y = 0; y < s; y += 3 + Math.random() * 5) {
+      const g = 118 + Math.random() * 20;
+      ctx.fillStyle = `rgba(${g},${g},${g},0.35)`;
+      ctx.fillRect(0, y, s, 1 + Math.random() * 2);
+    }
+    for (let i = 0; i < 500; i++) {
+      const g = 90 + Math.random() * 76;
+      ctx.fillStyle = `rgba(${g},${g},${g},${0.1 + Math.random() * 0.15})`;
+      ctx.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+  }, 3, 2);
+}
+
+function glazeTex() {
+  return canvasTex(256, (ctx, s) => {
+    ctx.fillStyle = 'rgb(92,92,92)';
+    ctx.fillRect(0, 0, s, s);
+    // drips of thicker glaze catch more light
+    for (let i = 0; i < 22; i++) {
+      const x = Math.random() * s, w = 4 + Math.random() * 14;
+      const g = 60 + Math.random() * 40;
+      const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+      grad.addColorStop(0, `rgba(${g},${g},${g},0)`);
+      grad.addColorStop(0.5, `rgba(${g},${g},${g},0.5)`);
+      grad.addColorStop(1, `rgba(${g},${g},${g},0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, 0, w, s);
+    }
+  }, 2, 1);
+}
+
 // r/h profile pairs -> lathe. Everything in here is turned, like clay.
-function lathe(profile, segments = 40) {
+function lathe(profile, segments = 64) {
   const pts = profile.map(([r, h]) => new THREE.Vector2(r, h));
   return new THREE.LatheGeometry(pts, segments);
 }
@@ -35,6 +114,7 @@ const VASES = [
       ]), 0.012);
       return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
         color: 0xe6dcc4, roughness: 0.95, side: THREE.DoubleSide,
+        bumpMap: clayTex(), bumpScale: 0.6, envMapIntensity: 0.45,
       }));
     },
     mouthR: 0.062, mouthY: 0.415, dip: 0.16, maxSplay: 1.0,
@@ -47,7 +127,8 @@ const VASES = [
         [0.05, 0.30], [0.05, 0.35], [0.069, 0.405],
       ]);
       return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-        color: 0xecebe2, roughness: 0.35, side: THREE.DoubleSide,
+        color: 0xecebe2, roughness: 1.0, roughnessMap: glazeTex(),
+        side: THREE.DoubleSide, envMapIntensity: 0.9,
       }));
     },
     mouthR: 0.055, mouthY: 0.405, dip: 0.16, maxSplay: 0.85,
@@ -61,6 +142,7 @@ const VASES = [
       ]);
       return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
         color: 0x9d9787, roughness: 0.55, metalness: 0.45, side: THREE.DoubleSide,
+        envMapIntensity: 0.8,
       }));
     },
     mouthR: 0.17, mouthY: 0.24, dip: 0.015, maxSplay: 1.35,
@@ -90,11 +172,12 @@ export class Studio {
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(1024, 1024);
     this.key.shadow.camera.left = -3.2; this.key.shadow.camera.right = 3.2;
-    this.key.shadow.camera.top = 4; this.key.shadow.camera.bottom = -0.5;
+    this.key.shadow.camera.top = 5.5; this.key.shadow.camera.bottom = -0.5;
     this.key.shadow.bias = -0.002;
+    this.key.shadow.radius = 5;
     this.scene.add(this.key);
 
-    this.plantMat = makePlantMaterial(uTime, false);
+    this.plantMat = makePlantMaterial(uTime, false, true);
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
 
@@ -119,17 +202,18 @@ export class Studio {
   }
 
   _buildRoom() {
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xa8b39a });
+    const wallMat = new THREE.MeshLambertMaterial({
+      color: 0xa8b39a, bumpMap: plasterTex(), bumpScale: 4 });
     this._wallMat = wallMat;
     this._wallBase = new THREE.Color(0xa8b39a);
     const walls = [
-      { pos: [0, 2, -4.25], rot: [0, 0, 0] },
-      { pos: [0, 2, 4.6], rot: [0, Math.PI, 0] },
-      { pos: [-4.0, 2, 0], rot: [0, Math.PI / 2, 0] },
-      { pos: [4.0, 2, 0], rot: [0, -Math.PI / 2, 0] },
+      { pos: [0, 2.6, -4.25], rot: [0, 0, 0] },
+      { pos: [0, 2.6, 4.6], rot: [0, Math.PI, 0] },
+      { pos: [-4.0, 2.6, 0], rot: [0, Math.PI / 2, 0] },
+      { pos: [4.0, 2.6, 0], rot: [0, -Math.PI / 2, 0] },
     ];
     for (const w of walls) {
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(18, 8), wallMat);
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(18, 10.5), wallMat);
       mesh.position.set(...w.pos);
       mesh.rotation.set(...w.rot);
       mesh.receiveShadow = true;
@@ -140,7 +224,7 @@ export class Studio {
     this._ceilBase = new THREE.Color(0x8f9884);
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(18, 18), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.y = 3.8;
+    ceiling.position.y = 5.4;
     this.scene.add(ceiling);
 
     const floorMat = new THREE.MeshLambertMaterial({ color: 0x8b8274 });
@@ -162,7 +246,10 @@ export class Studio {
       leg.castShadow = true;
       this.scene.add(leg);
     }
-    const clothMat = new THREE.MeshLambertMaterial({ color: 0xd9d2c0, side: THREE.DoubleSide });
+    const clothLinen = linenTex(9, 6);
+    const clothMat = new THREE.MeshStandardMaterial({
+      color: 0xd9d2c0, side: THREE.DoubleSide, roughness: 1,
+      map: clothLinen, bumpMap: clothLinen, bumpScale: 1.2, envMapIntensity: 0.3 });
     const clothTop = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.015, 1.08), clothMat);
     clothTop.position.set(0, TABLE_Y - 0.008, 0);
     clothTop.receiveShadow = true;
@@ -223,14 +310,14 @@ export class Studio {
   }
 
   zoom(dy) {
-    this.orbit.radius = THREE.MathUtils.clamp(this.orbit.radius + dy * 0.0016, 2.0, 3.4);
+    this.orbit.radius = THREE.MathUtils.clamp(this.orbit.radius + dy * 0.0022, 2.0, 5.2);
   }
 
   // ---- stems -------------------------------------------------------------
 
   holdStem(entry) {
     if (this.held || this.discarding) return false;
-    const built = buildStem(entry);
+    const built = buildStem(entry, 2);
     const mat = this.plantMat.clone();
     const mesh = new THREE.Mesh(built.geometry, mat);
     mesh.castShadow = true;
@@ -260,7 +347,7 @@ export class Studio {
   }
 
   _rebuildStem(s) {
-    const built = buildStem(s.entry);
+    const built = buildStem(s.entry, 2);
     s.mesh.geometry.dispose();
     s.mesh.geometry = built.geometry;
     s.built = built;
@@ -442,13 +529,15 @@ export class Studio {
     this._ceilMat.color.copy(this._ceilBase).multiplyScalar(day);
     this.scene.background = this._wallMat.color;
 
-    // orbiting, breathing camera
+    // orbiting, breathing camera; stepping back lifts the gaze so a
+    // tall arrangement is seen whole
     const o = this.orbit;
+    const lift = Math.max(0, o.radius - 2.9) * 0.3;
     this.camera.position.set(
       TARGET.x + o.radius * Math.sin(o.yaw) * Math.cos(o.pitch) + Math.sin(this._t * 0.23) * 0.012,
-      TARGET.y + o.radius * Math.sin(o.pitch) + Math.sin(this._t * 0.31) * 0.008,
+      TARGET.y + lift * 0.7 + o.radius * Math.sin(o.pitch) + Math.sin(this._t * 0.31) * 0.008,
       TARGET.z + o.radius * Math.cos(o.yaw) * Math.cos(o.pitch));
-    this.camera.lookAt(TARGET);
+    this.camera.lookAt(TARGET.x, TARGET.y + lift, TARGET.z);
 
     // the held stem previews its own placement; away from the vessel it
     // simply follows the hand

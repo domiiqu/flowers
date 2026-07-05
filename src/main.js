@@ -124,6 +124,41 @@ const studio = new Studio(uTime, {
   onMessage(t) { say(t); },
 });
 
+// Image-based light for the studio: a little painted world — grey-green
+// gradient, one tall warm window, one cool one — baked into an
+// environment map. This is what puts the sheen on the porcelain.
+function makeEnvironment() {
+  const scene = new THREE.Scene();
+  const geo = new THREE.SphereGeometry(8, 24, 16);
+  const pos = geo.attributes.position;
+  const colors = [];
+  const top = new THREE.Color(0.72, 0.75, 0.68), bottom = new THREE.Color(0.16, 0.15, 0.12);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const f = THREE.MathUtils.clamp(pos.getY(i) / 16 + 0.5, 0, 1);
+    c.copy(bottom).lerp(top, Math.pow(f, 1.4));
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  scene.add(new THREE.Mesh(geo,
+    new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true })));
+  const warm = new THREE.Mesh(new THREE.PlaneGeometry(3, 5),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 3.0, 2.3) }));
+  warm.position.set(5, 2.5, 2);
+  warm.lookAt(0, 1, 0);
+  scene.add(warm);
+  const cool = new THREE.Mesh(new THREE.PlaneGeometry(4, 3),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.9, 1.0, 1.25) }));
+  cool.position.set(-5, 3.5, -2);
+  cool.lookAt(0, 1, 0);
+  scene.add(cool);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromScene(scene, 0.04).texture;
+  pmrem.dispose();
+  return env;
+}
+studio.scene.environment = makeEnvironment();
+
 let mode = 'field';
 let switching = false;
 
@@ -134,6 +169,7 @@ function setMode(next) {
   setTimeout(() => {
     mode = next;
     document.body.dataset.mode = mode;
+    audio.setMode(mode);
     if (mode === 'studio') {
       document.exitPointerLock?.();
     }
@@ -338,12 +374,102 @@ function photograph() {
 }
 
 // ---------------------------------------------------------------- sound
+// The field has wind. The studio has a small radio across the room,
+// playing a slow, patient programme — pieces with pauses between them,
+// through a narrow old speaker, with dust on the needle. All synthesized;
+// there are no recordings anywhere in this work.
+function makeRadio(ctx, dest) {
+  const out = ctx.createGain();
+  out.gain.value = 0;
+  out.connect(dest);
+
+  // the cabinet: a narrow band and a little resonance
+  const speaker = ctx.createGain();
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 280;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2300;
+  const peak = ctx.createBiquadFilter();
+  peak.type = 'peaking'; peak.frequency.value = 1000; peak.gain.value = 4; peak.Q.value = 0.8;
+  speaker.connect(hp).connect(lp).connect(peak).connect(out);
+
+  // dust on the needle, hiss under everything
+  const dustBuf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+  const dd = dustBuf.getChannelData(0);
+  for (let i = 0; i < dd.length; i++) {
+    dd[i] = (Math.random() * 2 - 1) * 0.006;
+    if (Math.random() < 0.00013) dd[i] = (Math.random() * 2 - 1) * 0.5;
+  }
+  const dust = ctx.createBufferSource();
+  dust.buffer = dustBuf; dust.loop = true;
+  const dustG = ctx.createGain(); dustG.gain.value = 0.35;
+  dust.connect(dustG).connect(speaker);
+  dust.start();
+
+  // the station drifts a little
+  const music = ctx.createGain(); music.gain.value = 0.75;
+  const drift = ctx.createOscillator(); drift.frequency.value = 0.09;
+  const driftG = ctx.createGain(); driftG.gain.value = 0.1;
+  drift.connect(driftG).connect(music.gain);
+  drift.start();
+  music.connect(speaker);
+
+  // the programme itself: slow tunes in changing keys, pauses between
+  const SCALES = [[0, 2, 4, 7, 9], [0, 3, 5, 7, 10], [0, 2, 3, 7, 8], [0, 2, 5, 7, 9]];
+  let root = 220, scale = SCALES[0], degree = 5;
+  let next = ctx.currentTime + 1.5, pieceEnd = 0, resting = true;
+  function freqOf(deg) {
+    const oct = Math.floor(deg / scale.length);
+    const st = scale[((deg % scale.length) + scale.length) % scale.length];
+    return root * Math.pow(2, oct + st / 12);
+  }
+  function tone(t, f, dur, vel) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vel, t + 0.06);
+    g.gain.setTargetAtTime(0, t + dur * 0.4, dur * 0.35);
+    const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = f;
+    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2.003;
+    const g2 = ctx.createGain(); g2.gain.value = 0.28;
+    o1.connect(g); o2.connect(g2).connect(g);
+    g.connect(music);
+    o1.start(t); o2.start(t);
+    o1.stop(t + dur + 1.5); o2.stop(t + dur + 1.5);
+  }
+  setInterval(() => {
+    const horizon = ctx.currentTime + 1.5;
+    while (next < horizon) {
+      if (next > pieceEnd) {
+        if (!resting) { // the piece ends; the announcer says nothing
+          resting = true;
+          next += 6 + Math.random() * 7;
+          continue;
+        }
+        resting = false;
+        root = [174.6, 196, 220, 246.9][Math.floor(Math.random() * 4)];
+        scale = SCALES[Math.floor(Math.random() * SCALES.length)];
+        degree = 3 + Math.floor(Math.random() * 5);
+        pieceEnd = next + 40 + Math.random() * 35;
+      }
+      degree += [-2, -1, -1, 0, 1, 1, 2, 3][Math.floor(Math.random() * 8)];
+      degree = Math.max(0, Math.min(14, degree));
+      const dur = 0.5 + Math.random() * 1.4;
+      tone(next, freqOf(degree), dur, 0.05 + Math.random() * 0.03);
+      if (Math.random() < 0.3) tone(next + 0.12, freqOf(degree - 7) / 2, dur * 2, 0.028);
+      next += [0.4, 0.8, 0.8, 1.2, 1.6, 2.4][Math.floor(Math.random() * 6)];
+    }
+  }, 400);
+  return { out };
+}
+
 const audio = {
-  ctx: null, gain: null, muted: false,
+  ctx: null, master: null, windG: null, radio: null, _m: false, _mode: 'field',
   ensure() {
     if (this.ctx) return;
     try {
       this.ctx = new AudioContext();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this._m ? 0 : 1;
+      this.master.connect(this.ctx.destination);
+      // wind: filtered brown noise that swells and settles
       const len = this.ctx.sampleRate * 4;
       const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = buf.getChannelData(0);
@@ -356,16 +482,28 @@ const audio = {
       srcN.buffer = buf; srcN.loop = true;
       const filt = this.ctx.createBiquadFilter();
       filt.type = 'lowpass'; filt.frequency.value = 420; filt.Q.value = 0.4;
-      this.gain = this.ctx.createGain();
-      this.gain.gain.value = 0.05;
+      const swell = this.ctx.createGain();
+      swell.gain.value = 1;
       const lfo = this.ctx.createOscillator();
       lfo.frequency.value = 0.07;
       const lfoG = this.ctx.createGain();
-      lfoG.gain.value = 0.028;
-      lfo.connect(lfoG).connect(this.gain.gain);
-      srcN.connect(filt).connect(this.gain).connect(this.ctx.destination);
+      lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(swell.gain);
+      this.windG = this.ctx.createGain();
+      this.windG.gain.value = 0;
+      srcN.connect(filt).connect(swell).connect(this.windG).connect(this.master);
       srcN.start(); lfo.start();
+      this.radio = makeRadio(this.ctx, this.master);
+      this.setMode(this._mode);
     } catch { /* silence is acceptable */ }
+  },
+  // crossfade between the weather and the programme
+  setMode(mode) {
+    this._mode = mode;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.windG.gain.setTargetAtTime(mode === 'field' ? 0.05 : 0, t, 0.7);
+    this.radio.out.gain.setTargetAtTime(mode === 'studio' ? 1 : 0, t, 0.7);
   },
   pluck() {
     if (!this.ctx || this.muted) return;
@@ -376,15 +514,15 @@ const audio = {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0.06, this.ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.9);
-    o.connect(g).connect(this.ctx.destination);
+    o.connect(g).connect(this.master);
     o.start(); o.stop(this.ctx.currentTime + 1);
   },
-  get mutedState() { return this.muted; },
+  get muted() { return this._m; },
+  set muted(v) {
+    this._m = v;
+    if (this.master) this.master.gain.value = v ? 0 : 1;
+  },
 };
-Object.defineProperty(audio, 'muted', {
-  get() { return this._m || false; },
-  set(v) { this._m = v; if (this.gain) this.gain.gain.value = v ? 0 : 0.05; },
-});
 
 // ---------------------------------------------------------------- begin
 let started = false;

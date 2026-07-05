@@ -61,8 +61,8 @@ function toGeometry(arrays) {
   return geo;
 }
 
-function petalGeometry(len, wid, taper = 0.85, cup = 1.0) {
-  const g = new THREE.PlaneGeometry(wid, len, 1, 4);
+function petalGeometry(len, wid, taper = 0.85, cup = 1.0, d = 1) {
+  const g = new THREE.PlaneGeometry(wid, len, d, 4 * d);
   g.translate(0, len / 2, 0);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -108,13 +108,14 @@ export function buildFlower(seed, opts = {}) {
   const rng = mulberry32(seed);
   const cut = opts.cut ?? 1;
   const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
 
   const H = (0.9 + rng() * 0.7) * cut * (1 - 0.12 * w);
   const { curve, tip } = stemCurve(rng, H, 1 + 0.5 * w);
   const arrays = { position: [], normal: [], color: [] };
 
   const stemCol = STEM_GREEN.clone().lerp(STEM_PALE, rng() * 0.5).lerp(STEM_DRIED, w * 0.6);
-  push(arrays, new THREE.TubeGeometry(curve, 10, 0.0065 + rng() * 0.003, 5), _m.identity(), stemCol);
+  push(arrays, new THREE.TubeGeometry(curve, 10 * d, 0.0065 + rng() * 0.003, 4 + 3 * d), _m.identity(), stemCol);
 
   // the head nods — down and to one side, never straight up
   const nod = 0.35 + rng() * 0.85 + 1.05 * w;
@@ -124,7 +125,7 @@ export function buildFlower(seed, opts = {}) {
   const headQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
 
   const discR = 0.055 + rng() * 0.035;
-  const disc = new THREE.SphereGeometry(discR, 10, 7);
+  const disc = new THREE.SphereGeometry(discR, 10 * d, 7 * d);
   disc.scale(1, 1, 0.42);
   _m.compose(headPos, headQ, new THREE.Vector3(1, 1, 1));
   push(arrays, disc, _m, DISC_DARK, DISC_RING);
@@ -140,7 +141,7 @@ export function buildFlower(seed, opts = {}) {
   tipCol.lerp(PETAL_DRIED, w * 0.7);
   const nPetals = 14 + Math.floor(rng() * 9);
   const pLen = discR * (1.6 + rng() * 0.9);
-  const petal = petalGeometry(pLen, pLen * 0.32);
+  const petal = petalGeometry(pLen, pLen * 0.32, 0.85, 1.0, d);
   const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
   const sc = new THREE.Vector3();
   for (let i = 0; i < nPetals; i++) {
@@ -165,13 +166,14 @@ export function buildSeedhead(seed, opts = {}) {
   const rng = mulberry32(seed);
   const cut = opts.cut ?? 1;
   const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
 
   const H = (0.65 + rng() * 0.6) * cut * (1 - 0.08 * w);
   const { curve, tip } = stemCurve(rng, H, 1.3);
   const arrays = { position: [], normal: [], color: [] };
 
   const stemCol = new THREE.Color('#6f6b48').lerp(new THREE.Color('#4a4130'), rng() * 0.5 + w * 0.4);
-  push(arrays, new THREE.TubeGeometry(curve, 10, 0.010 + rng() * 0.004, 5), _m.identity(), stemCol);
+  push(arrays, new THREE.TubeGeometry(curve, 10 * d, 0.010 + rng() * 0.004, 4 + 3 * d), _m.identity(), stemCol);
 
   const nod = 0.8 + rng() * 0.8 + 0.35 * w;
   const nodA = rng() * Math.PI * 2;
@@ -195,7 +197,7 @@ export function buildSeedhead(seed, opts = {}) {
   };
 
   const discR = 0.085 + rng() * 0.075;
-  const disc = new THREE.SphereGeometry(discR, 22, 14);
+  const disc = new THREE.SphereGeometry(discR, 22 * d, 14 * d);
   disc.scale(1 + (rng() - 0.5) * 0.16, 1 + (rng() - 0.5) * 0.16, 0.32);
   _m.compose(headPos, headQ, new THREE.Vector3(1, 1, 1));
   push(arrays, disc, _m, speckle);
@@ -204,7 +206,7 @@ export function buildSeedhead(seed, opts = {}) {
   // ragged fringe of dry sepals poking past the rim
   const sepCol = new THREE.Color('#a89a55').lerp(new THREE.Color('#6d6538'), rng() * 0.6 + w * 0.4);
   const nSep = 12 + Math.floor(rng() * 8);
-  const sep = petalGeometry(discR * 1.3, discR * 0.16, 0.92, 0.4);
+  const sep = petalGeometry(discR * 1.3, discR * 0.16, 0.92, 0.4, d);
   const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
   for (let i = 0; i < nSep; i++) {
     if (rng() < 0.2) continue; // gaps — nothing dried is complete
@@ -226,13 +228,14 @@ export function buildDaisy(seed, opts = {}) {
   const rng = mulberry32(seed);
   const cut = opts.cut ?? 1;
   const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
 
   const H = (0.45 + rng() * 0.55) * cut * (1 - 0.1 * w);
   const { curve, tip } = stemCurve(rng, H, 0.8);
   const arrays = { position: [], normal: [], color: [] };
 
   const stemCol = new THREE.Color('#4b573a').lerp(STEM_DRIED, w * 0.6);
-  push(arrays, new THREE.TubeGeometry(curve, 8, 0.0035 + rng() * 0.002, 5), _m.identity(), stemCol);
+  push(arrays, new THREE.TubeGeometry(curve, 8 * d, 0.0035 + rng() * 0.002, 4 + 3 * d), _m.identity(), stemCol);
 
   const nod = 0.15 + rng() * 0.5 + 0.5 * w;
   const nodA = rng() * Math.PI * 2;
@@ -241,7 +244,7 @@ export function buildDaisy(seed, opts = {}) {
   const headQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
 
   const centerR = 0.016 + rng() * 0.009;
-  const center = new THREE.SphereGeometry(centerR, 8, 6);
+  const center = new THREE.SphereGeometry(centerR, 8 * d, 6 * d);
   center.scale(1, 1, 0.55);
   _m.compose(headPos, headQ, new THREE.Vector3(1, 1, 1));
   push(arrays, center,
@@ -253,7 +256,7 @@ export function buildDaisy(seed, opts = {}) {
     .lerp(new THREE.Color('#b5a07c'), w * 0.7);
   const nPetals = 7 + Math.floor(rng() * 3);
   const pLen = centerR * (2.2 + rng() * 0.9);
-  const petal = petalGeometry(pLen, pLen * 0.5, 0.35, 0.5);
+  const petal = petalGeometry(pLen, pLen * 0.5, 0.35, 0.5, d);
   const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
   for (let i = 0; i < nPetals; i++) {
     if (rng() < 0.08 + w * 0.75) continue; // petals let go, one by one
@@ -276,6 +279,7 @@ export function buildWhip(seed, opts = {}) {
   const rng = mulberry32(seed);
   const cut = opts.cut ?? 1;
   const w = opts.wilt ?? 0;
+  const det = opts.detail ?? 1;
   const steps = 26;
   const totalLen = (1.5 + rng() * 1.2) * cut;
   const step = totalLen / steps;
@@ -299,7 +303,7 @@ export function buildWhip(seed, opts = {}) {
   const arrays = { position: [], normal: [], color: [] };
   const col = new THREE.Color().setHSL(0.21 + rng() * 0.04, 0.28, 0.5 + rng() * 0.12)
     .lerp(new THREE.Color('#b3a066'), w * 0.7);
-  push(arrays, new THREE.TubeGeometry(curve, 48, 0.006, 4), _m.identity(), col);
+  push(arrays, new THREE.TubeGeometry(curve, 48 * det, 0.006, 3 + 3 * det), _m.identity(), col);
   // a tiny closed bud at the very end
   const end = pts[pts.length - 1];
   const bud = new THREE.SphereGeometry(0.014, 6, 5);
@@ -325,15 +329,19 @@ export const STEM_NAMES = {
   whip: 'whip',
 };
 
-export function buildStem(entry) {
+export function buildStem(entry, detail = 1) {
   const make = BUILDERS[entry.kind] || buildFlower;
-  return make(entry.seed, { cut: entry.cut, wilt: entry.wilt || 0 });
+  return make(entry.seed, { cut: entry.cut, wilt: entry.wilt || 0, detail });
 }
 
 // One shared material for everything grown. Sway is injected into the
 // shader: anything above the soil moves a little.
-export function makePlantMaterial(uTime, sway = true) {
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+export function makePlantMaterial(uTime, sway = true, standard = false) {
+  const mat = standard
+    ? new THREE.MeshStandardMaterial({
+      vertexColors: true, side: THREE.DoubleSide, roughness: 0.82, metalness: 0,
+      envMapIntensity: 0.55 })
+    : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   if (sway) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = uTime;

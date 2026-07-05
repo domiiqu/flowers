@@ -52,6 +52,7 @@ export class Field {
     this.sun.shadow.camera.top = 40; this.sun.shadow.camera.bottom = -40;
     this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 140;
     this.sun.shadow.bias = -0.0015;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
@@ -193,6 +194,8 @@ export class Field {
     // the sky shader's own colour just above the horizon line
     this.scene.fog.color.copy(p.horizon).lerp(p.glow, 0.36);
     this.groundMat.color.copy(p.ground).multiplyScalar(1.45);
+    // petals catch a little of the sky's glow, like backlit tissue
+    this.plantMat.emissive.copy(p.glow).multiplyScalar(0.055 * p.light);
     this.sky.update(worldT, camera.position);
 
     // ground follows you, snapped to the texture repeat so it stays world-fixed
