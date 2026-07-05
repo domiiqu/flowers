@@ -1,8 +1,21 @@
 import * as THREE from '../lib/three.module.min.js';
 import { Field } from './field.js';
 import { Studio } from './studio.js';
+import { buildStem, makePlantMaterial, STEM_NAMES } from './flower.js';
 
 const CYCLE = 780; // seconds of real time for one pass of the sky
+
+// Cut flowers do not last. Fresh for a while, then softening, then gone.
+const WILT_START = 300;   // seconds after picking
+const WILT_FULL = 1080;   // dust
+function wiltOf(entry) {
+  if (entry.pickedAt === undefined) return 0;
+  const age = clock.elapsedTime - entry.pickedAt;
+  return THREE.MathUtils.clamp((age - WILT_START) / (WILT_FULL - WILT_START), 0, 1);
+}
+function wiltWord(w) {
+  return w < 0.12 ? '' : w < 0.45 ? 'softening' : w < 0.8 ? 'wilting' : 'almost gone';
+}
 
 // ---------------------------------------------------------------- renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -30,23 +43,71 @@ function say(text, ms = 2600) {
   msgTimer = setTimeout(() => msgEl.classList.remove('show'), ms);
 }
 
+// ------------------------------------------------------- little portraits
+// Every stem in the bag gets its own photograph, taken in a tiny studio
+// of its own — a second renderer that develops thumbnails on demand.
+const thumbCache = new Map();
+let thumbKit = null;
+function thumbFor(entry) {
+  const bucket = Math.round((entry.wilt || 0) * 10);
+  const key = `${entry.kind}:${entry.seed}:${entry.cut.toFixed(2)}:${bucket}`;
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  if (!thumbKit) {
+    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    r.setSize(220, 220);
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xfff2dd, 0x5c5548, 1.8));
+    const sun = new THREE.DirectionalLight(0xffe8cc, 1.2);
+    sun.position.set(1.5, 2, 2.5);
+    scene.add(sun);
+    thumbKit = { r, scene, cam: new THREE.PerspectiveCamera(38, 1, 0.01, 20),
+      mat: makePlantMaterial({ value: 0 }, false) };
+  }
+  const built = buildStem(entry);
+  const mesh = new THREE.Mesh(built.geometry, thumbKit.mat);
+  thumbKit.scene.add(mesh);
+  const h = Math.max(built.height, built.headPos.y);
+  const c = built.headPos.clone().lerp(new THREE.Vector3(0, h * 0.55, 0), 0.45);
+  const d = Math.max(h * 0.8, built.headR * 2.8, 0.35);
+  thumbKit.cam.position.set(c.x + d * 0.3, c.y + d * 0.15, c.z + d);
+  thumbKit.cam.lookAt(c);
+  thumbKit.r.render(thumbKit.scene, thumbKit.cam);
+  const url = thumbKit.r.domElement.toDataURL();
+  thumbKit.scene.remove(mesh);
+  built.geometry.dispose();
+  thumbCache.set(key, url);
+  return url;
+}
+
 // ---------------------------------------------------------------- the bag
 const BAG_MAX = 12;
 const bag = [];
+const bagPreview = $('bagpreview');
 function renderBag() {
   bagEl.innerHTML = '';
   bag.forEach((entry, i) => {
     const d = document.createElement('button');
     d.className = 'stem ' + entry.kind;
-    d.title = entry.kind;
+    d.style.backgroundImage = `url(${thumbFor(entry)})`;
     d.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (mode !== 'studio') return;
       if (studio.holding) { say('your hands are full'); return; }
       const [e] = bag.splice(i, 1);
       studio.holdStem(e);
+      bagPreview.classList.remove('show');
       renderBag();
     });
+    d.addEventListener('mouseenter', () => {
+      bagPreview.querySelector('img').src = thumbFor(entry);
+      const w = wiltWord(entry.wilt || 0);
+      const cm = Math.round(entry.cut * 100);
+      bagPreview.querySelector('span').textContent =
+        STEM_NAMES[entry.kind] + (w ? ` — ${w}` : entry.cut < 1 ? ` — cut to ${cm}%` : '');
+      bagPreview.classList.add('show');
+    });
+    d.addEventListener('mouseleave', () => bagPreview.classList.remove('show'));
     bagEl.appendChild(d);
   });
   bagEl.classList.toggle('empty', bag.length === 0);
@@ -97,6 +158,9 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
+const pointerNdc = new THREE.Vector2();
+const drag = { down: false, moved: false, x: 0, y: 0 };
+
 document.addEventListener('mousemove', (e) => {
   if (mode === 'field' && document.pointerLockElement === renderer.domElement) {
     yaw -= e.movementX * 0.0021;
@@ -105,10 +169,16 @@ document.addEventListener('mousemove', (e) => {
   if (mode === 'studio') {
     pointerNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     studio.setPointer(pointerNdc);
+    if (drag.down) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (drag.moved || Math.abs(dx) + Math.abs(dy) > 5) {
+        drag.moved = true;
+        studio.rotate(dx, dy);
+        drag.x = e.clientX; drag.y = e.clientY;
+      }
+    }
   }
 });
-
-const pointerNdc = new THREE.Vector2();
 
 renderer.domElement.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
@@ -121,10 +191,19 @@ renderer.domElement.addEventListener('mousedown', (e) => {
     }
     tryPick();
   } else {
-    pointerNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-    studio.click(pointerNdc);
-    renderBag();
+    drag.down = true; drag.moved = false;
+    drag.x = e.clientX; drag.y = e.clientY;
   }
+});
+
+addEventListener('mouseup', (e) => {
+  if (e.button !== 0 || mode !== 'studio' || !drag.down) return;
+  drag.down = false;
+  if (drag.moved) return; // that was a look-around, not a click
+  pointerNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  studio.setPointer(pointerNdc);
+  studio.click(pointerNdc);
+  renderBag();
 });
 
 renderer.domElement.addEventListener('contextmenu', (e) => {
@@ -133,7 +212,10 @@ renderer.domElement.addEventListener('contextmenu', (e) => {
 });
 
 addEventListener('wheel', (e) => {
-  if (mode === 'studio' && studio.holding) { e.preventDefault(); studio.wheel(e.deltaY); }
+  if (mode !== 'studio') return;
+  e.preventDefault();
+  if (studio.holding) studio.wheel(e.deltaY);
+  else studio.zoom(e.deltaY);
 }, { passive: false });
 
 document.addEventListener('pointerlockchange', () => {
@@ -146,6 +228,8 @@ function tryPick() {
   if (bag.length >= BAG_MAX) { say('the bag is full'); return; }
   const entry = field.pick();
   if (entry) {
+    entry.pickedAt = clock.elapsedTime;
+    entry.wilt = 0;
     bag.push(entry);
     renderBag();
     audio.pluck();
@@ -169,11 +253,15 @@ function movePlayer(dt) {
 
 // ---------------------------------------------------------------- let go
 const letgo = $('letgo');
-let holdT = 0, holdRAF = null;
+const HOLD_S = 1.4;
+let holdStart = null, holdRAF = null;
 function holdStep() {
-  holdT += 1 / 60;
-  letgo.style.setProperty('--p', Math.min(1, holdT / 1.4));
-  if (holdT >= 1.4) {
+  const p = Math.min(1, (performance.now() - holdStart) / 1000 / HOLD_S);
+  letgo.style.setProperty('--p', p);
+  // the room dims as you decide — you will know you are doing it
+  veil.style.transitionDuration = '0s';
+  veil.style.opacity = p * 0.92;
+  if (p >= 1) {
     stopHold();
     studio.discard();
     say('gone', 1800);
@@ -181,12 +269,15 @@ function holdStep() {
 }
 function stopHold() {
   cancelAnimationFrame(holdRAF);
-  holdT = 0;
+  holdStart = null;
   letgo.style.setProperty('--p', 0);
+  veil.style.transitionDuration = '';
+  veil.style.opacity = '';
 }
 letgo.addEventListener('mousedown', (e) => {
   e.stopPropagation();
   if (!studio.hasArrangement()) { say('there is nothing to let go of'); return; }
+  holdStart = performance.now();
   holdStep();
 });
 addEventListener('mouseup', stopHold);
@@ -318,10 +409,32 @@ function onResize() {
 addEventListener('resize', onResize);
 onResize();
 
+let lastWiltTick = 0;
+function wiltTick() {
+  let changed = false;
+  for (let i = bag.length - 1; i >= 0; i--) {
+    const w = wiltOf(bag[i]);
+    if (w >= 1) {
+      bag.splice(i, 1);
+      say('a stem in the bag has gone to dust', 3000);
+      changed = true;
+    } else if (Math.abs(w - (bag[i].wilt || 0)) > 0.03) {
+      bag[i].wilt = w;
+      changed = true;
+    }
+  }
+  if (changed) renderBag();
+  studio.refreshWilt(wiltOf);
+}
+
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   uTime.value = clock.elapsedTime;
   const worldT = timeOffset + clock.elapsedTime / CYCLE;
+  if (clock.elapsedTime - lastWiltTick > 8) {
+    lastWiltTick = clock.elapsedTime;
+    wiltTick();
+  }
 
   if (mode === 'field') {
     if (started) movePlayer(dt);
@@ -338,7 +451,12 @@ renderBag();
 
 // a small back door, for tests and for the curious
 window.__game = {
-  setMode, field, studio, bag, fieldCam, renderBag, begin,
+  setMode, field, studio, bag, fieldCam, renderBag, begin, wiltTick, wiltOf,
   scrub: (t) => { timeOffset = t - clock.elapsedTime / CYCLE; },
   look: (y, p) => { yaw = y; pitch = p; },
+  ageAll: (s) => {
+    for (const e of bag) e.pickedAt -= s;
+    if (studio.held) studio.held.entry.pickedAt -= s;
+    for (const st of studio.placed) st.entry.pickedAt -= s;
+  },
 };

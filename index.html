@@ -58,14 +58,27 @@
   #msg.show { opacity: 0.85; }
 
   /* the bag */
-  #bag { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
-    display: flex; gap: 9px; z-index: 7; padding: 8px 14px; border-radius: 20px; }
+  #bag { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 7; padding: 7px 12px; border-radius: 24px; }
   body[data-mode="studio"] #bag { background: rgba(12, 12, 14, 0.18); }
-  #bag .stem { width: 13px; height: 13px; border-radius: 50%; border: none; padding: 0;
-    cursor: default; background: #5d2320; box-shadow: 0 0 0 1px rgba(240, 234, 220, 0.25); }
-  #bag .stem.whip { background: #97a468; border-radius: 40% 60% 55% 45%; }
+  #bag .stem { width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0;
+    cursor: default; background-color: #23201c; background-size: 190%;
+    background-position: center 20%; box-shadow: 0 0 0 1px rgba(240, 234, 220, 0.28);
+    transition: transform .18s ease; }
+  #bag .stem.whip { background-color: #4a4d38; }
+  #bag .stem.daisy { background-color: #57544a; }
+  #bag .stem.seedhead { background-color: #3a2f24; }
+  #bag .stem:hover { transform: translateY(-4px); }
   body[data-mode="studio"] #bag .stem { cursor: pointer; }
-  body[data-mode="studio"] #bag .stem:hover { transform: translateY(-3px); }
+
+  /* one stem, seen properly */
+  #bagpreview { position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%);
+    z-index: 7; text-align: center; opacity: 0; transition: opacity .25s ease;
+    pointer-events: none; }
+  #bagpreview.show { opacity: 1; }
+  #bagpreview img { width: 170px; height: 170px; border-radius: 10px;
+    background: rgba(14, 14, 18, 0.35); display: block; margin: 0 auto 6px; }
+  #bagpreview span { font-style: italic; font-size: 0.75rem; letter-spacing: 0.2em; }
 
   /* corner hints */
   .hints { position: fixed; right: 26px; bottom: 22px; text-align: right; z-index: 7;
@@ -98,6 +111,7 @@
   <div id="retlabel"></div>
   <div id="msg"></div>
   <div id="bag" class="empty"></div>
+  <div id="bagpreview"><img alt=""><span></span></div>
   <div id="cutlabel"></div>
 
   <div class="hints" id="hint-field">
@@ -107,10 +121,12 @@
     <span>the studio — tab</span>
   </div>
   <div class="hints" id="hint-studio">
+    <span>drag — look around &nbsp;·&nbsp; scroll — closer</span>
     <span>take a stem from the bag below</span>
-    <span>scroll — cut &nbsp;·&nbsp; right&#8209;click — put back</span>
+    <span>carry it near the vessel — it shows you how it will stand</span>
+    <span>click to set it &nbsp;·&nbsp; scroll — cut &nbsp;·&nbsp; right&#8209;click — put back</span>
     <button id="photo">photograph — p</button>
-    <button id="letgo">let the arrangement go — hold</button>
+    <button id="letgo">let the arrangement go — press and hold</button>
     <span>the field — tab</span>
   </div>
 

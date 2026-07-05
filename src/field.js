@@ -1,5 +1,5 @@
 import * as THREE from '../lib/three.module.min.js';
-import { mulberry32, buildFlower, buildWhip, makePlantMaterial } from './flower.js';
+import { mulberry32, buildStem, buildWhip, makePlantMaterial } from './flower.js';
 import { SkyDome, samplePalette } from './sky.js';
 
 const CHUNK = 22;      // metres
@@ -45,12 +45,20 @@ export class Field {
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1.1);
     this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffddbb, 0.5);
-    this.sun.position.set(12, 8, -26);
+    this.sun.position.set(26, 20, -44);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.camera.left = -40; this.sun.shadow.camera.right = 40;
+    this.sun.shadow.camera.top = 40; this.sun.shadow.camera.bottom = -40;
+    this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 140;
+    this.sun.shadow.bias = -0.0015;
     this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
 
     this.groundMat = new THREE.MeshLambertMaterial({ map: mottledTexture(), color: 0x59604a });
     const ground = new THREE.Mesh(new THREE.CircleGeometry(280, 40), this.groundMat);
     ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
     this.ground = ground;
     this.scene.add(ground);
 
@@ -73,11 +81,13 @@ export class Field {
     for (let i = 0; i < nFlowers; i++) {
       const x = ox + rng() * CHUNK, z = oz + rng() * CHUNK;
       const seed = Math.floor(rng() * 0xffffffff);
+      const roll = rng();
+      const kind = roll < 0.5 ? 'flower' : roll < 0.78 ? 'seedhead' : 'daisy';
       const id = `${cx},${cz},f${i}`;
-      const rec = { id, seed, kind: 'flower', pos: new THREE.Vector3(x, 0, z) };
+      const rec = { id, seed, kind, pos: new THREE.Vector3(x, 0, z) };
       records.push(rec);
       if (this.picked.has(id)) continue;
-      const f = buildFlower(seed);
+      const f = buildStem(rec);
       rec.headPos = f.headPos.clone().add(rec.pos);
       m.makeTranslation(x, 0, z);
       f.geometry.applyMatrix4(m);
@@ -135,6 +145,8 @@ export class Field {
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(arrays.normal, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(arrays.color, 3));
     const mesh = new THREE.Mesh(geo, this.plantMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.frustumCulled = false; // coords are baked world-space
     this.scene.add(mesh);
     return { mesh, records };
@@ -174,6 +186,9 @@ export class Field {
     this.hemi.intensity = 0.7 + p.light * 1.0;
     this.sun.color.copy(p.glow);
     this.sun.intensity = 0.15 + p.light * 0.75;
+    // the low sun follows you so its shadows always reach
+    this.sun.position.set(camera.position.x + 26, 20, camera.position.z - 44);
+    this.sun.target.position.set(camera.position.x, 0, camera.position.z);
     // the fog must dissolve into the sky where they meet — this mirrors
     // the sky shader's own colour just above the horizon line
     this.scene.fog.color.copy(p.horizon).lerp(p.glow, 0.36);
