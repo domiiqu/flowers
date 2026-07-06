@@ -295,13 +295,14 @@ function tryPick() {
 function movePlayer(dt) {
   const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const speed = 2.15;
+  const inGrass = field.grassAt(fieldCam.position.x, fieldCam.position.z);
+  const speed = 2.15 * (inGrass ? 0.48 : 1); // standing grass takes effort
   const moving = fwd !== 0 || str !== 0;
   if (moving) {
     const sy = Math.sin(yaw), cy = Math.cos(yaw);
     fieldCam.position.x += (-sy * fwd + cy * str) * speed * dt;
     fieldCam.position.z += (-cy * fwd - sy * str) * speed * dt;
-    bobPhase += dt * 5.6;
+    bobPhase += dt * (inGrass ? 4.0 : 5.6);
   }
   fieldCam.position.y = 1.55 + Math.sin(bobPhase) * (moving ? 0.026 : 0.004);
   fieldCam.rotation.set(pitch, yaw, 0);
@@ -432,51 +433,76 @@ function makeRadio(ctx, dest) {
   drift.start();
   music.connect(speaker);
 
-  // the programme itself: slow tunes in changing keys, pauses between
-  const SCALES = [[0, 2, 4, 7, 9], [0, 3, 5, 7, 10], [0, 2, 3, 7, 8], [0, 2, 5, 7, 9]];
-  let root = 220, scale = SCALES[0], degree = 5;
+  // The programme: patient minimalism — a small arpeggio cell that
+  // repeats and slowly turns while a longer line sings above it, the way
+  // certain Belgian composers taught the piano to insist. Generated as it
+  // plays; it never repeats itself and it is nobody's recording.
+  const CHORDS = {
+    I: [0, 4, 7, 12], i: [0, 3, 7, 12], IV: [5, 9, 12, 17], iv: [5, 8, 12, 17],
+    V: [7, 11, 14, 19], vi: [9, 12, 16, 21], VI: [8, 12, 15, 20], III: [4, 8, 11, 16],
+  };
+  const PROGS = [
+    ['I', 'V', 'vi', 'IV'], ['i', 'VI', 'III', 'V'], ['I', 'vi', 'IV', 'V'],
+    ['i', 'iv', 'VI', 'V'], ['I', 'IV', 'vi', 'V'],
+  ];
+  const ARPS = [
+    [0, 1, 2, 3, 2, 1], [0, 2, 1, 3, 1, 2], [0, 1, 3, 1, 2, 1], [0, 3, 2, 3, 1, 2],
+  ];
+  let root = 174.6, eighth = 0.23, prog = PROGS[0], arp = ARPS[0];
+  let chordI = 0, stepI = 0, melodyAt = 0;
   let next = ctx.currentTime + 1.5, pieceEnd = 0, resting = true;
-  function freqOf(deg) {
-    const oct = Math.floor(deg / scale.length);
-    const st = scale[((deg % scale.length) + scale.length) % scale.length];
-    return root * Math.pow(2, oct + st / 12);
-  }
-  function tone(t, f, dur, vel) {
+
+  function piano(t, f, dur, vel) {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vel, t + 0.06);
-    g.gain.setTargetAtTime(0, t + dur * 0.4, dur * 0.35);
-    const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = f;
-    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2.003;
-    const g2 = ctx.createGain(); g2.gain.value = 0.28;
-    o1.connect(g); o2.connect(g2).connect(g);
+    g.gain.linearRampToValueAtTime(vel, t + 0.008);
+    g.gain.setTargetAtTime(0, t + 0.03, Math.max(0.18, dur * 0.45));
+    const partials = [[1, 1], [2.001, 0.34], [2.998, 0.11], [4.01, 0.045]];
+    for (const [m, a] of partials) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * m;
+      const og = ctx.createGain();
+      og.gain.value = a;
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + dur + 1.6);
+    }
     g.connect(music);
-    o1.start(t); o2.start(t);
-    o1.stop(t + dur + 1.5); o2.stop(t + dur + 1.5);
   }
+
   setInterval(() => {
-    const horizon = ctx.currentTime + 1.5;
+    const horizon = ctx.currentTime + 1.6;
     while (next < horizon) {
       if (next > pieceEnd) {
-        if (!resting) { // the piece ends; the announcer says nothing
+        if (!resting) { // the piece ends; only the needle keeps going
           resting = true;
           next += 6 + Math.random() * 7;
           continue;
         }
         resting = false;
-        root = [174.6, 196, 220, 246.9][Math.floor(Math.random() * 4)];
-        scale = SCALES[Math.floor(Math.random() * SCALES.length)];
-        degree = 3 + Math.floor(Math.random() * 5);
-        pieceEnd = next + 40 + Math.random() * 35;
+        root = [155.6, 174.6, 196, 220][Math.floor(Math.random() * 4)];
+        eighth = 0.20 + Math.random() * 0.07;
+        prog = PROGS[Math.floor(Math.random() * PROGS.length)];
+        arp = ARPS[Math.floor(Math.random() * ARPS.length)];
+        chordI = 0; stepI = 0;
+        melodyAt = next + eighth * 12;
+        pieceEnd = next + 55 + Math.random() * 35;
       }
-      degree += [-2, -1, -1, 0, 1, 1, 2, 3][Math.floor(Math.random() * 8)];
-      degree = Math.max(0, Math.min(14, degree));
-      const dur = 0.5 + Math.random() * 1.4;
-      tone(next, freqOf(degree), dur, 0.05 + Math.random() * 0.03);
-      if (Math.random() < 0.3) tone(next + 0.12, freqOf(degree - 7) / 2, dur * 2, 0.028);
-      next += [0.4, 0.8, 0.8, 1.2, 1.6, 2.4][Math.floor(Math.random() * 6)];
+      const chord = CHORDS[prog[chordI]];
+      const deg = chord[arp[stepI % arp.length]];
+      const accent = stepI % arp.length === 0 ? 0.075 : 0.05;
+      piano(next, root * Math.pow(2, deg / 12), eighth * 2.2, accent * (0.9 + Math.random() * 0.2));
+      if (next >= melodyAt) { // the singing line, an octave up, unhurried
+        const mdeg = chord[1 + Math.floor(Math.random() * 3)] + 12;
+        piano(next, root * Math.pow(2, mdeg / 12), eighth * (6 + Math.random() * 6), 0.085);
+        melodyAt = next + eighth * (8 + Math.floor(Math.random() * 10));
+      }
+      stepI++;
+      if (stepI % (arp.length * 4) === 0) chordI = (chordI + 1) % prog.length;
+      next += eighth;
     }
-  }, 400);
+  }, 350);
   return { out };
 }
 

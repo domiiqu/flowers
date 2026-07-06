@@ -7,9 +7,13 @@ the sky moves through dusk, twilight, blue hour, night, and a pale
 almost-dawn, over about thirteen real minutes, and then again. In the field
 grow dark sunflowers, great dried seed heads — silver, umber, rust — chalk
 daisies, blush tulips with their strap leaves, unopened poppies on long
-swaying stems, sprays of small white wildflowers, and pale tendrils looping
-off on their own errands. They grow in loose companies: a stand of tulips
-here, poppies gathering there, edges soft as weather. You may pick them.
+swaying stems, sprays of small white wildflowers, tall wild carrot that
+closes into a bird's nest as it dries, feathery grass plumes, hanging
+harebells, and pale tendrils looping off on their own errands. They grow
+in loose companies: a stand of tulips here, poppies gathering there, edges
+soft as weather; some ground is lush and crowded, and in places the grass
+stands tall enough that walking through it takes real effort. You may pick
+them.
 A flower you pick is gone from the field, and the field remembers — walk
 back tomorrow and the gap is still there.
 
@@ -19,14 +23,17 @@ the still life beside the flowers. They do not wilt — a treasure is a
 treasure — and when an arrangement is let go, the treasures come back to
 you.
 
-There is also a studio: a table with a cloth on it, and two shelves of
-vessels — a lumpy bone amphora, a white pitcher, a shallow footed dish, a
-tall concrete cylinder, a black moon jar, a terracotta pot. You are in the
-room on your feet: walk anywhere, look anywhere. Choose a vessel and it
-comes to the table. Carry a stem near it and it shows you exactly how it
-would stand — lean it left, lean it right, turn it to face the light,
-click to set it. Cut them shorter. Take them out and try again. When it is
-right, photograph it.
+There is also a studio: a table with a cloth on it, a plinth in the corner
+with a gauze curtain hung behind it, and two shelves of vessels — a lumpy
+bone amphora, a white pitcher, a shallow footed dish, a tall concrete
+cylinder, a hand-built black terracotta jar, a terracotta pot. You are in
+the room on your feet: walk anywhere, look anywhere. Choose a vessel and
+it lands wherever you are standing nearer — the table, or the plinth.
+Carry a stem near it and it shows you exactly how it would stand — lean it
+left, lean it right, turn it to face the light, click to set it. Cut them
+shorter. Take them out and try again. When it is right, photograph it.
+Two arrangements can stand at once; when you let go, it is the one you are
+standing nearer that falls.
 
 Cut flowers do not last. From the moment you pick a stem it is dying —
 after a few minutes it softens, the head hangs, the colour dries, daisies
@@ -66,7 +73,7 @@ served over http, not file://)
 | put a held stem back in the bag | right-click |
 | photograph | `P` — saves a print, bordered and grained |
 | let the arrangement go | press and hold the words in the corner |
-| sound on/off | `M` — wind in the field; in the studio, a small radio plays a slow programme (synthesized, like everything else) |
+| sound on/off | `M` — wind in the field; in the studio, a small radio plays patient piano minimalism, composed as it plays (synthesized, like everything else) |
 
 There is a quiet back door for the impatient: `[` and `]` move the sky.
 

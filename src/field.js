@@ -9,8 +9,8 @@ const STORE_KEY = 'field.picked.v1';
 
 // Low-frequency value noise, one channel per species — this is what makes
 // the groves: tulips gather here, poppies there, edges soft as weather.
-const KINDS = ['flower', 'seedhead', 'daisy', 'tulip', 'poppy', 'spray'];
-const KIND_CH = { flower: 11, seedhead: 23, daisy: 37, tulip: 53, poppy: 67, spray: 83 };
+const KINDS = ['flower', 'seedhead', 'daisy', 'tulip', 'poppy', 'spray', 'umbel', 'plume', 'bells'];
+const KIND_CH = { flower: 11, seedhead: 23, daisy: 37, tulip: 53, poppy: 67, spray: 83, umbel: 101, plume: 113, bells: 127 };
 function vhash(a, b, ch) {
   let n = Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(ch, 2246822519);
   n = Math.imul(n ^ (n >>> 13), 1274126177);
@@ -38,6 +38,13 @@ function pickKind(x, z, rng) {
     if (r <= 0) return KINDS[i];
   }
   return 'flower';
+}
+
+// Some ground is lusher than other ground; and in places the grass
+// stands tall enough to slow a person down.
+const LUSH_CH = 131, TALL_CH = 97;
+export function tallGrassAt(x, z) {
+  return vnoise(x * 0.045, z * 0.045, TALL_CH) > 0.60;
 }
 
 function chunkSeed(cx, cz) {
@@ -128,13 +135,15 @@ export class Field {
       f.geometry.dispose();
     };
 
-    // flowers gather in loose companies, with stragglers between
+    // flowers gather in loose companies, with stragglers between;
+    // lush ground carries more of everything
+    const lush = vnoise((ox + CHUNK / 2) * 0.03, (oz + CHUNK / 2) * 0.03, LUSH_CH);
     let fi = 0;
-    const nClusters = 2 + Math.floor(rng() * 3);
+    const nClusters = 2 + Math.floor(rng() * 3) + Math.floor(lush * 2.6);
     for (let c = 0; c < nClusters; c++) {
       const cx0 = ox + rng() * CHUNK, cz0 = oz + rng() * CHUNK;
       const clusterKind = pickKind(cx0, cz0, rng);
-      const n = 3 + Math.floor(rng() * 5);
+      const n = 3 + Math.floor(rng() * 5 + lush * 3);
       for (let j = 0; j < n; j++) {
         const x = cx0 + (rng() - rng()) * 2.4;
         const z = cz0 + (rng() - rng()) * 2.4;
@@ -200,18 +209,27 @@ export class Field {
     }
     const tc = new THREE.Color();
     const scaleM = new THREE.Matrix4();
-    for (let i = 0; i < 60; i++) {
-      const x = ox + rng() * CHUNK, z = oz + rng() * CHUNK;
-      const s = 0.5 + rng() * 1.1;
-      tc.setHSL(0.23 + rng() * 0.06, 0.32, 0.07 + rng() * 0.05);
-      const nBlades = 2 + Math.floor(rng() * 2);
+    const plantTuft = (x, z, tall) => {
+      const s = tall ? 1.1 + rng() * 0.9 : 0.5 + rng() * 1.1;
+      if (tall) tc.setHSL(0.17 + rng() * 0.06, 0.28, 0.13 + rng() * 0.07);
+      else tc.setHSL(0.23 + rng() * 0.06, 0.32, 0.07 + rng() * 0.05);
+      const nBlades = tall ? 4 + Math.floor(rng() * 3) : 2 + Math.floor(rng() * 2);
       for (let k = 0; k < nBlades; k++) {
         m.makeRotationY(rng() * Math.PI * 2);
-        m.setPosition(x + (rng() - 0.5) * 0.08, 0, z + (rng() - 0.5) * 0.08);
-        scaleM.makeScale(s, s * (0.6 + rng() * 0.9), s);
+        m.setPosition(x + (rng() - 0.5) * (tall ? 0.16 : 0.08), 0, z + (rng() - 0.5) * (tall ? 0.16 : 0.08));
+        scaleM.makeScale(s, s * (tall ? 2.4 + rng() * 1.4 : 0.6 + rng() * 0.9), s);
         m.multiply(scaleM);
         this._append(arrays, blade, m, tc);
       }
+    };
+    for (let i = 0; i < 60; i++) {
+      const x = ox + rng() * CHUNK, z = oz + rng() * CHUNK;
+      plantTuft(x, z, tallGrassAt(x, z));
+    }
+    // extra standing grass where the tall patches run
+    for (let i = 0; i < 70; i++) {
+      const x = ox + rng() * CHUNK, z = oz + rng() * CHUNK;
+      if (tallGrassAt(x, z)) plantTuft(x, z, true);
     }
     blade.dispose();
 
@@ -321,6 +339,9 @@ export class Field {
       }
     }
   }
+
+  // Is the walker pushing through standing grass here?
+  grassAt(x, z) { return tallGrassAt(x, z); }
 
   // Pick the current target. Gone from the field, forever.
   pick() {
