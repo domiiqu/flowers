@@ -334,24 +334,54 @@ export function buildStem(entry, detail = 1) {
   return make(entry.seed, { cut: entry.cut, wilt: entry.wilt || 0, detail });
 }
 
+// Shared uniforms for translucency — the scene that owns the plants
+// points these at its own sun, and light passes through the petals.
+export function makeTransUniforms() {
+  return {
+    dir: { value: new THREE.Vector3(0, 1, 0) },
+    col: { value: new THREE.Color(0xffffff) },
+    str: { value: 0 },
+  };
+}
+
 // One shared material for everything grown. Sway is injected into the
-// shader: anything above the soil moves a little.
-export function makePlantMaterial(uTime, sway = true, standard = false) {
+// shader: anything above the soil moves a little. Translucency is
+// injected too: petals lit from behind glow like backlit tissue.
+export function makePlantMaterial(uTime, sway = true, standard = false, trans = null) {
   const mat = standard
     ? new THREE.MeshStandardMaterial({
       vertexColors: true, side: THREE.DoubleSide, roughness: 0.82, metalness: 0,
       envMapIntensity: 0.55 })
     : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  if (sway) {
+  if (sway || trans) {
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = uTime;
-      shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        float swayAmt = smoothstep(0.15, 1.4, position.y);
-        transformed.x += swayAmt * 0.022 * sin(uTime * 0.8 + position.x * 0.6 + position.z * 0.8);
-        transformed.z += swayAmt * 0.017 * sin(uTime * 0.63 + position.x * 0.8 + 2.0);`
-      );
+      if (sway) {
+        shader.uniforms.uTime = uTime;
+        shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          float swayAmt = smoothstep(0.15, 1.4, position.y);
+          transformed.x += swayAmt * 0.022 * sin(uTime * 0.8 + position.x * 0.6 + position.z * 0.8);
+          transformed.z += swayAmt * 0.017 * sin(uTime * 0.63 + position.x * 0.8 + 2.0);`
+        );
+      }
+      if (trans) {
+        shader.uniforms.uTransDir = trans.dir;
+        shader.uniforms.uTransCol = trans.col;
+        shader.uniforms.uTransStr = trans.str;
+        shader.fragmentShader =
+          'uniform vec3 uTransDir;\nuniform vec3 uTransCol;\nuniform float uTransStr;\n'
+          + shader.fragmentShader.replace(
+            '#include <lights_fragment_end>',
+            `#include <lights_fragment_end>
+            {
+              vec3 V = normalize(vViewPosition);
+              vec3 L = normalize((viewMatrix * vec4(uTransDir, 0.0)).xyz);
+              float tr = pow(clamp(dot(V, -L), 0.0, 1.0), 3.0);
+              reflectedLight.indirectDiffuse += diffuseColor.rgb * uTransCol * tr * uTransStr;
+            }`
+          );
+      }
     };
   }
   return mat;

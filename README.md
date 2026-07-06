@@ -64,10 +64,14 @@ Everything is procedural — every flower is grown from a seed, every vessel
 is turned on a lathe in code, the sky is one shader, the cloth's weave and
 the walls' plaster are drawn onto canvases at load, the studio's light
 comes from a painted environment baked at startup, and the radio programme
-is composed as it plays. Three.js (vendored in `lib/`), five small source
-files, and no other machinery.
+is composed as it plays. The image passes through a small hand-rolled
+lens: real depth of field in the studio, a soft glow off anything bright,
+and light that passes through petals when the sun is behind them.
+Three.js (vendored in `lib/`), six small source files, and no other
+machinery.
 
 - `src/sky.js` — the colour score and the sky dome
+- `src/post.js` — the lens: depth of field, bloom, the filmic grade
 - `src/flower.js` — flowers and whips, grown from seeds
 - `src/field.js` — the endless field, in remembering chunks
 - `src/studio.js` — the table, the shelf, the arranging

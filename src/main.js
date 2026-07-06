@@ -1,6 +1,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { Field } from './field.js';
 import { Studio } from './studio.js';
+import { Post } from './post.js';
 import { buildStem, makePlantMaterial, STEM_NAMES } from './flower.js';
 
 const CYCLE = 780; // seconds of real time for one pass of the sky
@@ -26,6 +27,13 @@ renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('stage').appendChild(renderer.domElement);
+
+const post = new Post(renderer);
+function postOpts() {
+  return mode === 'field'
+    ? { dof: 0, bloom: 0.30, focus: 10, range: 20 }
+    : { dof: 0.85, bloom: 0.18, focus: studio.orbit.radius, range: 1.5 };
+}
 
 const uTime = { value: 0 };
 
@@ -326,7 +334,7 @@ let photoN = 1;
 function photograph() {
   const cam = mode === 'field' ? fieldCam : studio.camera;
   const scene = mode === 'field' ? field.scene : studio.scene;
-  renderer.render(scene, cam);
+  post.render(scene, cam, postOpts());
   const src = renderer.domElement;
   const border = Math.round(Math.min(src.width, src.height) * 0.045);
   const c = document.createElement('canvas');
@@ -539,6 +547,8 @@ let timeOffset = 0.015;
 const clock = new THREE.Clock();
 function onResize() {
   renderer.setSize(innerWidth, innerHeight);
+  const db = renderer.getDrawingBufferSize(new THREE.Vector2());
+  post.setSize(db.x, db.y);
   fieldCam.aspect = innerWidth / innerHeight;
   fieldCam.updateProjectionMatrix();
   studio.camera.aspect = innerWidth / innerHeight;
@@ -579,10 +589,10 @@ renderer.setAnimationLoop(() => {
     field.update(worldT, fieldCam);
     reticle.classList.toggle('near', !!field.target);
     retLabel.textContent = field.target ? 'pick' : '';
-    renderer.render(field.scene, fieldCam);
+    post.render(field.scene, fieldCam, postOpts());
   } else {
     studio.update(dt, worldT);
-    renderer.render(studio.scene, studio.camera);
+    post.render(studio.scene, studio.camera, postOpts());
   }
 });
 renderBag();

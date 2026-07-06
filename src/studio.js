@@ -1,5 +1,5 @@
 import * as THREE from '../lib/three.module.min.js';
-import { buildStem, makePlantMaterial } from './flower.js';
+import { buildStem, makePlantMaterial, makeTransUniforms } from './flower.js';
 import { samplePalette } from './sky.js';
 
 const TABLE_Y = 1.02; // top of the cloth
@@ -177,7 +177,9 @@ export class Studio {
     this.key.shadow.radius = 5;
     this.scene.add(this.key);
 
-    this.plantMat = makePlantMaterial(uTime, false, true);
+    this.transU = makeTransUniforms();
+    this.plantMat = makePlantMaterial(uTime, false, true, this.transU);
+    this._uTime = uTime;
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
 
@@ -318,7 +320,7 @@ export class Studio {
   holdStem(entry) {
     if (this.held || this.discarding) return false;
     const built = buildStem(entry, 2);
-    const mat = this.plantMat.clone();
+    const mat = makePlantMaterial(this._uTime, false, true, this.transU);
     const mesh = new THREE.Mesh(built.geometry, mat);
     mesh.castShadow = true;
     const group = new THREE.Group();
@@ -524,6 +526,9 @@ export class Studio {
     this.hemi.color.copy(p.horizon).lerp(new THREE.Color(0xfff4e0), 0.5);
     this.key.intensity = 0.5 + p.light * 1.1;
     this.key.color.copy(p.glow).lerp(new THREE.Color(0xfff0dd), 0.4);
+    this.transU.dir.value.copy(this.key.position).normalize();
+    this.transU.col.value.copy(this.key.color);
+    this.transU.str.value = 0.12 + p.light * 0.25;
     this._wallMat.color.copy(this._wallBase).multiplyScalar(day);
     this._floorMat.color.copy(this._floorBase).multiplyScalar(day);
     this._ceilMat.color.copy(this._ceilBase).multiplyScalar(day);

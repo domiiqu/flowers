@@ -1,5 +1,5 @@
 import * as THREE from '../lib/three.module.min.js';
-import { mulberry32, buildStem, buildWhip, makePlantMaterial } from './flower.js';
+import { mulberry32, buildStem, buildWhip, makePlantMaterial, makeTransUniforms } from './flower.js';
 import { SkyDome, samplePalette } from './sky.js';
 
 const CHUNK = 22;      // metres
@@ -63,7 +63,9 @@ export class Field {
     this.ground = ground;
     this.scene.add(ground);
 
-    this.plantMat = makePlantMaterial(uTime, true);
+    this.transU = makeTransUniforms();
+    this.transU.dir.value.set(26, 20, -44).normalize();
+    this.plantMat = makePlantMaterial(uTime, true, false, this.transU);
     this.chunks = new Map();   // "cx,cz" -> { mesh, records }
     this.picked = new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
     this.target = null;        // record currently in reach + in gaze
@@ -194,8 +196,10 @@ export class Field {
     // the sky shader's own colour just above the horizon line
     this.scene.fog.color.copy(p.horizon).lerp(p.glow, 0.36);
     this.groundMat.color.copy(p.ground).multiplyScalar(1.45);
-    // petals catch a little of the sky's glow, like backlit tissue
-    this.plantMat.emissive.copy(p.glow).multiplyScalar(0.055 * p.light);
+    // light through the petals — strongest looking into the afterglow
+    this.transU.col.value.copy(p.glow);
+    this.transU.str.value = 0.15 + p.light * 0.5;
+    this.plantMat.emissive.copy(p.glow).multiplyScalar(0.03 * p.light);
     this.sky.update(worldT, camera.position);
 
     // ground follows you, snapped to the texture repeat so it stays world-fixed
