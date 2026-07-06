@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picking flowers</title>
+<style>
+  :root { --ink: rgba(244, 240, 230, 0.62); }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #14161c; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: var(--ink); }
+  #stage, #stage canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* film grain + vignette, always on, very quiet */
+  #grain { position: fixed; inset: -60px; pointer-events: none; z-index: 5; opacity: .08;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grain 0.9s steps(4) infinite; }
+  @keyframes grain {
+    0% { transform: translate(0, 0); } 25% { transform: translate(-18px, 12px); }
+    50% { transform: translate(12px, -20px); } 75% { transform: translate(-10px, -8px); }
+    100% { transform: translate(0, 0); } }
+  #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4;
+    background: radial-gradient(ellipse at 50% 48%, transparent 55%, rgba(8, 8, 12, 0.38) 100%); }
+
+  /* transitions */
+  #veil { position: fixed; inset: 0; background: #0b0c10; opacity: 0; pointer-events: none;
+    transition: opacity 0.48s ease; z-index: 8; }
+  #veil.on { opacity: 1; }
+  #flash { position: fixed; inset: 0; background: #f6f1e4; opacity: 0; pointer-events: none; z-index: 9; }
+  #flash.go { animation: flash 0.7s ease-out; }
+  @keyframes flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+
+  /* title */
+  #title { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
+    background: rgba(10, 11, 15, 0.65); backdrop-filter: blur(2px); cursor: pointer;
+    transition: opacity 1.4s ease; text-align: center; }
+  #title.away { opacity: 0; pointer-events: none; }
+  #title h1 { font-weight: normal; font-style: italic; letter-spacing: 0.35em; font-size: 1.5rem;
+    color: rgba(244, 240, 230, 0.85); margin-bottom: 1.1em; }
+  #title p { font-size: 0.8rem; letter-spacing: 0.12em; line-height: 2.1; opacity: 0.75; }
+  #title .go { margin-top: 3em; font-size: 0.75rem; letter-spacing: 0.3em; opacity: 0.5;
+    animation: breathe 3.5s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0.9; } }
+
+  /* reticle */
+  #reticle { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px;
+    border-radius: 50%; background: var(--ink); opacity: 0.35; z-index: 6; pointer-events: none;
+    transition: transform .25s ease, opacity .25s ease; }
+  #reticle.near { transform: scale(2.2); opacity: 0.9; }
+  #retlabel { position: fixed; left: 50%; top: calc(50% + 18px); transform: translateX(-50%);
+    font-style: italic; font-size: 0.8rem; letter-spacing: 0.25em; z-index: 6; pointer-events: none; }
+  body[data-mode="studio"] #reticle, body[data-mode="studio"] #retlabel { display: none; }
+
+  /* messages */
+  #msg { position: fixed; left: 50%; bottom: 18vh; transform: translateX(-50%);
+    font-style: italic; font-size: 0.9rem; letter-spacing: 0.18em; opacity: 0;
+    transition: opacity 0.6s ease; z-index: 6; pointer-events: none; }
+  #msg.show { opacity: 0.85; }
+
+  /* the bag */
+  #bag { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 7; padding: 7px 12px; border-radius: 24px; }
+  body[data-mode="studio"] #bag { background: rgba(12, 12, 14, 0.18); }
+  #bag .stem { width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0;
+    cursor: default; background-color: #23201c; background-size: 190%;
+    background-position: center 20%; box-shadow: 0 0 0 1px rgba(240, 234, 220, 0.28);
+    transition: transform .18s ease; }
+  #bag .stem.whip { background-color: #4a4d38; }
+  #bag .stem.daisy { background-color: #57544a; }
+  #bag .stem.seedhead { background-color: #3a2f24; }
+  #bag .stem:hover { transform: translateY(-4px); }
+  body[data-mode="studio"] #bag .stem { cursor: pointer; }
+
+  /* one stem, seen properly */
+  #bagpreview { position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%);
+    z-index: 7; text-align: center; opacity: 0; transition: opacity .25s ease;
+    pointer-events: none; }
+  #bagpreview.show { opacity: 1; }
+  #bagpreview img { width: 170px; height: 170px; border-radius: 10px;
+    background: rgba(14, 14, 18, 0.35); display: block; margin: 0 auto 6px; }
+  #bagpreview span { font-style: italic; font-size: 0.75rem; letter-spacing: 0.2em; }
+
+  /* corner hints */
+  .hints { position: fixed; right: 26px; bottom: 22px; text-align: right; z-index: 7;
+    font-size: 0.72rem; letter-spacing: 0.2em; line-height: 2.2; font-style: italic;
+    transition: opacity 1s ease; }
+  .hints.dim { opacity: 0.35; }
+  .hints span, .hints button { display: block; }
+  .hints button { background: none; border: none; color: var(--ink); font: inherit;
+    letter-spacing: inherit; cursor: pointer; padding: 0; margin-left: auto; }
+  .hints button:hover { color: rgba(244, 240, 230, 0.95); }
+  body[data-mode="field"] #hint-studio { display: none; }
+  body[data-mode="studio"] #hint-field { display: none; }
+
+  #letgo { position: relative; }
+  #letgo::after { content: ''; position: absolute; left: 0; bottom: -2px; height: 1px;
+    width: calc(var(--p, 0) * 100%); background: var(--ink); }
+
+  #cutlabel { position: fixed; left: 26px; bottom: 22px; font-size: 0.72rem; font-style: italic;
+    letter-spacing: 0.2em; z-index: 7; }
+</style>
+</head>
+<body data-mode="field">
+  <div id="stage"></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="veil"></div>
+  <div id="flash"></div>
+
+  <div id="reticle"></div>
+  <div id="retlabel"></div>
+  <div id="msg"></div>
+  <div id="bag" class="empty"></div>
+  <div id="bagpreview"><img alt=""><span></span></div>
+  <div id="cutlabel"></div>
+
+  <div class="hints" id="hint-field">
+    <span>walk — w a s d &nbsp;·&nbsp; look — mouse</span>
+    <span>pick — click</span>
+    <span>photograph — p</span>
+    <span>the studio — tab</span>
+  </div>
+  <div class="hints" id="hint-studio">
+    <span>drag — look around &nbsp;·&nbsp; scroll — closer</span>
+    <span>take a stem from the bag below</span>
+    <span>carry it near the vessel — it shows you how it will stand</span>
+    <span>click to set it &nbsp;·&nbsp; scroll — cut &nbsp;·&nbsp; right&#8209;click — put back</span>
+    <button id="photo">photograph — p</button>
+    <button id="letgo">let the arrangement go — press and hold</button>
+    <span>the field — tab</span>
+  </div>
+
+  <div id="title">
+    <div>
+      <h1>picking flowers</h1>
+      <p>an endless field at dusk. a table with a cloth on it.<br>
+      the flowers you pick are gone from the field.<br>
+      the arrangements you make cannot be kept — only photographed.</p>
+      <div class="go">click to begin</div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
