@@ -1,5 +1,6 @@
 import * as THREE from '../lib/three.module.min.js';
 import { buildStem, makePlantMaterial, makeTransUniforms } from './flower.js';
+import { buildObject, disposeObject } from './objects.js';
 import { samplePalette } from './sky.js';
 
 const TABLE_Y = 1.02; // top of the cloth
@@ -147,12 +148,64 @@ const VASES = [
     },
     mouthR: 0.17, mouthY: 0.24, dip: 0.015, maxSplay: 1.35,
   },
+  {
+    name: 'tall cylinder',
+    make() {
+      const g = lathe([
+        [0.001, 0.0], [0.052, 0.0], [0.056, 0.03], [0.048, 0.47], [0.054, 0.52],
+      ]);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0xb0aca1, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.35,
+      }));
+    },
+    mouthR: 0.05, mouthY: 0.52, dip: 0.2, maxSplay: 0.55,
+  },
+  {
+    name: 'black terracotta jar',
+    make() {
+      // coil-built by hand: big slow lumps, then the small tremor of fingers
+      const g = lumpify(lumpify(lathe([
+        [0.001, 0.0], [0.05, 0.0], [0.125, 0.045], [0.16, 0.14], [0.125, 0.24],
+        [0.068, 0.285], [0.076, 0.315],
+      ]), 0.02, 7), 0.007, 31);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0x352e28, roughness: 0.85, side: THREE.DoubleSide,
+        bumpMap: clayTex(), bumpScale: 0.9, envMapIntensity: 0.5,
+      }));
+    },
+    mouthR: 0.068, mouthY: 0.315, dip: 0.12, maxSplay: 1.1,
+  },
+  {
+    name: 'terracotta pot',
+    make() {
+      const g = lathe([
+        [0.001, 0.0], [0.068, 0.0], [0.072, 0.01], [0.1, 0.185], [0.115, 0.19],
+        [0.115, 0.225], [0.103, 0.228],
+      ]);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0xa25c3b, roughness: 0.95, side: THREE.DoubleSide,
+        bumpMap: clayTex(), bumpScale: 0.5, envMapIntensity: 0.4,
+      }));
+    },
+    mouthR: 0.1, mouthY: 0.225, dip: 0.06, maxSplay: 1.25,
+  },
+];
+
+// Two places to make an arrangement: the cloth table in the middle of
+// the room, and the plinth in the corner with the gauze hung behind it.
+// A chosen vessel lands wherever you are standing nearer.
+const STATIONS = [
+  { center: new THREE.Vector3(0, 0, 0), surfaceY: TABLE_Y, bounds: { x: 0.82, z: 0.48 } },
+  { center: new THREE.Vector3(2.45, 0, -2.9), surfaceY: 1.13, bounds: { x: 0.17, z: 0.17 } },
 ];
 
 const SHELF_POS = [
-  new THREE.Vector3(-1.28, 1.62, -3.85),
-  new THREE.Vector3(-0.98, 1.62, -3.85),
-  new THREE.Vector3(-0.62, 1.62, -3.85),
+  new THREE.Vector3(-1.38, 1.458, -3.85),
+  new THREE.Vector3(-0.98, 1.458, -3.85),
+  new THREE.Vector3(-0.58, 1.458, -3.85),
+  new THREE.Vector3(-1.38, 1.998, -3.85),
+  new THREE.Vector3(-0.98, 1.998, -3.85),
+  new THREE.Vector3(-0.58, 1.998, -3.85),
 ];
 
 export class Studio {
@@ -161,9 +214,13 @@ export class Studio {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xa4ab97);
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
-    // the view walks a slow circle around the table
-    this.orbit = { yaw: 0.06, pitch: 0.13, radius: 2.9 };
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.05, 50);
+    this.camera.rotation.order = 'YXZ';
+    // you are in the room, on your feet — walk anywhere
+    this.view = { yaw: 0.05, pitch: -0.08 };
+    this.pos = new THREE.Vector3(0.14, 0, 2.85);
+    this._bob = 0;
+    this.heldSpin = 0;
 
     this.hemi = new THREE.HemisphereLight(0xfff4e0, 0x67604f, 1.0);
     this.scene.add(this.hemi);
@@ -183,7 +240,7 @@ export class Studio {
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
 
-    this.tableVase = null;   // index into VASES
+    this.stationVase = [null, null]; // per-station index into VASES
     this.vaseMeshes = [];
     this.placed = [];        // { entry, group, mat, built }
     this.held = null;        // { entry, group, mat, mesh, built }
@@ -271,11 +328,61 @@ export class Studio {
       this.scene.add(skirtMesh);
     }
 
-    // shelf plank
-    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.035, 0.3), wood);
-    plank.position.set(-0.95, 1.6, -3.9);
-    plank.castShadow = true;
-    this.scene.add(plank);
+    // the plinth in the corner, and a gauze hung on a rod behind it
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.44, 1.13, 0.44),
+      new THREE.MeshStandardMaterial({
+        color: 0xd3d0c6, roughness: 0.92, bumpMap: plasterTex(), bumpScale: 2,
+        envMapIntensity: 0.3 }));
+    plinth.position.set(2.45, 0.565, -2.9);
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    this.scene.add(plinth);
+
+    const rodDir = new THREE.Vector3(1, 0, 1).normalize();
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 3.9, 8),
+      new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.6 }));
+    rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), rodDir);
+    rod.position.set(2.95, 3.42, -3.0);
+    this.scene.add(rod);
+
+    const gauzeGeo = new THREE.PlaneGeometry(3.6, 3.3, 64, 4);
+    { // deep vertical folds, heavier toward the hem
+      const gp = gauzeGeo.attributes.position;
+      for (let i = 0; i < gp.count; i++) {
+        const x = gp.getX(i), y = gp.getY(i);
+        const hang = (1.65 - y) / 3.3;
+        gp.setZ(i, (Math.sin(x * 5.0) * 0.09 + Math.sin(x * 11.0 + 1.7) * 0.03)
+          * (0.3 + hang * 0.7));
+      }
+      gauzeGeo.computeVertexNormals();
+    }
+    const gauzeMat = new THREE.MeshLambertMaterial({
+      color: 0xf5f0e4, emissive: 0x35322c, transparent: true, opacity: 0.55,
+      side: THREE.DoubleSide, depthWrite: false });
+    const uT = this._uTime;
+    gauzeMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uT;
+      shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        float hang = (1.65 - position.y) / 3.3;
+        transformed.z += sin(uTime * 0.55 + position.x * 2.6) * 0.05 * hang;
+        transformed.x += sin(uTime * 0.4 + position.y * 1.8) * 0.015 * hang;`
+      );
+    };
+    const gauze = new THREE.Mesh(gauzeGeo, gauzeMat);
+    gauze.rotation.y = -Math.PI / 4;
+    gauze.position.set(2.95, 1.85, -3.0);
+    gauze.renderOrder = 5;
+    this.scene.add(gauze);
+
+    // shelf planks, two of them now — the collection grows
+    for (const py of [1.44, 1.98]) {
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.035, 0.3), wood);
+      plank.position.set(-0.98, py, -3.9);
+      plank.castShadow = true;
+      this.scene.add(plank);
+    }
   }
 
   _buildVases() {
@@ -293,13 +400,15 @@ export class Studio {
 
   get holding() { return this.held !== null; }
   hasArrangement() { return this.placed.length > 0; }
-  vaseOnTable() { return this.tableVase !== null; }
+  anyVase() { return this.stationVase.some((v) => v !== null); }
+  _stemsAt(st) { return this.placed.filter((s) => s.station === st); }
 
-  _mouth() {
-    const def = VASES[this.tableVase];
+  _mouth(st) {
+    const def = VASES[this.stationVase[st]];
+    const c = STATIONS[st];
     return {
-      def,
-      center: new THREE.Vector3(0, TABLE_Y + def.mouthY, 0),
+      def, station: st,
+      center: new THREE.Vector3(c.center.x, c.surfaceY + def.mouthY, c.center.z),
       r: def.mouthR,
     };
   }
@@ -307,18 +416,41 @@ export class Studio {
   // ---- the view ----------------------------------------------------------
 
   rotate(dx, dy) {
-    this.orbit.yaw -= dx * 0.005;
-    this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch + dy * 0.004, 0.04, 0.85);
+    this.view.yaw += dx * 0.0042;
+    this.view.pitch = THREE.MathUtils.clamp(this.view.pitch + dy * 0.0042, -1.15, 1.15);
   }
 
-  zoom(dy) {
-    this.orbit.radius = THREE.MathUtils.clamp(this.orbit.radius + dy * 0.0022, 2.0, 5.2);
+  move(fwd, str, dt) {
+    const moving = fwd !== 0 || str !== 0;
+    if (moving) {
+      const speed = 1.55;
+      const sy = Math.sin(this.view.yaw), cy = Math.cos(this.view.yaw);
+      this.pos.x += (-sy * fwd + cy * str) * speed * dt;
+      this.pos.z += (-cy * fwd - sy * str) * speed * dt;
+      this.pos.x = THREE.MathUtils.clamp(this.pos.x, -3.6, 3.6);
+      this.pos.z = THREE.MathUtils.clamp(this.pos.z, -3.85, 4.3);
+      this._bob += dt * 5.2;
+    }
+    this._moving = moving;
+  }
+
+  spinHeld(d) {
+    if (this.held) this.heldSpin += d;
   }
 
   // ---- stems -------------------------------------------------------------
 
   holdStem(entry) {
     if (this.held || this.discarding) return false;
+    this.heldSpin = 0;
+    if (entry.object) {
+      const built = buildObject(entry.kind, entry.seed);
+      built.group.position.set(0.5, TABLE_Y + 0.15, 0.6);
+      this.scene.add(built.group);
+      this.held = { entry, group: built.group, built, object: true };
+      this._updateCutLabel();
+      return true;
+    }
     const built = buildStem(entry, 2);
     const mat = makePlantMaterial(this._uTime, false, true, this.transU);
     const mesh = new THREE.Mesh(built.geometry, mat);
@@ -344,6 +476,7 @@ export class Studio {
 
   _disposeStem(s) {
     this.scene.remove(s.group);
+    if (s.object) { disposeObject(s.group); return; }
     s.mesh.geometry.dispose();
     s.mat.dispose();
   }
@@ -356,7 +489,7 @@ export class Studio {
   }
 
   wheel(dy) {
-    if (!this.held) return;
+    if (!this.held || this.held.object) return;
     const e = this.held.entry;
     e.cut = THREE.MathUtils.clamp(e.cut - dy * 0.00055, 0.3, 1);
     this._rebuildStem(this.held);
@@ -367,8 +500,9 @@ export class Studio {
     const el = document.getElementById('cutlabel');
     if (!el) return;
     if (!this.held) { el.textContent = ''; return; }
+    if (this.held.object) { el.textContent = 'q e — turn it · click the table to set it down'; return; }
     const cm = Math.round(this.held.built.height * 100);
-    el.textContent = `${cm} cm — scroll to cut`;
+    el.textContent = `${cm} cm — scroll to cut · q e — turn`;
   }
 
   // Called every so often as time passes; the stems in this room are
@@ -382,6 +516,7 @@ export class Studio {
       }
     }
     for (const s of [...this.placed]) {
+      if (s.object) continue;
       const w = wiltOf(s.entry);
       if (w >= 1) {
         // dust
@@ -407,7 +542,11 @@ export class Studio {
     if (this.discarding) return;
     this.raycaster.setFromCamera(ndc, this.camera);
 
-    if (this.held) { this._tryPlace(); return; }
+    if (this.held) {
+      if (this.held.object) this._tryPlaceObject();
+      else this._tryPlace();
+      return;
+    }
 
     // a placed stem? take it back into your hand
     const hitStem = this._stemUnderRay();
@@ -425,13 +564,7 @@ export class Studio {
     // a vase on the shelf?
     const hits = this.raycaster.intersectObjects(this.vaseMeshes);
     if (hits.length) {
-      const idx = hits[0].object.userData.vaseIndex;
-      if (idx === this.tableVase) return;
-      if (this.hasArrangement()) {
-        this.hooks.onMessage('let this arrangement go first');
-        return;
-      }
-      this._chooseVase(idx);
+      this._chooseVase(hits[0].object.userData.vaseIndex);
     }
   }
 
@@ -448,46 +581,94 @@ export class Studio {
   }
 
   _chooseVase(idx) {
-    // send the previous one home
-    if (this.tableVase !== null) {
-      const old = this.vaseMeshes[this.tableVase];
-      this.anims.push(animMove(old, SHELF_POS[this.tableVase], 0.72, 0.7));
+    // where is this vessel now, and is it busy?
+    const cur = this.stationVase.indexOf(idx);
+    if (cur >= 0 && this._stemsAt(cur).length) {
+      this.hooks.onMessage('let that arrangement go first');
+      return;
     }
-    this.tableVase = idx;
-    const mesh = this.vaseMeshes[idx];
-    this.anims.push(animMove(mesh, new THREE.Vector3(0, TABLE_Y, 0), 1.0, 0.8));
-    const def = VASES[idx];
-    this.ring.scale.setScalar(def.mouthR * 1.12);
-    this.ring.position.set(0, TABLE_Y + def.mouthY + 0.004, 0);
+    if (cur >= 0) this.stationVase[cur] = null;
+    // it lands at the empty station you are standing nearer
+    const order = [0, 1].sort((a, b) =>
+      STATIONS[a].center.distanceTo(this.pos) - STATIONS[b].center.distanceTo(this.pos));
+    const target = order.find((st) => this._stemsAt(st).length === 0);
+    if (target === undefined) {
+      this.hooks.onMessage('let an arrangement go first');
+      return;
+    }
+    if (this.stationVase[target] !== null) {
+      const old = this.vaseMeshes[this.stationVase[target]];
+      this.anims.push(animMove(old, SHELF_POS[this.stationVase[target]], 0.72, 0.7));
+    }
+    this.stationVase[target] = idx;
+    const c = STATIONS[target];
+    this.anims.push(animMove(this.vaseMeshes[idx],
+      new THREE.Vector3(c.center.x, c.surfaceY, c.center.z), 1.0, 0.8));
   }
 
   // Where would the held stem stand, if you let it go right here?
   // The whole area around the vessel is the aiming surface: dead centre
   // is upright, further out leans further, in exactly that direction.
   _placementPose() {
-    if (this.tableVase === null) return null;
-    const { def, center, r } = this._mouth();
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -center.y);
-    const hit = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(plane, hit)) return null;
-    const off = hit.sub(center);
-    off.y = 0;
-    const dist = off.length();
-    if (dist > r * 3.4) return null; // out of range — just carrying it
-    const rhat = dist > 1e-4
-      ? off.clone().normalize()
-      : new THREE.Vector3(0, 0, 1);
-    const tilt = Math.min(1, dist / (r * 2.6)) * def.maxSplay;
-    const axis = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), rhat).normalize();
-    const pos = center.clone().addScaledVector(rhat, Math.min(dist, r) * 0.6);
-    pos.y = center.y - def.dip;
-    const quat = new THREE.Quaternion().setFromAxisAngle(axis, tilt);
-    return { pos, quat };
+    let best = null, bestScore = Infinity;
+    for (let st = 0; st < STATIONS.length; st++) {
+      if (this.stationVase[st] === null) continue;
+      const { def, center, r } = this._mouth(st);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -center.y);
+      const hit = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(plane, hit)) continue;
+      const off = hit.sub(center);
+      off.y = 0;
+      const dist = off.length();
+      if (dist > r * 3.4) continue; // out of range of this vessel
+      if (dist / r < bestScore) {
+        bestScore = dist / r;
+        const rhat = dist > 1e-4 ? off.clone().normalize() : new THREE.Vector3(0, 0, 1);
+        const tilt = Math.min(1, dist / (r * 2.6)) * def.maxSplay;
+        const axis = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), rhat).normalize();
+        const pos = center.clone().addScaledVector(rhat, Math.min(dist, r) * 0.6);
+        pos.y = center.y - def.dip;
+        const quat = new THREE.Quaternion().setFromAxisAngle(axis, tilt)
+          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin));
+        best = { pos, quat, station: st, mouth: { center, r: def.mouthR } };
+      }
+    }
+    return best;
+  }
+
+  // The cloth, or the plinth top — either is a place for a found thing.
+  _objectPose() {
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    for (let st = 0; st < STATIONS.length; st++) {
+      const c = STATIONS[st];
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -c.surfaceY);
+      const hit = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(plane, hit)) continue;
+      if (Math.abs(hit.x - c.center.x) > c.bounds.x || Math.abs(hit.z - c.center.z) > c.bounds.z) continue;
+      return {
+        pos: new THREE.Vector3(hit.x, c.surfaceY, hit.z),
+        quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin),
+        station: st,
+      };
+    }
+    return null;
+  }
+
+  _tryPlaceObject() {
+    const pose = this._objectPose();
+    if (!pose) return;
+    const s = this.held;
+    this.held = null;
+    s.station = pose.station;
+    s.group.position.copy(pose.pos);
+    s.group.quaternion.copy(pose.quat);
+    this.placed.push(s);
+    this._updateCutLabel();
   }
 
   _tryPlace() {
-    if (this.tableVase === null) {
+    if (!this.anyVase()) {
       this.hooks.onMessage('choose a vessel from the shelf');
       return;
     }
@@ -495,6 +676,7 @@ export class Studio {
     if (!pose) return; // nowhere near — keep holding
     const s = this.held;
     this.held = null;
+    s.station = pose.station;
     s.group.position.copy(pose.pos);
     s.group.rotation.set(0, 0, 0);
     s.group.quaternion.copy(pose.quat);
@@ -506,15 +688,27 @@ export class Studio {
 
   discard() {
     if (!this.hasArrangement() || this.discarding) return;
+    // the arrangement you are standing nearer is the one you let go of
+    const cands = [0, 1].filter((st) => this._stemsAt(st).length);
+    if (!cands.length) return;
+    cands.sort((a, b) =>
+      STATIONS[a].center.distanceTo(this.pos) - STATIONS[b].center.distanceTo(this.pos));
+    const st = cands[0];
     this.discarding = true;
-    for (const s of this.placed) {
+    this._discardStation = st;
+    for (const s of this._stemsAt(st)) {
+      this.placed.splice(this.placed.indexOf(s), 1);
+      if (s.object) { // a treasure is a treasure — back to the bag
+        this._disposeStem(s);
+        this.hooks.onReturnStem(s.entry);
+        continue;
+      }
       s.mat.transparent = true;
       s.vel = new THREE.Vector3((Math.random() - 0.5) * 0.5, -0.25, (Math.random() - 0.3) * 0.5);
       s.spin = (Math.random() - 0.5) * 1.6;
       s.life = 1;
       this._falling.push(s);
     }
-    this.placed = [];
   }
 
   update(dt, worldT) {
@@ -534,20 +728,19 @@ export class Studio {
     this._ceilMat.color.copy(this._ceilBase).multiplyScalar(day);
     this.scene.background = this._wallMat.color;
 
-    // orbiting, breathing camera; stepping back lifts the gaze so a
-    // tall arrangement is seen whole
-    const o = this.orbit;
-    const lift = Math.max(0, o.radius - 2.9) * 0.3;
+    // a body in the room: breath, and a little bob when walking
     this.camera.position.set(
-      TARGET.x + o.radius * Math.sin(o.yaw) * Math.cos(o.pitch) + Math.sin(this._t * 0.23) * 0.012,
-      TARGET.y + lift * 0.7 + o.radius * Math.sin(o.pitch) + Math.sin(this._t * 0.31) * 0.008,
-      TARGET.z + o.radius * Math.cos(o.yaw) * Math.cos(o.pitch));
-    this.camera.lookAt(TARGET.x, TARGET.y + lift, TARGET.z);
+      this.pos.x + Math.sin(this._t * 0.23) * 0.008,
+      1.52 + Math.sin(this._bob) * (this._moving ? 0.02 : 0)
+        + Math.sin(this._t * 0.31) * 0.006,
+      this.pos.z);
+    this.camera.rotation.set(this.view.pitch, this.view.yaw, 0);
 
     // the held stem previews its own placement; away from the vessel it
     // simply follows the hand
     if (this.held) {
-      const pose = this.discarding ? null : this._placementPose();
+      const pose = this.discarding ? null
+        : (this.held.object ? this._objectPose() : this._placementPose());
       const k = 1 - Math.pow(0.002, dt);
       if (pose) {
         this.held.group.position.lerp(pose.pos, k);
@@ -561,15 +754,23 @@ export class Studio {
           hit.z = THREE.MathUtils.clamp(hit.z, -1.3, 1.5);
           hit.y = TABLE_Y + 0.12;
           this.held.group.position.lerp(hit, k);
-          this.held.group.quaternion.slerp(UPRIGHT_Q, k);
+          const idleQ = UPRIGHT_Q.clone()
+            .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin));
+          this.held.group.quaternion.slerp(idleQ, k);
         }
       }
     }
 
     // the ring shows where the mouth is, only while you carry a stem
-    this.ring.visible = !!this.held && this.tableVase !== null && !this.discarding;
-    if (this.ring.visible) {
+    const ringPose = (this.held && !this.held.object && !this.discarding)
+      ? this._placementPose() : null;
+    if (ringPose) {
+      this.ring.visible = true;
+      this.ring.scale.setScalar(ringPose.mouth.r * 1.12);
+      this.ring.position.copy(ringPose.mouth.center).y += 0.004;
       this.ring.material.opacity = 0.28 + 0.16 * Math.sin(this._t * 2.4);
+    } else {
+      this.ring.visible = false;
     }
 
     // vase travel
@@ -592,11 +793,13 @@ export class Studio {
     if (!alive && this._falling.length) this._falling = [];
     if (this.discarding && !alive) {
       this.discarding = false;
-      if (this.tableVase !== null) {
-        const mesh = this.vaseMeshes[this.tableVase];
-        this.anims.push(animMove(mesh, SHELF_POS[this.tableVase], 0.72, 0.8));
-        this.tableVase = null;
+      const st = this._discardStation;
+      if (st !== undefined && this.stationVase[st] !== null) {
+        const idx = this.stationVase[st];
+        this.anims.push(animMove(this.vaseMeshes[idx], SHELF_POS[idx], 0.72, 0.8));
+        this.stationVase[st] = null;
       }
+      this._discardStation = undefined;
     }
   }
 }

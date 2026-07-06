@@ -3,6 +3,9 @@ import { Field } from './field.js';
 import { Studio } from './studio.js';
 import { Post } from './post.js';
 import { buildStem, makePlantMaterial, STEM_NAMES } from './flower.js';
+import { buildObject, disposeObject, OBJECT_NAMES } from './objects.js';
+
+const NAMES = { ...STEM_NAMES, ...OBJECT_NAMES };
 
 const CYCLE = 780; // seconds of real time for one pass of the sky
 
@@ -10,7 +13,7 @@ const CYCLE = 780; // seconds of real time for one pass of the sky
 const WILT_START = 300;   // seconds after picking
 const WILT_FULL = 1080;   // dust
 function wiltOf(entry) {
-  if (entry.pickedAt === undefined) return 0;
+  if (entry.object || entry.pickedAt === undefined) return 0; // treasures keep
   const age = clock.elapsedTime - entry.pickedAt;
   return THREE.MathUtils.clamp((age - WILT_START) / (WILT_FULL - WILT_START), 0, 1);
 }
@@ -32,7 +35,7 @@ const post = new Post(renderer);
 function postOpts() {
   return mode === 'field'
     ? { dof: 0, bloom: 0.30, focus: 10, range: 20 }
-    : { dof: 0.85, bloom: 0.18, focus: studio.orbit.radius, range: 1.5 };
+    : { dof: 0, bloom: 0.18, focus: 3, range: 3 }; // the room stays sharp
 }
 
 const uTime = { value: 0 };
@@ -72,18 +75,25 @@ function thumbFor(entry) {
     thumbKit = { r, scene, cam: new THREE.PerspectiveCamera(38, 1, 0.01, 20),
       mat: makePlantMaterial({ value: 0 }, false) };
   }
-  const built = buildStem(entry);
-  const mesh = new THREE.Mesh(built.geometry, thumbKit.mat);
-  thumbKit.scene.add(mesh);
+  let node, built;
+  if (entry.object) {
+    built = buildObject(entry.kind, entry.seed);
+    node = built.group;
+  } else {
+    built = buildStem(entry);
+    node = new THREE.Mesh(built.geometry, thumbKit.mat);
+  }
+  thumbKit.scene.add(node);
   const h = Math.max(built.height, built.headPos.y);
   const c = built.headPos.clone().lerp(new THREE.Vector3(0, h * 0.55, 0), 0.45);
-  const d = Math.max(h * 0.8, built.headR * 2.8, 0.35);
-  thumbKit.cam.position.set(c.x + d * 0.3, c.y + d * 0.15, c.z + d);
+  const d = Math.max(h * 0.8, built.headR * 2.8, entry.object ? 0.16 : 0.35);
+  thumbKit.cam.position.set(c.x + d * 0.3, c.y + d * (entry.object ? 0.8 : 0.15), c.z + d);
   thumbKit.cam.lookAt(c);
   thumbKit.r.render(thumbKit.scene, thumbKit.cam);
   const url = thumbKit.r.domElement.toDataURL();
-  thumbKit.scene.remove(mesh);
-  built.geometry.dispose();
+  thumbKit.scene.remove(node);
+  if (entry.object) disposeObject(node);
+  else built.geometry.dispose();
   thumbCache.set(key, url);
   return url;
 }
@@ -111,8 +121,9 @@ function renderBag() {
       bagPreview.querySelector('img').src = thumbFor(entry);
       const w = wiltWord(entry.wilt || 0);
       const cm = Math.round(entry.cut * 100);
-      bagPreview.querySelector('span').textContent =
-        STEM_NAMES[entry.kind] + (w ? ` — ${w}` : entry.cut < 1 ? ` — cut to ${cm}%` : '');
+      bagPreview.querySelector('span').textContent = entry.object
+        ? NAMES[entry.kind]
+        : NAMES[entry.kind] + (w ? ` — ${w}` : entry.cut < 1 ? ` — cut to ${cm}%` : '');
       bagPreview.classList.add('show');
     });
     d.addEventListener('mouseleave', () => bagPreview.classList.remove('show'));
@@ -165,7 +176,9 @@ function makeEnvironment() {
   pmrem.dispose();
   return env;
 }
-studio.scene.environment = makeEnvironment();
+const ENV = makeEnvironment();
+studio.scene.environment = ENV;
+field.scene.environment = ENV;
 
 let mode = 'field';
 let switching = false;
@@ -259,7 +272,6 @@ addEventListener('wheel', (e) => {
   if (mode !== 'studio') return;
   e.preventDefault();
   if (studio.holding) studio.wheel(e.deltaY);
-  else studio.zoom(e.deltaY);
 }, { passive: false });
 
 document.addEventListener('pointerlockchange', () => {
@@ -283,13 +295,14 @@ function tryPick() {
 function movePlayer(dt) {
   const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const speed = 2.15;
+  const inGrass = field.grassAt(fieldCam.position.x, fieldCam.position.z);
+  const speed = 2.15 * (inGrass ? 0.48 : 1); // standing grass takes effort
   const moving = fwd !== 0 || str !== 0;
   if (moving) {
     const sy = Math.sin(yaw), cy = Math.cos(yaw);
     fieldCam.position.x += (-sy * fwd + cy * str) * speed * dt;
     fieldCam.position.z += (-cy * fwd - sy * str) * speed * dt;
-    bobPhase += dt * 5.6;
+    bobPhase += dt * (inGrass ? 4.0 : 5.6);
   }
   fieldCam.position.y = 1.55 + Math.sin(bobPhase) * (moving ? 0.026 : 0.004);
   fieldCam.rotation.set(pitch, yaw, 0);
@@ -420,51 +433,76 @@ function makeRadio(ctx, dest) {
   drift.start();
   music.connect(speaker);
 
-  // the programme itself: slow tunes in changing keys, pauses between
-  const SCALES = [[0, 2, 4, 7, 9], [0, 3, 5, 7, 10], [0, 2, 3, 7, 8], [0, 2, 5, 7, 9]];
-  let root = 220, scale = SCALES[0], degree = 5;
+  // The programme: patient minimalism — a small arpeggio cell that
+  // repeats and slowly turns while a longer line sings above it, the way
+  // certain Belgian composers taught the piano to insist. Generated as it
+  // plays; it never repeats itself and it is nobody's recording.
+  const CHORDS = {
+    I: [0, 4, 7, 12], i: [0, 3, 7, 12], IV: [5, 9, 12, 17], iv: [5, 8, 12, 17],
+    V: [7, 11, 14, 19], vi: [9, 12, 16, 21], VI: [8, 12, 15, 20], III: [4, 8, 11, 16],
+  };
+  const PROGS = [
+    ['I', 'V', 'vi', 'IV'], ['i', 'VI', 'III', 'V'], ['I', 'vi', 'IV', 'V'],
+    ['i', 'iv', 'VI', 'V'], ['I', 'IV', 'vi', 'V'],
+  ];
+  const ARPS = [
+    [0, 1, 2, 3, 2, 1], [0, 2, 1, 3, 1, 2], [0, 1, 3, 1, 2, 1], [0, 3, 2, 3, 1, 2],
+  ];
+  let root = 174.6, eighth = 0.23, prog = PROGS[0], arp = ARPS[0];
+  let chordI = 0, stepI = 0, melodyAt = 0;
   let next = ctx.currentTime + 1.5, pieceEnd = 0, resting = true;
-  function freqOf(deg) {
-    const oct = Math.floor(deg / scale.length);
-    const st = scale[((deg % scale.length) + scale.length) % scale.length];
-    return root * Math.pow(2, oct + st / 12);
-  }
-  function tone(t, f, dur, vel) {
+
+  function piano(t, f, dur, vel) {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vel, t + 0.06);
-    g.gain.setTargetAtTime(0, t + dur * 0.4, dur * 0.35);
-    const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = f;
-    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2.003;
-    const g2 = ctx.createGain(); g2.gain.value = 0.28;
-    o1.connect(g); o2.connect(g2).connect(g);
+    g.gain.linearRampToValueAtTime(vel, t + 0.008);
+    g.gain.setTargetAtTime(0, t + 0.03, Math.max(0.18, dur * 0.45));
+    const partials = [[1, 1], [2.001, 0.34], [2.998, 0.11], [4.01, 0.045]];
+    for (const [m, a] of partials) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * m;
+      const og = ctx.createGain();
+      og.gain.value = a;
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + dur + 1.6);
+    }
     g.connect(music);
-    o1.start(t); o2.start(t);
-    o1.stop(t + dur + 1.5); o2.stop(t + dur + 1.5);
   }
+
   setInterval(() => {
-    const horizon = ctx.currentTime + 1.5;
+    const horizon = ctx.currentTime + 1.6;
     while (next < horizon) {
       if (next > pieceEnd) {
-        if (!resting) { // the piece ends; the announcer says nothing
+        if (!resting) { // the piece ends; only the needle keeps going
           resting = true;
           next += 6 + Math.random() * 7;
           continue;
         }
         resting = false;
-        root = [174.6, 196, 220, 246.9][Math.floor(Math.random() * 4)];
-        scale = SCALES[Math.floor(Math.random() * SCALES.length)];
-        degree = 3 + Math.floor(Math.random() * 5);
-        pieceEnd = next + 40 + Math.random() * 35;
+        root = [155.6, 174.6, 196, 220][Math.floor(Math.random() * 4)];
+        eighth = 0.20 + Math.random() * 0.07;
+        prog = PROGS[Math.floor(Math.random() * PROGS.length)];
+        arp = ARPS[Math.floor(Math.random() * ARPS.length)];
+        chordI = 0; stepI = 0;
+        melodyAt = next + eighth * 12;
+        pieceEnd = next + 55 + Math.random() * 35;
       }
-      degree += [-2, -1, -1, 0, 1, 1, 2, 3][Math.floor(Math.random() * 8)];
-      degree = Math.max(0, Math.min(14, degree));
-      const dur = 0.5 + Math.random() * 1.4;
-      tone(next, freqOf(degree), dur, 0.05 + Math.random() * 0.03);
-      if (Math.random() < 0.3) tone(next + 0.12, freqOf(degree - 7) / 2, dur * 2, 0.028);
-      next += [0.4, 0.8, 0.8, 1.2, 1.6, 2.4][Math.floor(Math.random() * 6)];
+      const chord = CHORDS[prog[chordI]];
+      const deg = chord[arp[stepI % arp.length]];
+      const accent = stepI % arp.length === 0 ? 0.075 : 0.05;
+      piano(next, root * Math.pow(2, deg / 12), eighth * 2.2, accent * (0.9 + Math.random() * 0.2));
+      if (next >= melodyAt) { // the singing line, an octave up, unhurried
+        const mdeg = chord[1 + Math.floor(Math.random() * 3)] + 12;
+        piano(next, root * Math.pow(2, mdeg / 12), eighth * (6 + Math.random() * 6), 0.085);
+        melodyAt = next + eighth * (8 + Math.floor(Math.random() * 10));
+      }
+      stepI++;
+      if (stepI % (arp.length * 4) === 0) chordI = (chordI + 1) % prog.length;
+      next += eighth;
     }
-  }, 400);
+  }, 350);
   return { out };
 }
 
@@ -588,9 +626,15 @@ renderer.setAnimationLoop(() => {
     if (started) movePlayer(dt);
     field.update(worldT, fieldCam);
     reticle.classList.toggle('near', !!field.target);
-    retLabel.textContent = field.target ? 'pick' : '';
+    retLabel.textContent = field.target
+      ? (field.target.object ? NAMES[field.target.kind] : 'pick') : '';
     post.render(field.scene, fieldCam, postOpts());
   } else {
+    const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    studio.move(fwd, str, dt);
+    if (keys.has('KeyQ')) studio.spinHeld(2.4 * dt);
+    if (keys.has('KeyE')) studio.spinHeld(-2.4 * dt);
     studio.update(dt, worldT);
     post.render(studio.scene, studio.camera, postOpts());
   }
