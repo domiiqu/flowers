@@ -273,6 +273,205 @@ export function buildDaisy(seed, opts = {}) {
   return { geometry: toGeometry(arrays), height: H, headPos, headR: centerR + pLen };
 }
 
+// A blush tulip — double-petalled, tea-coloured, heavy as silk. The only
+// one of us with proper leaves.
+export function buildTulip(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const H = (0.5 + rng() * 0.45) * cut * (1 - 0.1 * w);
+  const { curve, tip } = stemCurve(rng, H, 0.9 + 0.8 * w);
+  const arrays = { position: [], normal: [], color: [] };
+
+  const stemCol = new THREE.Color('#6f7f52').lerp(STEM_DRIED, w * 0.6);
+  push(arrays, new THREE.TubeGeometry(curve, 10 * d, 0.007 + rng() * 0.002, 4 + 3 * d), _m.identity(), stemCol);
+
+  // broad strap leaves from low on the stem
+  const nLeaves = 1 + Math.floor(rng() * 2);
+  const leafCol = new THREE.Color('#5f7250').lerp(new THREE.Color('#8a9860'), rng() * 0.3)
+    .lerp(STEM_DRIED, w * 0.5);
+  for (let i = 0; i < nLeaves; i++) {
+    const len = 0.26 + rng() * 0.18;
+    const leaf = new THREE.PlaneGeometry(0.055, len, 2, 6 * d);
+    leaf.translate(0, len / 2, 0);
+    const lp = leaf.attributes.position;
+    for (let k = 0; k < lp.count; k++) {
+      const f = Math.max(0, lp.getY(k) / len);
+      lp.setX(k, lp.getX(k) * (1 - Math.pow(f, 1.5) * 0.75));
+      lp.setZ(k, f * f * len * (0.55 + w * 0.5) + Math.abs(lp.getX(k)) * 0.4);
+    }
+    leaf.computeVertexNormals();
+    const az = rng() * Math.PI * 2;
+    const q = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(-(0.25 + rng() * 0.4), az, 0, 'YXZ'));
+    _m.compose(new THREE.Vector3(0, 0.02 + rng() * 0.08, 0), q, new THREE.Vector3(1, 1, 1));
+    push(arrays, leaf, _m, leafCol, leafCol.clone().lerp(new THREE.Color('#b3ac72'), 0.4));
+    leaf.dispose();
+  }
+
+  // the bloom points up, mostly — a soft double cup
+  const nod = 0.1 + rng() * 0.4 + 0.8 * w;
+  const nodA = rng() * Math.PI * 2;
+  const dir = nodDirection(nod, nodA);
+  const headPos = tip.clone().addScaledVector(dir, 0.005);
+  const headQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+
+  // dusty tea / blush / parchment
+  const base = new THREE.Color().setHSL(0.04 + rng() * 0.05, 0.22 + rng() * 0.2, 0.52 + rng() * 0.16);
+  const tipCol = base.clone().lerp(new THREE.Color('#f0e4d0'), 0.35 + rng() * 0.3);
+  base.lerp(new THREE.Color('#8a6a52'), w * 0.55);
+  tipCol.lerp(PETAL_DRIED, w * 0.5);
+  const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+  for (let layer = 0; layer < 3; layer++) {
+    const nP = 5 + Math.floor(rng() * 3);
+    const pLen = (0.055 + rng() * 0.02) * (1 - layer * 0.12);
+    const petal = petalGeometry(pLen, pLen * 0.8, 0.55, -0.9, d);
+    const pitch = (1.15 - layer * 0.22) - w * 0.7; // wilt lets the cup fall open
+    for (let i = 0; i < nP; i++) {
+      const theta = (i / nP) * Math.PI * 2 + layer * 0.45 + (rng() - 0.5) * 0.3;
+      q1.setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch + (rng() - 0.5) * 0.2);
+      q2.setFromAxisAngle(new THREE.Vector3(0, 0, 1), theta);
+      q2.multiply(q1).premultiply(headQ);
+      _m.compose(headPos, q2, new THREE.Vector3(1, 1, 1));
+      push(arrays, petal, _m, base, tipCol);
+    }
+    petal.dispose();
+  }
+
+  return { geometry: toGeometry(arrays), height: H, headPos, headR: 0.09 };
+}
+
+// A poppy not yet open — a long swaying stem and a fuzzy green bud,
+// sometimes with a crease of orange showing where the flower will be.
+export function buildPoppy(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const H = (0.7 + rng() * 0.6) * cut * (1 - 0.1 * w);
+  // an S of a stem — poppies cannot stand still
+  const amp = (0.08 + rng() * 0.1) * H * (1 + 0.5 * w);
+  const az = rng() * Math.PI * 2;
+  const ax = Math.cos(az), az2 = Math.sin(az);
+  const pts = [
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(ax * amp * 0.7, H * 0.3, az2 * amp * 0.7),
+    new THREE.Vector3(-ax * amp, H * 0.6, -az2 * amp),
+    new THREE.Vector3(ax * amp * 0.8, H * 0.85, az2 * amp * 0.8),
+    new THREE.Vector3(0, H, 0),
+  ];
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const arrays = { position: [], normal: [], color: [] };
+  const stemCol = new THREE.Color('#647449').lerp(new THREE.Color('#98a072'), rng() * 0.3)
+    .lerp(STEM_DRIED, w * 0.6);
+  push(arrays, new THREE.TubeGeometry(curve, 14 * d, 0.0065 + rng() * 0.002, 4 + 3 * d), _m.identity(), stemCol);
+
+  const nod = 0.2 + rng() * 0.7 + 0.6 * w;
+  const nodA = rng() * Math.PI * 2;
+  const dir = nodDirection(nod, nodA);
+  const headPos = pts[4].clone().addScaledVector(dir, 0.01);
+  const headQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+
+  const budR = 0.026 + rng() * 0.014;
+  const bud = new THREE.SphereGeometry(budR, 10 * d, 8 * d);
+  bud.scale(1, 1, 1.35);
+  const budBase = new THREE.Color('#5c6c40').lerp(new THREE.Color('#3f4a2e'), w * 0.5);
+  const budDark = budBase.clone().lerp(new THREE.Color('#2c331f'), 0.7);
+  const jit = rng() * 90;
+  const fuzz = (v) => {
+    const h = Math.abs(Math.sin(v.x * 143.1 + v.y * 87.3 + v.z * 61.7 + jit)) % 1;
+    return budBase.clone().lerp(budDark, h * 0.5);
+  };
+  _m.compose(headPos, headQ, new THREE.Vector3(1, 1, 1));
+  push(arrays, bud, _m, fuzz);
+  bud.dispose();
+
+  // a crease of orange, where it is deciding to open
+  if (rng() < 0.55 && w < 0.7) {
+    const crest = new THREE.Color('#d05a1c').lerp(new THREE.Color('#e88a38'), rng() * 0.5);
+    const cPetal = petalGeometry(budR * 1.3, budR * 0.5, 0.6, 0.6, d);
+    const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+    const n = 2 + Math.floor(rng() * 3);
+    for (let i = 0; i < n; i++) {
+      q1.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 1.25 + (rng() - 0.5) * 0.3);
+      q2.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rng() * Math.PI * 2);
+      q2.multiply(q1).premultiply(headQ);
+      _m.compose(headPos.clone().addScaledVector(dir, budR * 1.05), q2, new THREE.Vector3(1, 1, 1));
+      push(arrays, cPetal, _m, crest, crest.clone().lerp(new THREE.Color('#f2b268'), 0.5));
+    }
+    cPetal.dispose();
+  }
+
+  return { geometry: toGeometry(arrays), height: H, headPos, headR: budR * 2.2 };
+}
+
+// A spray of wildflowers — one thin stem that cannot decide, branching
+// into little white blossoms and unopened beads.
+export function buildSpray(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const H = (0.5 + rng() * 0.4) * cut * (1 - 0.1 * w);
+  const { curve, tip } = stemCurve(rng, H, 1.1);
+  const arrays = { position: [], normal: [], color: [] };
+  const stemCol = new THREE.Color('#6a6a4a').lerp(new THREE.Color('#4a4432'), rng() * 0.5 + w * 0.4);
+  push(arrays, new THREE.TubeGeometry(curve, 10 * d, 0.0035, 4 + 2 * d), _m.identity(), stemCol);
+
+  const petalCol = new THREE.Color('#ece6d4')
+    .lerp(new THREE.Color('#e0c8bc'), rng() * 0.25)
+    .lerp(new THREE.Color('#b5a07c'), w * 0.6);
+  const centerCol = new THREE.Color('#caa23a').lerp(new THREE.Color('#7a5c22'), w * 0.5);
+  const bPetal = petalGeometry(0.016 + rng() * 0.006, 0.011, 0.35, 0.4, d);
+  const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+
+  const nBranch = 4 + Math.floor(rng() * 4);
+  for (let b = 0; b < nBranch; b++) {
+    const t = 0.45 + rng() * 0.5;
+    const base = curve.getPoint(t);
+    const bAz = rng() * Math.PI * 2;
+    const len = 0.08 + rng() * 0.15;
+    const out = new THREE.Vector3(Math.cos(bAz), 0.7 + rng() * 0.8, Math.sin(bAz)).normalize();
+    const end = base.clone().addScaledVector(out, len);
+    const mid = base.clone().addScaledVector(out, len * 0.55);
+    mid.x += (rng() - 0.5) * 0.03; mid.z += (rng() - 0.5) * 0.03;
+    const bc = new THREE.CatmullRomCurve3([base, mid, end]);
+    push(arrays, new THREE.TubeGeometry(bc, 5 * d, 0.0022, 4), _m.identity(), stemCol);
+
+    if (rng() < 0.32 + w * 0.5) {
+      // still a bead
+      const bead = new THREE.SphereGeometry(0.006, 6, 5);
+      _m.makeTranslation(end.x, end.y, end.z);
+      push(arrays, bead, _m, petalCol.clone().lerp(stemCol, 0.4));
+      bead.dispose();
+    } else {
+      // a small open blossom facing along the branch, tilted skyward
+      const fDir = out.clone().lerp(new THREE.Vector3(0, 1, 0), 0.5).normalize();
+      const fQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), fDir);
+      const heart = new THREE.SphereGeometry(0.004, 6, 5);
+      _m.compose(end, fQ, new THREE.Vector3(1, 1, 1));
+      push(arrays, heart, _m, centerCol);
+      heart.dispose();
+      const nP = 5 + Math.floor(rng() * 2);
+      for (let i = 0; i < nP; i++) {
+        if (rng() < w * 0.6) continue;
+        q1.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 1.35 + (rng() - 0.5) * 0.3);
+        q2.setFromAxisAngle(new THREE.Vector3(0, 0, 1), (i / nP) * Math.PI * 2 + rng() * 0.3);
+        q2.multiply(q1).premultiply(fQ);
+        _m.compose(end, q2, new THREE.Vector3(1, 1, 1));
+        push(arrays, bPetal, _m, petalCol);
+      }
+    }
+  }
+  bPetal.dispose();
+
+  return { geometry: toGeometry(arrays), height: H, headPos: tip.clone(), headR: 0.2 };
+}
+
 // A whip — one of those long pale tendrils that loops off on its own
 // errand. No flower to speak of; it is all gesture.
 export function buildWhip(seed, opts = {}) {
@@ -320,6 +519,9 @@ const BUILDERS = {
   seedhead: buildSeedhead,
   daisy: buildDaisy,
   whip: buildWhip,
+  tulip: buildTulip,
+  poppy: buildPoppy,
+  spray: buildSpray,
 };
 
 export const STEM_NAMES = {
@@ -327,6 +529,9 @@ export const STEM_NAMES = {
   seedhead: 'seed head',
   daisy: 'chalk daisy',
   whip: 'whip',
+  tulip: 'blush tulip',
+  poppy: 'poppy bud',
+  spray: 'wild spray',
 };
 
 export function buildStem(entry, detail = 1) {

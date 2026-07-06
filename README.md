@@ -5,18 +5,28 @@ An artwork you walk around in. Not a product.
 There is an endless field. The only thing that changes about it is time —
 the sky moves through dusk, twilight, blue hour, night, and a pale
 almost-dawn, over about thirteen real minutes, and then again. In the field
-grow dark sunflowers on wavering stems, great dried seed heads — silver,
-umber, rust — small chalk daisies, and here and there a long pale tendril
-looping off on its own errand. You may pick them. A flower you pick is gone
-from the field, and the field remembers — walk back tomorrow and the gap is
-still there.
+grow dark sunflowers, great dried seed heads — silver, umber, rust — chalk
+daisies, blush tulips with their strap leaves, unopened poppies on long
+swaying stems, sprays of small white wildflowers, and pale tendrils looping
+off on their own errands. They grow in loose companies: a stand of tulips
+here, poppies gathering there, edges soft as weather. You may pick them.
+A flower you pick is gone from the field, and the field remembers — walk
+back tomorrow and the gap is still there.
 
-There is also a studio: a table with a cloth on it, a shelf with three
-vessels — a lumpy bone amphora, a white pitcher, a shallow footed dish.
-Choose one and it comes to the table. Carry a stem near the vessel and it
-shows you exactly how it would stand — lean it left, lean it right, click
-to set it. Cut them shorter. Take them out and try again. Walk around the
-table. When it is right, photograph it.
+Very rarely, the field gives something up: a lost locket, an old tin, a
+striped stone, an ammonite. Treasures go in the bag too, and can stand in
+the still life beside the flowers. They do not wilt — a treasure is a
+treasure — and when an arrangement is let go, the treasures come back to
+you.
+
+There is also a studio: a table with a cloth on it, and two shelves of
+vessels — a lumpy bone amphora, a white pitcher, a shallow footed dish, a
+tall concrete cylinder, a black moon jar, a terracotta pot. You are in the
+room on your feet: walk anywhere, look anywhere. Choose a vessel and it
+comes to the table. Carry a stem near it and it shows you exactly how it
+would stand — lean it left, lean it right, turn it to face the light,
+click to set it. Cut them shorter. Take them out and try again. When it is
+right, photograph it.
 
 Cut flowers do not last. From the moment you pick a stem it is dying —
 after a few minutes it softens, the head hangs, the colour dries, daisies
@@ -45,10 +55,12 @@ served over http, not file://)
 | look (full 360) | mouse (click once to take hold of the view) |
 | pick a flower | look at it, come close, click (or `E`) |
 | the studio / the field | `Tab` |
-| look around the studio | drag; scroll to come closer or step far back |
+| walk the studio | `W A S D`; drag to look around |
 | see a stem properly | rest on it in the bag at the bottom |
 | take a stem | click it in the bag |
 | place a stem | carry it near the vessel — it previews how it will stand — click to set |
+| turn a held stem or treasure | `Q` / `E` |
+| set a treasure down | click anywhere on the cloth |
 | cut a stem | scroll while holding it |
 | take a placed stem back | click it |
 | put a held stem back in the bag | right-click |

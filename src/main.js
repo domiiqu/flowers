@@ -3,6 +3,9 @@ import { Field } from './field.js';
 import { Studio } from './studio.js';
 import { Post } from './post.js';
 import { buildStem, makePlantMaterial, STEM_NAMES } from './flower.js';
+import { buildObject, disposeObject, OBJECT_NAMES } from './objects.js';
+
+const NAMES = { ...STEM_NAMES, ...OBJECT_NAMES };
 
 const CYCLE = 780; // seconds of real time for one pass of the sky
 
@@ -10,7 +13,7 @@ const CYCLE = 780; // seconds of real time for one pass of the sky
 const WILT_START = 300;   // seconds after picking
 const WILT_FULL = 1080;   // dust
 function wiltOf(entry) {
-  if (entry.pickedAt === undefined) return 0;
+  if (entry.object || entry.pickedAt === undefined) return 0; // treasures keep
   const age = clock.elapsedTime - entry.pickedAt;
   return THREE.MathUtils.clamp((age - WILT_START) / (WILT_FULL - WILT_START), 0, 1);
 }
@@ -32,7 +35,7 @@ const post = new Post(renderer);
 function postOpts() {
   return mode === 'field'
     ? { dof: 0, bloom: 0.30, focus: 10, range: 20 }
-    : { dof: 0.85, bloom: 0.18, focus: studio.orbit.radius, range: 1.5 };
+    : { dof: 0, bloom: 0.18, focus: 3, range: 3 }; // the room stays sharp
 }
 
 const uTime = { value: 0 };
@@ -72,18 +75,25 @@ function thumbFor(entry) {
     thumbKit = { r, scene, cam: new THREE.PerspectiveCamera(38, 1, 0.01, 20),
       mat: makePlantMaterial({ value: 0 }, false) };
   }
-  const built = buildStem(entry);
-  const mesh = new THREE.Mesh(built.geometry, thumbKit.mat);
-  thumbKit.scene.add(mesh);
+  let node, built;
+  if (entry.object) {
+    built = buildObject(entry.kind, entry.seed);
+    node = built.group;
+  } else {
+    built = buildStem(entry);
+    node = new THREE.Mesh(built.geometry, thumbKit.mat);
+  }
+  thumbKit.scene.add(node);
   const h = Math.max(built.height, built.headPos.y);
   const c = built.headPos.clone().lerp(new THREE.Vector3(0, h * 0.55, 0), 0.45);
-  const d = Math.max(h * 0.8, built.headR * 2.8, 0.35);
-  thumbKit.cam.position.set(c.x + d * 0.3, c.y + d * 0.15, c.z + d);
+  const d = Math.max(h * 0.8, built.headR * 2.8, entry.object ? 0.16 : 0.35);
+  thumbKit.cam.position.set(c.x + d * 0.3, c.y + d * (entry.object ? 0.8 : 0.15), c.z + d);
   thumbKit.cam.lookAt(c);
   thumbKit.r.render(thumbKit.scene, thumbKit.cam);
   const url = thumbKit.r.domElement.toDataURL();
-  thumbKit.scene.remove(mesh);
-  built.geometry.dispose();
+  thumbKit.scene.remove(node);
+  if (entry.object) disposeObject(node);
+  else built.geometry.dispose();
   thumbCache.set(key, url);
   return url;
 }
@@ -111,8 +121,9 @@ function renderBag() {
       bagPreview.querySelector('img').src = thumbFor(entry);
       const w = wiltWord(entry.wilt || 0);
       const cm = Math.round(entry.cut * 100);
-      bagPreview.querySelector('span').textContent =
-        STEM_NAMES[entry.kind] + (w ? ` — ${w}` : entry.cut < 1 ? ` — cut to ${cm}%` : '');
+      bagPreview.querySelector('span').textContent = entry.object
+        ? NAMES[entry.kind]
+        : NAMES[entry.kind] + (w ? ` — ${w}` : entry.cut < 1 ? ` — cut to ${cm}%` : '');
       bagPreview.classList.add('show');
     });
     d.addEventListener('mouseleave', () => bagPreview.classList.remove('show'));
@@ -165,7 +176,9 @@ function makeEnvironment() {
   pmrem.dispose();
   return env;
 }
-studio.scene.environment = makeEnvironment();
+const ENV = makeEnvironment();
+studio.scene.environment = ENV;
+field.scene.environment = ENV;
 
 let mode = 'field';
 let switching = false;
@@ -259,7 +272,6 @@ addEventListener('wheel', (e) => {
   if (mode !== 'studio') return;
   e.preventDefault();
   if (studio.holding) studio.wheel(e.deltaY);
-  else studio.zoom(e.deltaY);
 }, { passive: false });
 
 document.addEventListener('pointerlockchange', () => {
@@ -588,9 +600,15 @@ renderer.setAnimationLoop(() => {
     if (started) movePlayer(dt);
     field.update(worldT, fieldCam);
     reticle.classList.toggle('near', !!field.target);
-    retLabel.textContent = field.target ? 'pick' : '';
+    retLabel.textContent = field.target
+      ? (field.target.object ? NAMES[field.target.kind] : 'pick') : '';
     post.render(field.scene, fieldCam, postOpts());
   } else {
+    const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    studio.move(fwd, str, dt);
+    if (keys.has('KeyQ')) studio.spinHeld(2.4 * dt);
+    if (keys.has('KeyE')) studio.spinHeld(-2.4 * dt);
     studio.update(dt, worldT);
     post.render(studio.scene, studio.camera, postOpts());
   }

@@ -1,5 +1,6 @@
 import * as THREE from '../lib/three.module.min.js';
 import { buildStem, makePlantMaterial, makeTransUniforms } from './flower.js';
+import { buildObject, disposeObject } from './objects.js';
 import { samplePalette } from './sky.js';
 
 const TABLE_Y = 1.02; // top of the cloth
@@ -147,12 +148,54 @@ const VASES = [
     },
     mouthR: 0.17, mouthY: 0.24, dip: 0.015, maxSplay: 1.35,
   },
+  {
+    name: 'tall cylinder',
+    make() {
+      const g = lathe([
+        [0.001, 0.0], [0.052, 0.0], [0.056, 0.03], [0.048, 0.47], [0.054, 0.52],
+      ]);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0xb0aca1, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.35,
+      }));
+    },
+    mouthR: 0.05, mouthY: 0.52, dip: 0.2, maxSplay: 0.55,
+  },
+  {
+    name: 'black moon jar',
+    make() {
+      const g = lumpify(lathe([
+        [0.001, 0.0], [0.05, 0.0], [0.125, 0.045], [0.16, 0.14], [0.125, 0.24],
+        [0.068, 0.285], [0.076, 0.315],
+      ]), 0.008);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0x2b2725, roughness: 0.5, side: THREE.DoubleSide, envMapIntensity: 1.0,
+      }));
+    },
+    mouthR: 0.068, mouthY: 0.315, dip: 0.12, maxSplay: 1.1,
+  },
+  {
+    name: 'terracotta pot',
+    make() {
+      const g = lathe([
+        [0.001, 0.0], [0.068, 0.0], [0.072, 0.01], [0.1, 0.185], [0.115, 0.19],
+        [0.115, 0.225], [0.103, 0.228],
+      ]);
+      return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0xa25c3b, roughness: 0.95, side: THREE.DoubleSide,
+        bumpMap: clayTex(), bumpScale: 0.5, envMapIntensity: 0.4,
+      }));
+    },
+    mouthR: 0.1, mouthY: 0.225, dip: 0.06, maxSplay: 1.25,
+  },
 ];
 
 const SHELF_POS = [
-  new THREE.Vector3(-1.28, 1.62, -3.85),
-  new THREE.Vector3(-0.98, 1.62, -3.85),
-  new THREE.Vector3(-0.62, 1.62, -3.85),
+  new THREE.Vector3(-1.38, 1.458, -3.85),
+  new THREE.Vector3(-0.98, 1.458, -3.85),
+  new THREE.Vector3(-0.58, 1.458, -3.85),
+  new THREE.Vector3(-1.38, 1.998, -3.85),
+  new THREE.Vector3(-0.98, 1.998, -3.85),
+  new THREE.Vector3(-0.58, 1.998, -3.85),
 ];
 
 export class Studio {
@@ -161,9 +204,13 @@ export class Studio {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xa4ab97);
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
-    // the view walks a slow circle around the table
-    this.orbit = { yaw: 0.06, pitch: 0.13, radius: 2.9 };
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.05, 50);
+    this.camera.rotation.order = 'YXZ';
+    // you are in the room, on your feet — walk anywhere
+    this.view = { yaw: 0.05, pitch: -0.08 };
+    this.pos = new THREE.Vector3(0.14, 0, 2.85);
+    this._bob = 0;
+    this.heldSpin = 0;
 
     this.hemi = new THREE.HemisphereLight(0xfff4e0, 0x67604f, 1.0);
     this.scene.add(this.hemi);
@@ -271,11 +318,13 @@ export class Studio {
       this.scene.add(skirtMesh);
     }
 
-    // shelf plank
-    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.035, 0.3), wood);
-    plank.position.set(-0.95, 1.6, -3.9);
-    plank.castShadow = true;
-    this.scene.add(plank);
+    // shelf planks, two of them now — the collection grows
+    for (const py of [1.44, 1.98]) {
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.035, 0.3), wood);
+      plank.position.set(-0.98, py, -3.9);
+      plank.castShadow = true;
+      this.scene.add(plank);
+    }
   }
 
   _buildVases() {
@@ -307,18 +356,41 @@ export class Studio {
   // ---- the view ----------------------------------------------------------
 
   rotate(dx, dy) {
-    this.orbit.yaw -= dx * 0.005;
-    this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch + dy * 0.004, 0.04, 0.85);
+    this.view.yaw += dx * 0.0042;
+    this.view.pitch = THREE.MathUtils.clamp(this.view.pitch + dy * 0.0042, -1.15, 1.15);
   }
 
-  zoom(dy) {
-    this.orbit.radius = THREE.MathUtils.clamp(this.orbit.radius + dy * 0.0022, 2.0, 5.2);
+  move(fwd, str, dt) {
+    const moving = fwd !== 0 || str !== 0;
+    if (moving) {
+      const speed = 1.55;
+      const sy = Math.sin(this.view.yaw), cy = Math.cos(this.view.yaw);
+      this.pos.x += (-sy * fwd + cy * str) * speed * dt;
+      this.pos.z += (-cy * fwd - sy * str) * speed * dt;
+      this.pos.x = THREE.MathUtils.clamp(this.pos.x, -3.6, 3.6);
+      this.pos.z = THREE.MathUtils.clamp(this.pos.z, -3.85, 4.3);
+      this._bob += dt * 5.2;
+    }
+    this._moving = moving;
+  }
+
+  spinHeld(d) {
+    if (this.held) this.heldSpin += d;
   }
 
   // ---- stems -------------------------------------------------------------
 
   holdStem(entry) {
     if (this.held || this.discarding) return false;
+    this.heldSpin = 0;
+    if (entry.object) {
+      const built = buildObject(entry.kind, entry.seed);
+      built.group.position.set(0.5, TABLE_Y + 0.15, 0.6);
+      this.scene.add(built.group);
+      this.held = { entry, group: built.group, built, object: true };
+      this._updateCutLabel();
+      return true;
+    }
     const built = buildStem(entry, 2);
     const mat = makePlantMaterial(this._uTime, false, true, this.transU);
     const mesh = new THREE.Mesh(built.geometry, mat);
@@ -344,6 +416,7 @@ export class Studio {
 
   _disposeStem(s) {
     this.scene.remove(s.group);
+    if (s.object) { disposeObject(s.group); return; }
     s.mesh.geometry.dispose();
     s.mat.dispose();
   }
@@ -356,7 +429,7 @@ export class Studio {
   }
 
   wheel(dy) {
-    if (!this.held) return;
+    if (!this.held || this.held.object) return;
     const e = this.held.entry;
     e.cut = THREE.MathUtils.clamp(e.cut - dy * 0.00055, 0.3, 1);
     this._rebuildStem(this.held);
@@ -367,8 +440,9 @@ export class Studio {
     const el = document.getElementById('cutlabel');
     if (!el) return;
     if (!this.held) { el.textContent = ''; return; }
+    if (this.held.object) { el.textContent = 'q e — turn it · click the table to set it down'; return; }
     const cm = Math.round(this.held.built.height * 100);
-    el.textContent = `${cm} cm — scroll to cut`;
+    el.textContent = `${cm} cm — scroll to cut · q e — turn`;
   }
 
   // Called every so often as time passes; the stems in this room are
@@ -382,6 +456,7 @@ export class Studio {
       }
     }
     for (const s of [...this.placed]) {
+      if (s.object) continue;
       const w = wiltOf(s.entry);
       if (w >= 1) {
         // dust
@@ -407,7 +482,11 @@ export class Studio {
     if (this.discarding) return;
     this.raycaster.setFromCamera(ndc, this.camera);
 
-    if (this.held) { this._tryPlace(); return; }
+    if (this.held) {
+      if (this.held.object) this._tryPlaceObject();
+      else this._tryPlace();
+      return;
+    }
 
     // a placed stem? take it back into your hand
     const hitStem = this._stemUnderRay();
@@ -482,8 +561,33 @@ export class Studio {
     const axis = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), rhat).normalize();
     const pos = center.clone().addScaledVector(rhat, Math.min(dist, r) * 0.6);
     pos.y = center.y - def.dip;
-    const quat = new THREE.Quaternion().setFromAxisAngle(axis, tilt);
+    const quat = new THREE.Quaternion().setFromAxisAngle(axis, tilt)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin));
     return { pos, quat };
+  }
+
+  // Anywhere on the cloth is a place for a found thing.
+  _objectPose() {
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -TABLE_Y);
+    const hit = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(plane, hit)) return null;
+    if (Math.abs(hit.x) > 0.82 || Math.abs(hit.z) > 0.48) return null;
+    return {
+      pos: new THREE.Vector3(hit.x, TABLE_Y, hit.z),
+      quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin),
+    };
+  }
+
+  _tryPlaceObject() {
+    const pose = this._objectPose();
+    if (!pose) return;
+    const s = this.held;
+    this.held = null;
+    s.group.position.copy(pose.pos);
+    s.group.quaternion.copy(pose.quat);
+    this.placed.push(s);
+    this._updateCutLabel();
   }
 
   _tryPlace() {
@@ -508,6 +612,11 @@ export class Studio {
     if (!this.hasArrangement() || this.discarding) return;
     this.discarding = true;
     for (const s of this.placed) {
+      if (s.object) { // a treasure is a treasure — back to the bag
+        this._disposeStem(s);
+        this.hooks.onReturnStem(s.entry);
+        continue;
+      }
       s.mat.transparent = true;
       s.vel = new THREE.Vector3((Math.random() - 0.5) * 0.5, -0.25, (Math.random() - 0.3) * 0.5);
       s.spin = (Math.random() - 0.5) * 1.6;
@@ -534,20 +643,19 @@ export class Studio {
     this._ceilMat.color.copy(this._ceilBase).multiplyScalar(day);
     this.scene.background = this._wallMat.color;
 
-    // orbiting, breathing camera; stepping back lifts the gaze so a
-    // tall arrangement is seen whole
-    const o = this.orbit;
-    const lift = Math.max(0, o.radius - 2.9) * 0.3;
+    // a body in the room: breath, and a little bob when walking
     this.camera.position.set(
-      TARGET.x + o.radius * Math.sin(o.yaw) * Math.cos(o.pitch) + Math.sin(this._t * 0.23) * 0.012,
-      TARGET.y + lift * 0.7 + o.radius * Math.sin(o.pitch) + Math.sin(this._t * 0.31) * 0.008,
-      TARGET.z + o.radius * Math.cos(o.yaw) * Math.cos(o.pitch));
-    this.camera.lookAt(TARGET.x, TARGET.y + lift, TARGET.z);
+      this.pos.x + Math.sin(this._t * 0.23) * 0.008,
+      1.52 + Math.sin(this._bob) * (this._moving ? 0.02 : 0)
+        + Math.sin(this._t * 0.31) * 0.006,
+      this.pos.z);
+    this.camera.rotation.set(this.view.pitch, this.view.yaw, 0);
 
     // the held stem previews its own placement; away from the vessel it
     // simply follows the hand
     if (this.held) {
-      const pose = this.discarding ? null : this._placementPose();
+      const pose = this.discarding ? null
+        : (this.held.object ? this._objectPose() : this._placementPose());
       const k = 1 - Math.pow(0.002, dt);
       if (pose) {
         this.held.group.position.lerp(pose.pos, k);
@@ -561,7 +669,9 @@ export class Studio {
           hit.z = THREE.MathUtils.clamp(hit.z, -1.3, 1.5);
           hit.y = TABLE_Y + 0.12;
           this.held.group.position.lerp(hit, k);
-          this.held.group.quaternion.slerp(UPRIGHT_Q, k);
+          const idleQ = UPRIGHT_Q.clone()
+            .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin));
+          this.held.group.quaternion.slerp(idleQ, k);
         }
       }
     }
