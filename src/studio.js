@@ -217,7 +217,7 @@ export class Studio {
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.05, 50);
     this.camera.rotation.order = 'YXZ';
     // you are in the room, on your feet — walk anywhere
-    this.view = { yaw: 0.05, pitch: -0.08 };
+    this.view = { yaw: 0.05, pitch: -0.16 };
     this.pos = new THREE.Vector3(0.14, 0, 2.85);
     this._bob = 0;
     this.heldSpin = 0;
@@ -246,6 +246,7 @@ export class Studio {
     this.held = null;        // { entry, group, mat, mesh, built }
     this.anims = [];
     this._falling = [];
+    this.litter = [[], []]; // fallen petals, per station
     this.discarding = false;
     this._t = 0;
 
@@ -505,6 +506,32 @@ export class Studio {
     el.textContent = `${cm} cm — scroll to cut · q e — turn`;
   }
 
+  _dropPetals(s) {
+    const colors = {
+      tulip: 0xc9a892, flower: 0x58231e, daisy: 0xe6ddc4, bells: 0x8a7a9c,
+      spray: 0xe8e2d0,
+    };
+    const col = colors[s.entry.kind];
+    const st = s.station;
+    if (col === undefined || st === undefined) return;
+    if (this.litter[st].length > 42) return;
+    const c = STATIONS[st];
+    const n = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const geo = new THREE.PlaneGeometry(0.014 + Math.random() * 0.012, 0.032 + Math.random() * 0.02);
+      const petal = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+        color: col, side: THREE.DoubleSide }));
+      const a = Math.random() * Math.PI * 2;
+      const rr = 0.07 + Math.random() * Math.min(c.bounds.x - 0.02, 0.26);
+      petal.position.set(
+        c.center.x + Math.cos(a) * rr, c.surfaceY + 0.003, c.center.z + Math.sin(a) * rr);
+      petal.rotation.set(-Math.PI / 2 + (Math.random() - 0.5) * 0.4,
+        0, Math.random() * Math.PI * 2, 'ZXY');
+      this.scene.add(petal);
+      this.litter[st].push(petal);
+    }
+  }
+
   // Called every so often as time passes; the stems in this room are
   // cut flowers, and they behave like it.
   refreshWilt(wiltOf) {
@@ -530,6 +557,11 @@ export class Studio {
       } else if (Math.abs(w - (s.entry.wilt || 0)) > 0.03) {
         s.entry.wilt = w;
         this._rebuildStem(s);
+        // and something lets go of the stem, and drifts down
+        while (w - (s._petalW ?? 0) > 0.16) {
+          s._petalW = (s._petalW ?? 0) + 0.16;
+          this._dropPetals(s);
+        }
       }
     }
   }
@@ -561,10 +593,21 @@ export class Studio {
       return;
     }
 
-    // a vase on the shelf?
+    // a vase somewhere?
     const hits = this.raycaster.intersectObjects(this.vaseMeshes);
     if (hits.length) {
-      this._chooseVase(hits[0].object.userData.vaseIndex);
+      const idx = hits[0].object.userData.vaseIndex;
+      const cur = this.stationVase.indexOf(idx);
+      if (cur >= 0) {
+        if (this._stemsAt(cur).length) {
+          this.hooks.onMessage('press and hold on it to let it go');
+        } else { // empty — it goes back to the shelf
+          this.stationVase[cur] = null;
+          this.anims.push(animMove(this.vaseMeshes[idx], SHELF_POS[idx], 0.72, 0.7));
+        }
+        return;
+      }
+      this._chooseVase(idx);
     }
   }
 
@@ -610,22 +653,25 @@ export class Studio {
   // The whole area around the vessel is the aiming surface: dead centre
   // is upright, further out leans further, in exactly that direction.
   _placementPose() {
+    // aim by where your gaze passes nearest the vessel's mouth — this
+    // works looking down into it, up at it, or across the room at it
     this.raycaster.setFromCamera(this.pointer, this.camera);
+    const near = new THREE.Vector3();
     let best = null, bestScore = Infinity;
     for (let st = 0; st < STATIONS.length; st++) {
       if (this.stationVase[st] === null) continue;
       const { def, center, r } = this._mouth(st);
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -center.y);
-      const hit = new THREE.Vector3();
-      if (!this.raycaster.ray.intersectPlane(plane, hit)) continue;
-      const off = hit.sub(center);
-      off.y = 0;
-      const dist = off.length();
-      if (dist > r * 3.4) continue; // out of range of this vessel
-      if (dist / r < bestScore) {
-        bestScore = dist / r;
+      this.raycaster.ray.closestPointToPoint(center, near);
+      const reach = near.distanceTo(center);
+      if (reach > r * 3.4 + 0.14) continue; // out of range of this vessel
+      const score = reach / (r + 0.02);
+      if (score < bestScore) {
+        bestScore = score;
+        const off = near.clone().sub(center);
+        off.y = 0;
+        const dist = off.length();
         const rhat = dist > 1e-4 ? off.clone().normalize() : new THREE.Vector3(0, 0, 1);
-        const tilt = Math.min(1, dist / (r * 2.6)) * def.maxSplay;
+        const tilt = Math.min(1, dist / (r * 2.2)) * def.maxSplay;
         const axis = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), rhat).normalize();
         const pos = center.clone().addScaledVector(rhat, Math.min(dist, r) * 0.6);
         pos.y = center.y - def.dip;
@@ -635,6 +681,22 @@ export class Studio {
       }
     }
     return best;
+  }
+
+  // Which arrangement is the gaze resting on? (for press-and-hold to let go)
+  stationUnderRay() {
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const near = new THREE.Vector3();
+    for (let st = 0; st < STATIONS.length; st++) {
+      if (!this._stemsAt(st).length) continue;
+      const c = STATIONS[st];
+      const anchor = this.stationVase[st] !== null
+        ? this._mouth(st).center
+        : new THREE.Vector3(c.center.x, c.surfaceY + 0.15, c.center.z);
+      this.raycaster.ray.closestPointToPoint(anchor, near);
+      if (near.distanceTo(anchor) < 0.55) return st;
+    }
+    return null;
   }
 
   // The cloth, or the plinth top — either is a place for a found thing.
@@ -686,14 +748,15 @@ export class Studio {
 
   // ---- letting go ----------------------------------------------------------
 
-  discard() {
+  discard(target = null) {
     if (!this.hasArrangement() || this.discarding) return;
-    // the arrangement you are standing nearer is the one you let go of
+    // the arrangement you are standing nearer is the one you let go of,
+    // unless you asked for one by holding on it
     const cands = [0, 1].filter((st) => this._stemsAt(st).length);
     if (!cands.length) return;
     cands.sort((a, b) =>
       STATIONS[a].center.distanceTo(this.pos) - STATIONS[b].center.distanceTo(this.pos));
-    const st = cands[0];
+    const st = (target !== null && cands.includes(target)) ? target : cands[0];
     this.discarding = true;
     this._discardStation = st;
     for (const s of this._stemsAt(st)) {
@@ -709,6 +772,15 @@ export class Studio {
       s.life = 1;
       this._falling.push(s);
     }
+    // the fallen petals go with it
+    for (const petal of this.litter[st]) {
+      this._falling.push({
+        group: petal, mesh: petal, mat: petal.material, object: false,
+        vel: new THREE.Vector3(0, -0.12, 0), spin: (Math.random() - 0.5) * 0.5, life: 1,
+      });
+      petal.material.transparent = true;
+    }
+    this.litter[st] = [];
   }
 
   update(dt, worldT) {
@@ -731,7 +803,7 @@ export class Studio {
     // a body in the room: breath, and a little bob when walking
     this.camera.position.set(
       this.pos.x + Math.sin(this._t * 0.23) * 0.008,
-      1.52 + Math.sin(this._bob) * (this._moving ? 0.02 : 0)
+      1.74 + Math.sin(this._bob) * (this._moving ? 0.02 : 0)
         + Math.sin(this._t * 0.31) * 0.006,
       this.pos.z);
     this.camera.rotation.set(this.view.pitch, this.view.yaw, 0);
@@ -747,12 +819,12 @@ export class Studio {
         this.held.group.quaternion.slerp(pose.quat, k);
       } else {
         this.raycaster.setFromCamera(this.pointer, this.camera);
-        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(TABLE_Y + 0.28));
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.32);
         const hit = new THREE.Vector3();
         if (this.raycaster.ray.intersectPlane(plane, hit)) {
-          hit.x = THREE.MathUtils.clamp(hit.x, -1.6, 1.6);
-          hit.z = THREE.MathUtils.clamp(hit.z, -1.3, 1.5);
-          hit.y = TABLE_Y + 0.12;
+          hit.x = THREE.MathUtils.clamp(hit.x, -3.5, 3.5);
+          hit.z = THREE.MathUtils.clamp(hit.z, -3.7, 4.2);
+          hit.y = 1.2;
           this.held.group.position.lerp(hit, k);
           const idleQ = UPRIGHT_Q.clone()
             .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heldSpin));

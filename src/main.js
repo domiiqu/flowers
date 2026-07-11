@@ -229,6 +229,7 @@ document.addEventListener('mousemove', (e) => {
     if (drag.down) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (drag.moved || Math.abs(dx) + Math.abs(dy) > 5) {
+        if (!drag.moved && drag.station !== null) clearVeil();
         drag.moved = true;
         studio.rotate(dx, dy);
         drag.x = e.clientX; drag.y = e.clientY;
@@ -250,13 +251,18 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   } else {
     drag.down = true; drag.moved = false;
     drag.x = e.clientX; drag.y = e.clientY;
+    drag.t0 = performance.now();
+    // resting the press on an arrangement begins letting it go
+    drag.station = (!studio.holding && !studio.discarding) ? studio.stationUnderRay() : null;
+    drag.discarded = false;
   }
 });
 
 addEventListener('mouseup', (e) => {
   if (e.button !== 0 || mode !== 'studio' || !drag.down) return;
   drag.down = false;
-  if (drag.moved) return; // that was a look-around, not a click
+  if (drag.station !== null) clearVeil();
+  if (drag.moved || drag.discarded) return; // a look-around or a letting-go
   pointerNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   studio.setPointer(pointerNdc);
   studio.click(pointerNdc);
@@ -311,13 +317,19 @@ function movePlayer(dt) {
 // ---------------------------------------------------------------- let go
 const letgo = $('letgo');
 const HOLD_S = 1.4;
+function setVeil(p) {
+  veil.style.transitionDuration = '0s';
+  veil.style.opacity = p * 0.92;
+}
+function clearVeil() {
+  veil.style.transitionDuration = '';
+  veil.style.opacity = '';
+}
 let holdStart = null, holdRAF = null;
 function holdStep() {
   const p = Math.min(1, (performance.now() - holdStart) / 1000 / HOLD_S);
   letgo.style.setProperty('--p', p);
-  // the room dims as you decide — you will know you are doing it
-  veil.style.transitionDuration = '0s';
-  veil.style.opacity = p * 0.92;
+  setVeil(p); // the room dims as you decide — you will know you are doing it
   if (p >= 1) {
     stopHold();
     studio.discard();
@@ -328,16 +340,17 @@ function stopHold() {
   cancelAnimationFrame(holdRAF);
   holdStart = null;
   letgo.style.setProperty('--p', 0);
-  veil.style.transitionDuration = '';
-  veil.style.opacity = '';
+  clearVeil();
 }
-letgo.addEventListener('mousedown', (e) => {
+letgo.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
+  e.preventDefault();
   if (!studio.hasArrangement()) { say('there is nothing to let go of'); return; }
   holdStart = performance.now();
   holdStep();
 });
-addEventListener('mouseup', stopHold);
+addEventListener('pointerup', () => { if (holdStart !== null) stopHold(); });
+addEventListener('mouseup', () => { if (holdStart !== null) stopHold(); });
 
 // ---------------------------------------------------------------- photo
 $('photo').addEventListener('mousedown', (e) => { e.stopPropagation(); });
@@ -624,7 +637,7 @@ renderer.setAnimationLoop(() => {
 
   if (mode === 'field') {
     if (started) movePlayer(dt);
-    field.update(worldT, fieldCam);
+    field.update(worldT, fieldCam, clock.elapsedTime);
     reticle.classList.toggle('near', !!field.target);
     retLabel.textContent = field.target
       ? (field.target.object ? NAMES[field.target.kind] : 'pick') : '';
@@ -635,6 +648,17 @@ renderer.setAnimationLoop(() => {
     studio.move(fwd, str, dt);
     if (keys.has('KeyQ')) studio.spinHeld(2.4 * dt);
     if (keys.has('KeyE')) studio.spinHeld(-2.4 * dt);
+    // press and rest on an arrangement, and it begins to go
+    if (drag.down && !drag.moved && !drag.discarded && drag.station !== null) {
+      const held = (performance.now() - drag.t0 - 300) / 1000;
+      if (held > 0) setVeil(Math.min(1, held / HOLD_S));
+      if (held >= HOLD_S) {
+        drag.discarded = true;
+        studio.discard(drag.station);
+        clearVeil();
+        say('gone', 1800);
+      }
+    }
     studio.update(dt, worldT);
     post.render(studio.scene, studio.camera, postOpts());
   }
