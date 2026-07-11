@@ -37,10 +37,14 @@ standing nearer that falls.
 
 Cut flowers do not last. From the moment you pick a stem it is dying —
 after a few minutes it softens, the head hangs, the colour dries, daisies
-let their petals go — and in the end it crumbles to dust, whether in the
-bag or standing in the vase. An arrangement cannot be kept. To begin
-another, you must let the first one go — press and hold, and the room
-darkens, and it falls away. That is the whole idea.
+let their petals go, tulips collapse entirely over the rim — and fallen
+petals rest on the cloth where they land, and stay. In the end each stem
+crumbles to dust, whether in the bag or standing in the vase. An
+arrangement cannot be kept. To begin another, you must let it go — press
+and hold on the arrangement itself (or the words in the corner), and the
+room darkens, and it falls away, petals and all. That is the whole idea.
+
+On some nights, if the night is clear, there are stars.
 
 ## running it
 
@@ -70,9 +74,10 @@ served over http, not file://)
 | set a treasure down | click anywhere on the cloth |
 | cut a stem | scroll while holding it |
 | take a placed stem back | click it |
+| send an empty vessel home | click it |
 | put a held stem back in the bag | right-click |
 | photograph | `P` — saves a print, bordered and grained |
-| let the arrangement go | press and hold the words in the corner |
+| let an arrangement go | press and hold on the arrangement itself, or the words in the corner |
 | sound on/off | `M` — wind in the field; in the studio, a small radio plays patient piano minimalism, composed as it plays (synthesized, like everything else) |
 
 There is a quiet back door for the impatient: `[` and `]` move the sky.

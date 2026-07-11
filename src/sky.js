@@ -49,6 +49,8 @@ export class SkyDome {
       uHorizon: { value: new THREE.Color('#cbaa8d') },
       uGlow: { value: new THREE.Color('#e6b98e') },
       uSunDir: { value: new THREE.Vector3(0.4, 0, -0.9).normalize() },
+      uStars: { value: 0 },
+      uTime: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
@@ -65,6 +67,7 @@ export class SkyDome {
       fragmentShader: /* glsl */`
         varying vec3 vDir;
         uniform vec3 uZenith, uHorizon, uGlow, uSunDir;
+        uniform float uStars, uTime;
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         void main() {
           vec3 d = normalize(vDir);
@@ -76,6 +79,19 @@ export class SkyDome {
           vec3 flat_ = normalize(vec3(d.x, 0.0, d.z));
           float azim = 0.5 + 0.5 * dot(flat_, uSunDir);
           col = mix(col, uGlow, band * (0.25 + 0.75 * azim * azim) * 0.85);
+          // on some nights, stars — never many, never the same twinkle twice
+          if (uStars > 0.001 && d.y > 0.02) {
+            vec2 sc = vec2(atan(d.x, d.z) * 57.0, d.y * 90.0);
+            vec2 cell = floor(sc);
+            float sh = hash(cell);
+            if (sh > 0.994) {
+              vec2 off = vec2(hash(cell + 1.3), hash(cell + 4.7)) - 0.5;
+              float dist = length(fract(sc) - 0.5 - off * 0.6);
+              float tw = 0.75 + 0.25 * sin(uTime * (1.0 + sh * 3.0) + sh * 40.0);
+              float star = smoothstep(0.10, 0.0, dist) * tw;
+              col += vec3(0.85, 0.9, 1.0) * star * uStars * smoothstep(0.02, 0.25, d.y);
+            }
+          }
           // dither so the gradient never bands
           col += (hash(gl_FragCoord.xy) - 0.5) / 128.0;
           gl_FragColor = vec4(col, 1.0);
@@ -87,11 +103,16 @@ export class SkyDome {
     this.mesh.frustumCulled = false;
   }
 
-  update(t, cameraPos) {
+  update(t, cameraPos, elapsed = 0) {
     const p = samplePalette(t);
     this.uniforms.uZenith.value.copy(p.zenith);
     this.uniforms.uHorizon.value.copy(p.horizon);
     this.uniforms.uGlow.value.copy(p.glow);
+    // some nights are clear and starred; some are not. each night decides.
+    const dark = THREE.MathUtils.smoothstep(0.42, 0.24, p.light);
+    const nightSeed = Math.abs(Math.sin(Math.floor(((t % 1) + 1) % 1 + Math.floor(t)) * 12.9898 + Math.floor(t) * 3.7));
+    this.uniforms.uStars.value = dark * (nightSeed > 0.4 ? 0.45 + nightSeed * 0.5 : 0);
+    this.uniforms.uTime.value = elapsed;
     if (cameraPos) this.mesh.position.copy(cameraPos);
   }
 }

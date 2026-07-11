@@ -315,7 +315,8 @@ export function buildTulip(seed, opts = {}) {
   const d = opts.detail ?? 1;
 
   const H = (0.5 + rng() * 0.45) * cut * (1 - 0.1 * w);
-  const { curve, tip } = stemCurve(rng, H, 0.9 + 0.8 * w);
+  // dying tulips do it theatrically: the whole stem lets go over the rim
+  const { curve, tip } = stemCurve(rng, H, 0.9 + 2.6 * w);
   const arrays = { position: [], normal: [], color: [] };
 
   const stemCol = new THREE.Color('#6f7f52').lerp(STEM_DRIED, w * 0.6);
@@ -344,8 +345,8 @@ export function buildTulip(seed, opts = {}) {
     leaf.dispose();
   }
 
-  // the bloom points up, mostly — a soft double cup
-  const nod = 0.1 + rng() * 0.4 + 0.8 * w;
+  // the bloom points up, mostly — until, dying, it hangs right over
+  const nod = 0.1 + rng() * 0.4 + 1.8 * w;
   const nodA = rng() * Math.PI * 2;
   const dir = nodDirection(nod, nodA);
   const headPos = tip.clone().addScaledVector(dir, 0.005);

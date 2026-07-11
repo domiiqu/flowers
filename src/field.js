@@ -276,7 +276,7 @@ export class Field {
     this.chunks.set(key, this._buildChunk(cx, cz));
   }
 
-  update(worldT, camera) {
+  update(worldT, camera, elapsed = 0) {
     const p = samplePalette(worldT);
     this.hemi.color.copy(p.horizon).lerp(p.zenith, 0.3);
     this.hemi.groundColor.copy(p.ground).multiplyScalar(1.3);
@@ -294,7 +294,7 @@ export class Field {
     this.transU.col.value.copy(p.glow);
     this.transU.str.value = 0.15 + p.light * 0.5;
     this.plantMat.emissive.copy(p.glow).multiplyScalar(0.03 * p.light);
-    this.sky.update(worldT, camera.position);
+    this.sky.update(worldT, camera.position, elapsed);
 
     // ground follows you, snapped to the texture repeat so it stays world-fixed
     const cell = 560 / 48;
