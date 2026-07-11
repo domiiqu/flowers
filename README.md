@@ -46,7 +46,18 @@ room darkens, and it falls away, petals and all. That is the whole idea.
 
 On some nights, if the night is clear, there are stars.
 
-## running it
+## playing it
+
+Once GitHub Pages is turned on (Settings → Pages → Deploy from a branch →
+`main` / root), the piece lives at:
+
+**https://domiiqu.github.io/flowers/**
+
+That link is always the latest version — every change merged to `main`
+redeploys it within a minute. Nothing to download, nothing to install;
+open it on any device and send it to anyone.
+
+## running it locally
 
 No build, no dependencies, no accounts, no ads, no analytics.
 
