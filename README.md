@@ -18,13 +18,21 @@ A flower you pick is gone from the field, and the field remembers — walk
 back tomorrow and the gap is still there.
 
 Near where you wake, a door stands alone in the grass. Through it is the
-walled garden: a held morning — lighter, sunnier, quieter, only birdsong
-and a few butterflies. Raised beds were planted in rows once and have had
-their own ideas since: carrots (in the garden only the feathered greens
-show; the orange is a surprise you earn by pulling), ramps with their
-burgundy throats, architectural artichokes, weeds along the walls, whips
-gone feral over the north wall. Everything pulls, everything arranges,
-everything wilts. The blue door in the south wall goes back to the field.
+garden: a held morning — lighter, sunnier, quieter, only birdsong and a
+few butterflies. It is fenced, not walled — a low waist-high rail, and
+beyond it a sunlit meadow runs out in every direction, dense with
+wildflowers right along the fence line and thinning into haze. Inside,
+raised beds packed close, each one sectioned into two or three different
+crops rather than a single row: carrots (only the feathered greens show
+in the soil; the orange is a surprise you earn by pulling), ramps with
+burgundy throats, chives crowned in purple poms, nasturtiums spilling
+round leaves and small orange flames over the bed edges, rainbow chard in
+magenta and gold, architectural artichokes. Two beds carry trellises —
+pea vines climb them, hung with white blossoms and pods. A bag of mulch
+slumps against a bed, half spilled; potted chives and nasturtiums stand
+about; one pot lies tipped on its side. Everything pulls, everything
+arranges, everything wilts. The blue door in the fence goes back to the
+field.
 
 Very rarely, the field gives something up: a lost locket, an old tin, a
 striped stone, an ammonite. Treasures go in the bag too, and can stand in

@@ -2,14 +2,15 @@ import * as THREE from '../lib/three.module.min.js';
 import { mulberry32, buildStem, buildWhip, makePlantMaterial, makeTransUniforms } from './flower.js';
 import { SkyDome } from './sky.js';
 
-// The walled garden. The field is forever dusk; this place is a held
-// morning — lighter, sunnier, quieter. You are inside its walls, among
-// raised beds that were planted in rows once and have since had their own
-// ideas. The blue door in the south wall goes back to the field.
+// The garden. The field is forever dusk; this place is a held morning —
+// lighter, sunnier, quieter. A low fence, not a wall: beyond it a bright
+// meadow runs out in every direction, sun-dappled, unreachable. Inside,
+// raised beds packed close with mixed plantings — rows gone loose, vines
+// on trellises, edible flowers between the vegetables. The blue door in
+// the fence goes back to the field.
 
 const STORE_KEY = 'garden.picked.v1';
-const W = 11, D = 8;          // half-extents of the enclosure
-const WALL_H = 2.35;
+const W = 9, D = 7;           // half-extents of the fence
 const BED_TOP = 0.18;
 
 const MORNING = {
@@ -18,23 +19,79 @@ const MORNING = {
   glow: new THREE.Color('#f4e6b4'),
 };
 
-function soilTexture() {
+// per-crop planting habits: spacing along the row, and how many rows
+const HABITS = {
+  carrot: { sp: 0.15, rows: 3 },
+  ramp: { sp: 0.2, rows: 3 },
+  chive: { sp: 0.26, rows: 2 },
+  nasturtium: { sp: 0.5, rows: 1 },
+  chard: { sp: 0.42, rows: 2 },
+  artichoke: { sp: 0.68, rows: 1 },
+};
+const CROPS = Object.keys(HABITS);
+
+const POTS = [
+  { x: -1.5, z: 5.9, plant: 'chive' },
+  { x: 1.9, z: -6.1, tipped: true },
+  { x: 7.6, z: 6.0, plant: 'nasturtium' },
+  { x: -7.9, z: -5.8, plant: 'nasturtium' },
+  { x: -7.5, z: 6.1, plant: 'chive' },
+  { x: 2.4, z: 6.2 },
+];
+
+// The ground's own colour carries the sun patches — baked into the
+// diffuse texture, so the scene's own lights shade them like grass, not
+// a floating glow. An additive overlay here reads as a sheen skating
+// across the surface; at a grazing angle that sheen is indistinguishable
+// from still water. Real light and shadow never do that.
+function groundTexture() {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#a89b7c';
-  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#7e8c5c';
+  ctx.fillRect(0, 0, 256, 256);
   const rng = mulberry32(31);
-  for (let i = 0; i < 500; i++) {
-    const g = 120 + Math.floor(rng() * 90);
-    ctx.fillStyle = `rgba(${g},${g - 8},${g - 26},${0.06 + rng() * 0.12})`;
+  // a few big warm patches, as if sun fell through a gap in leaves
+  for (let i = 0; i < 9; i++) {
+    const x = rng() * 256, y = rng() * 256;
+    const r = 46 + rng() * 70;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(214,204,132,${0.30 + rng() * 0.16})`);
+    g.addColorStop(1, 'rgba(214,204,132,0)');
+    ctx.fillStyle = g;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rng() * 3);
+    ctx.scale(1, 0.55 + rng() * 0.4);
+    ctx.translate(-x, -y);
     ctx.beginPath();
-    ctx.ellipse(rng() * 128, rng() * 128, 1 + rng() * 7, 1 + rng() * 7, rng() * 3, 0, 7);
+    ctx.arc(x, y, r, 0, 7);
+    ctx.fill();
+    ctx.restore();
+  }
+  // a few darker patches too — shade has to exist for light to mean anything
+  for (let i = 0; i < 6; i++) {
+    const x = rng() * 256, y = rng() * 256;
+    const r = 30 + rng() * 50;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(58,66,38,${0.16 + rng() * 0.12})`);
+    g.addColorStop(1, 'rgba(58,66,38,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 7);
+    ctx.fill();
+  }
+  // fine grain, so nothing reads as a smooth flat fill up close
+  for (let i = 0; i < 700; i++) {
+    const g = 100 + Math.floor(rng() * 90);
+    ctx.fillStyle = `rgba(${g},${g + 6},${g - 26},${0.05 + rng() * 0.1})`;
+    ctx.beginPath();
+    ctx.ellipse(rng() * 256, rng() * 256, 1 + rng() * 5, 1 + rng() * 5, rng() * 3, 0, 7);
     ctx.fill();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(20, 16);
+  tex.repeat.set(11, 9);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -42,10 +99,10 @@ function soilTexture() {
 export class Garden {
   constructor(uTime) {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0xe4d8b6, 0.012);
+    this.scene.fog = new THREE.FogExp2(0xdccf9e, 0.0055);
 
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 400);
-    this.camera.position.set(0, 1.55, 5.5);
+    this.camera.position.set(0, 1.55, 5.2);
     this.camera.rotation.order = 'YXZ';
 
     this.sky = new SkyDome();
@@ -61,8 +118,8 @@ export class Garden {
     this.sun.position.set(14, 20, 8);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -15; this.sun.shadow.camera.right = 15;
-    this.sun.shadow.camera.top = 15; this.sun.shadow.camera.bottom = -15;
+    this.sun.shadow.camera.left = -13; this.sun.shadow.camera.right = 13;
+    this.sun.shadow.camera.top = 13; this.sun.shadow.camera.bottom = -13;
     this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 60;
     this.sun.shadow.bias = -0.0015;
     this.sun.shadow.radius = 3;
@@ -76,81 +133,90 @@ export class Garden {
 
     this.picked = new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
     this.records = [];
-    this.target = null;      // plant in reach + in gaze
-    this.doorTarget = false; // looking at the door, near it
+    this.zones = new Map();   // name -> { plants: [{x,z,kind,id,baseY}], mesh }
+    this.target = null;
+    this.doorTarget = false;
     this._tmp = new THREE.Vector3();
     this._dir = new THREE.Vector3();
     this._t = 0;
+    this._built = false; // the heavy planting happens on first visit
 
     this._buildEnclosure();
-    this._plantMesh = null;
-    this._rebuildPlants();
     this._buildButterflies();
   }
 
   // ---- the place itself ---------------------------------------------------
 
   _buildEnclosure() {
-    // warm ground, and a lighter path worn from the door to the middle
-    const groundMat = new THREE.MeshLambertMaterial({ map: soilTexture(), color: 0x8a9161 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 + 3, D * 2 + 3), groundMat);
+    // one green ground running out to the fog, its own sun patches baked in
+    const groundMat = new THREE.MeshLambertMaterial({ map: groundTexture(), color: 0x8d9868 });
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(150, 40), groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
-    const path = new THREE.Mesh(new THREE.PlaneGeometry(1.6, D * 2),
+
+    const path = new THREE.Mesh(new THREE.PlaneGeometry(1.5, D * 2),
       new THREE.MeshLambertMaterial({ color: 0xc2b491 }));
     path.rotation.x = -Math.PI / 2;
-    path.position.set(0, 0.005, 0);
+    path.position.set(0, 0.006, 0);
     path.receiveShadow = true;
     this.scene.add(path);
 
-    // sunlit plaster walls; the south wall parts around the door
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xd8c9a4 });
-    const cap = new THREE.MeshLambertMaterial({ color: 0xb8a988 });
-    const mkWall = (w, x, z, rotY) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, 0.3), wallMat);
-      m.position.set(x, WALL_H / 2, z);
-      m.rotation.y = rotY;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this.scene.add(m);
-      const c = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.08, 0.4), cap);
-      c.position.set(x, WALL_H + 0.04, z);
-      c.rotation.y = rotY;
-      this.scene.add(c);
+    // a low weathered fence — post and rail, nothing to keep the meadow out
+    const fenceMat = new THREE.MeshLambertMaterial({ color: 0x8a7a62 });
+    const postGeo = new THREE.BoxGeometry(0.07, 0.95, 0.07);
+    const fenceRun = (x1, z1, x2, z2) => {
+      const dx = x2 - x1, dz = z2 - z1;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      const n = Math.max(1, Math.round(len / 1.45));
+      for (let i = 0; i <= n; i++) {
+        const post = new THREE.Mesh(postGeo, fenceMat);
+        post.position.set(x1 + (dx * i) / n, 0.475, z1 + (dz * i) / n);
+        post.castShadow = true;
+        this.scene.add(post);
+      }
+      for (const ry of [0.42, 0.78]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, 0.035), fenceMat);
+        rail.position.set((x1 + x2) / 2, ry, (z1 + z2) / 2);
+        rail.rotation.y = -Math.atan2(dz, dx);
+        rail.castShadow = true;
+        this.scene.add(rail);
+      }
     };
-    mkWall(W * 2 + 0.6, 0, -D - 0.15, 0);                     // north
-    mkWall(D * 2 + 0.6, -W - 0.15, 0, Math.PI / 2);           // west
-    mkWall(D * 2 + 0.6, W + 0.15, 0, Math.PI / 2);            // east
-    const gap = 0.75; // half-width of the doorway
-    mkWall(W - gap, -(W + gap) / 2 - 0.15, D + 0.15, 0);      // south, left of door
-    mkWall(W - gap, (W + gap) / 2 + 0.15, D + 0.15, 0);       // south, right of door
+    const gap = 0.75;
+    fenceRun(-W, -D, W, -D);
+    fenceRun(-W, -D, -W, D);
+    fenceRun(W, -D, W, D);
+    fenceRun(-W, D, -gap, D);
+    fenceRun(gap, D, W, D);
 
-    // the door — old blue, a little sun-bleached
+    // the blue door, taller than the fence it stands in — a door is a
+    // door, whatever it is asked to interrupt
     const frameMat = new THREE.MeshLambertMaterial({ color: 0x7a6f58 });
     for (const dx of [-gap, gap]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.15, 0.34), frameMat);
-      post.position.set(dx, 1.075, D + 0.15);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.15, 0.2), frameMat);
+      post.position.set(dx, 1.075, D);
+      post.castShadow = true;
       this.scene.add(post);
     }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(gap * 2 + 0.12, 0.14, 0.34), frameMat);
-    lintel.position.set(0, 2.15, D + 0.15);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(gap * 2 + 0.12, 0.14, 0.2), frameMat);
+    lintel.position.set(0, 2.15, D);
     this.scene.add(lintel);
     this.door = new THREE.Mesh(new THREE.BoxGeometry(gap * 2 - 0.1, 2.0, 0.07),
       new THREE.MeshStandardMaterial({ color: 0x647082, roughness: 0.85 }));
-    this.door.position.set(0.05, 1.0, D + 0.13);
+    this.door.position.set(0.05, 1.0, D - 0.02);
     this.door.rotation.y = 0.12; // ajar, always
     this.door.castShadow = true;
     this.scene.add(this.door);
-    this.doorPos = new THREE.Vector3(0, 1.1, D + 0.1);
+    this.doorPos = new THREE.Vector3(0, 1.1, D);
 
     // raised beds, two ranks flanking the path
     this.beds = [];
     const bedMat = new THREE.MeshLambertMaterial({ color: 0x6b5a42 });
     const soilMat = new THREE.MeshLambertMaterial({ color: 0x4a3b2c });
-    for (const bx of [-5.6, 5.6]) {
-      for (const bz of [-4.6, 0, 4.6]) {
-        const bw = 6.6, bd = 2.0;
+    for (const bx of [-4.6, 4.6]) {
+      for (const bz of [-4.2, 0, 4.2]) {
+        const bw = 5.6, bd = 1.9;
         const frame = new THREE.Mesh(new THREE.BoxGeometry(bw, BED_TOP, bd), bedMat);
         frame.position.set(bx, BED_TOP / 2, bz);
         frame.castShadow = true;
@@ -161,158 +227,286 @@ export class Garden {
         soil.position.set(bx, BED_TOP + 0.005, bz);
         soil.receiveShadow = true;
         this.scene.add(soil);
-        this.beds.push({ x: bx, z: bz, w: bw - 0.5, d: bd - 0.5 });
+        this.beds.push({ x: bx, z: bz, w: bw - 0.4, d: bd - 0.4 });
       }
     }
 
-    // a couple of terracotta pots left about, one on its side
-    const potMat = new THREE.MeshStandardMaterial({ color: 0xa25c3b, roughness: 0.95 });
-    const potGeo = new THREE.CylinderGeometry(0.14, 0.1, 0.22, 14, 1, true);
-    for (const [px, pz, tipped] of [[-1.6, 6.2, false], [2.1, -6.6, true], [8.9, 6.9, false]]) {
-      const pot = new THREE.Mesh(potGeo, potMat);
-      if (tipped) {
+    // trellises on the two middle beds — some things need to climb
+    this.trellises = [1, 4];
+    const latticeMat = new THREE.MeshLambertMaterial({ color: 0x7a6a52 });
+    for (const bi of this.trellises) {
+      const bed = this.beds[bi];
+      const tz = bed.z - bed.d / 2 - 0.12;
+      for (const px of [-bed.w / 2, bed.w / 2]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.8, 0.06), latticeMat);
+        post.position.set(bed.x + px, 0.9, tz);
+        post.castShadow = true;
+        this.scene.add(post);
+      }
+      for (const ly of [0.55, 0.95, 1.35, 1.7]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(bed.w, 0.035, 0.03), latticeMat);
+        bar.position.set(bed.x, ly, tz);
+        bar.castShadow = true;
+        this.scene.add(bar);
+      }
+      for (let sx = -bed.w / 2 + 0.5; sx < bed.w / 2; sx += 0.6) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.028, 1.35, 0.026), latticeMat);
+        slat.position.set(bed.x + sx, 1.1, tz);
+        this.scene.add(slat);
+      }
+    }
+
+    // pots — a small crowd of them now, some with tenants
+    const potMat = new THREE.MeshStandardMaterial({
+      color: 0xa25c3b, roughness: 0.95, side: THREE.DoubleSide });
+    for (const p of POTS) {
+      const size = 0.1 + ((p.x * 13 + p.z * 7) % 5) * 0.012;
+      const pot = new THREE.Mesh(
+        new THREE.CylinderGeometry(size * 1.35, size, size * 2.1, 14, 1, true), potMat);
+      if (p.tipped) {
         pot.rotation.z = Math.PI / 2 - 0.15;
-        pot.position.set(px, 0.12, pz);
+        pot.position.set(p.x, size, p.z);
       } else {
-        pot.position.set(px, 0.11, pz);
+        pot.position.set(p.x, size * 1.05, p.z);
+        // packed earth in the planted ones
+        const soil = new THREE.Mesh(new THREE.CircleGeometry(size * 1.28, 12),
+          new THREE.MeshLambertMaterial({ color: 0x4a3b2c }));
+        soil.rotation.x = -Math.PI / 2;
+        soil.position.set(p.x, size * 1.95, p.z);
+        this.scene.add(soil);
+        p.rim = size * 1.95;
       }
       pot.castShadow = true;
       this.scene.add(pot);
     }
+
+    // a bag of mulch, slumped against the nearest bed, half spilled
+    const kraft = new THREE.MeshLambertMaterial({ color: 0xb89a6a });
+    const bagMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.44, 0.26), kraft);
+    bagMesh.position.set(-2.6, 0.2, 4.9);
+    bagMesh.rotation.set(0.12, 0.5, -0.18); // it has given up standing straight
+    bagMesh.castShadow = true;
+    this.scene.add(bagMesh);
+    const mulchMat = new THREE.MeshLambertMaterial({ color: 0x3a2e22 });
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 7), mulchMat);
+    mound.scale.set(1, 0.45, 1);
+    mound.position.set(-2.58, 0.42, 4.87);
+    this.scene.add(mound);
+    const spill = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 7), mulchMat);
+    spill.scale.set(1.3, 0.16, 1);
+    spill.position.set(-2.3, 0.03, 5.15);
+    spill.receiveShadow = true;
+    this.scene.add(spill);
   }
 
   // ---- planting -----------------------------------------------------------
 
-  _rebuildPlants() {
-    if (this._plantMesh) {
-      this.scene.remove(this._plantMesh);
-      this._plantMesh.geometry.dispose();
-    }
-    const rng = mulberry32(20260719);
-    const arrays = { position: [], normal: [], color: [] };
-    this.records = [];
-    const m = new THREE.Matrix4();
+  // Decide, once and deterministically, everything that grows here.
+  _layout() {
+    const rng = mulberry32(20260720);
     let idx = 0;
-
-    const plant = (x, z, kind, baseY) => {
-      const seed = Math.floor(rng() * 0xffffffff);
-      const id = `g${idx++}`;
-      const rec = { id, seed, kind, pos: new THREE.Vector3(x, 0, z) };
-      this.records.push(rec);
-      if (this.picked.has(id)) return;
-      const f = buildStem(rec);
-      const y = baseY - (f.sink || 0);
-      rec.headPos = f.headPos.clone().add(new THREE.Vector3(x, y, z));
-      m.makeTranslation(x, y, z);
-      f.geometry.applyMatrix4(m);
-      this._append(arrays, f.geometry);
-      f.geometry.dispose();
+    const zonePlants = new Map([['ground', []]]);
+    const addPlant = (zone, x, z, kind, baseY) => {
+      if (!zonePlants.has(zone)) zonePlants.set(zone, []);
+      zonePlants.get(zone).push({ x, z, kind, baseY, id: `g${idx++}` });
     };
 
-    // each bed grows mostly one thing, in rows that have loosened
-    const crops = ['carrot', 'ramp', 'artichoke', 'carrot', 'artichoke', 'ramp'];
     this.beds.forEach((bed, bi) => {
-      const crop = crops[bi % crops.length];
-      const spacing = crop === 'artichoke' ? 0.85 : 0.42;
-      const rows = crop === 'artichoke' ? 2 : 3;
-      for (let r = 0; r < rows; r++) {
-        const rz = bed.z - bed.d / 2 + (r + 0.5) * (bed.d / rows);
-        for (let cx = -bed.w / 2; cx < bed.w / 2; cx += spacing) {
-          if (rng() < 0.16) continue; // gaps — something got eaten, or never came up
-          const jit = 0.05 + rng() * 0.1;
-          const kind = rng() < 0.92 ? crop : crops[Math.floor(rng() * crops.length)];
-          plant(bed.x + cx + (rng() - 0.5) * jit * 2, rz + (rng() - 0.5) * jit * 2,
-            kind, BED_TOP);
+      const zone = `bed${bi}`;
+      // the bed is cut into sections, each with its own crop
+      const nSec = 2 + Math.floor(rng() * 2);
+      const pool = [...CROPS].sort(() => rng() - 0.5);
+      let x0 = -bed.w / 2;
+      for (let sIdx = 0; sIdx < nSec; sIdx++) {
+        const secW = bed.w / nSec;
+        const crop = pool[sIdx % pool.length];
+        const habit = HABITS[crop];
+        for (let r = 0; r < habit.rows; r++) {
+          const rz = bed.z - bed.d / 2 + (r + 0.5) * (bed.d / habit.rows);
+          for (let cx = x0 + habit.sp / 2; cx < x0 + secW; cx += habit.sp) {
+            if (rng() < 0.1) continue; // a gap; something got there first
+            const kind = rng() < 0.9 ? crop
+              : CROPS[Math.floor(rng() * CROPS.length)];
+            addPlant(zone, bed.x + cx + (rng() - 0.5) * 0.07,
+              rz + (rng() - 0.5) * 0.09, kind, BED_TOP);
+          }
         }
+        x0 += secW;
       }
-      // escapees at the bed's feet
-      const nEsc = 1 + Math.floor(rng() * 3);
-      for (let e = 0; e < nEsc; e++) {
-        plant(bed.x + (rng() - 0.5) * (bed.w + 1.6),
-          bed.z + (bed.d / 2 + 0.3 + rng() * 0.5) * (rng() < 0.5 ? 1 : -1),
-          crop, 0);
+      // nasturtiums spill over the edges wherever they were planted
+      for (let e = 0; e < 2 + Math.floor(rng() * 2); e++) {
+        addPlant(zone, bed.x + (rng() - 0.5) * bed.w,
+          bed.z + (bed.d / 2 + 0.25 + rng() * 0.3) * (rng() < 0.5 ? 1 : -1),
+          rng() < 0.6 ? 'nasturtium' : 'chard', 0);
+      }
+      // and the trellised beds carry pea vines up their lattice
+      if (this.trellises.includes(bi)) {
+        const tz = bed.z - bed.d / 2 - 0.05;
+        for (let vx = -bed.w / 2 + 0.3; vx < bed.w / 2; vx += 0.42 + rng() * 0.2) {
+          addPlant(zone, bed.x + vx, tz + (rng() - 0.5) * 0.06, 'peavine', BED_TOP);
+        }
       }
     });
 
-    // weeds along the walls — a garden is a negotiation, not a victory
-    const weedKinds = ['daisy', 'spray', 'daisy', 'bells'];
-    for (let i = 0; i < 14; i++) {
+    // the potted tenants
+    for (const p of POTS) {
+      if (p.plant && p.rim) addPlant('ground', p.x, p.z, p.plant, p.rim);
+    }
+    // weeds along the fence line
+    const weedKinds = ['daisy', 'spray', 'bells', 'nasturtium'];
+    for (let i = 0; i < 12; i++) {
       const side = Math.floor(rng() * 4);
-      const x = side < 2 ? (side === 0 ? -W + 0.4 + rng() * 1.2 : W - 0.4 - rng() * 1.2)
+      const x = side < 2 ? (side === 0 ? -W + 0.4 + rng() : W - 0.4 - rng())
         : -W + 1 + rng() * (W * 2 - 2);
       const z = side < 2 ? -D + 1 + rng() * (D * 2 - 2)
-        : (side === 2 ? -D + 0.4 + rng() * 1.0 : D - 0.4 - rng() * 1.0);
-      plant(x, z, weedKinds[Math.floor(rng() * weedKinds.length)], 0);
+        : (side === 2 ? -D + 0.35 + rng() * 0.8 : D - 0.35 - rng() * 0.8);
+      addPlant('ground', x, z, weedKinds[Math.floor(rng() * weedKinds.length)], 0);
+    }
+    // whips gone feral along the north fence
+    for (let i = 0; i < 4; i++) {
+      addPlant('ground', -W + 2 + i * (W * 2 - 4) / 3 + (rng() - 0.5), -D + 0.3, 'whip', 0);
     }
 
-    // and plain grass, everywhere the beds are not
-    {
-      const blade = new THREE.PlaneGeometry(0.025, 0.2, 1, 2);
-      blade.translate(0, 0.1, 0);
-      const bp = blade.attributes.position;
-      for (let i = 0; i < bp.count; i++) {
-        const f = Math.max(0, bp.getY(i) / 0.2);
-        bp.setX(i, bp.getX(i) * (1 - f * 0.8));
-        bp.setZ(i, f * f * 0.06);
+    // register records
+    for (const [zone, plants] of zonePlants) {
+      this.zones.set(zone, { plants, mesh: null });
+      for (const pl of plants) {
+        this.records.push({
+          id: pl.id, seed: 0, kind: pl.kind, zone,
+          pos: new THREE.Vector3(pl.x, 0, pl.z), headPos: null,
+        });
       }
-      blade.computeVertexNormals();
-      const tc = new THREE.Color();
-      const bm = new THREE.Matrix4();
-      const sm = new THREE.Matrix4();
-      const inBed = (x, z) => this.beds.some((b) =>
-        Math.abs(x - b.x) < b.w / 2 + 0.4 && Math.abs(z - b.z) < b.d / 2 + 0.4);
-      for (let i = 0; i < 420; i++) {
-        const x = -W + 0.6 + rng() * (W * 2 - 1.2);
-        const z = -D + 0.6 + rng() * (D * 2 - 1.2);
-        if (inBed(x, z) || Math.abs(x) < 0.9) continue; // not in beds, not on the path
-        tc.setHSL(0.24 + rng() * 0.05, 0.34, 0.2 + rng() * 0.1);
-        const sc = 0.6 + rng() * 0.9;
-        for (let k = 0; k < 2; k++) {
-          bm.makeRotationY(rng() * Math.PI * 2);
-          bm.setPosition(x + (rng() - 0.5) * 0.06, 0, z + (rng() - 0.5) * 0.06);
-          sm.makeScale(sc, sc * (0.6 + rng() * 0.8), sc);
-          bm.multiply(sm);
-          const src = blade;
-          const p2 = src.attributes.position, n2 = src.attributes.normal;
-          const v = new THREE.Vector3(), nv = new THREE.Vector3();
-          const nm = new THREE.Matrix3().getNormalMatrix(bm);
-          for (let j = 0; j < p2.count; j++) {
-            v.fromBufferAttribute(p2, j).applyMatrix4(bm);
-            arrays.position.push(v.x, v.y, v.z);
-            nv.fromBufferAttribute(n2, j).applyMatrix3(nm).normalize();
-            arrays.normal.push(nv.x, nv.y, nv.z);
-            arrays.color.push(tc.r, tc.g, tc.b);
-          }
+    }
+    // seeds come from position so they survive any relayout
+    for (const rec of this.records) {
+      rec.seed = (Math.abs(Math.imul(Math.round(rec.pos.x * 97), 2654435761)
+        ^ Math.imul(Math.round(rec.pos.z * 131), 1274126177)) >>> 0);
+    }
+
+    for (const zone of this.zones.keys()) this._rebuildZone(zone);
+    this._buildMeadow(rng);
+  }
+
+  _rebuildZone(zone) {
+    const z = this.zones.get(zone);
+    if (!z) return;
+    if (z.mesh) {
+      this.scene.remove(z.mesh);
+      z.mesh.geometry.dispose();
+    }
+    const arrays = { position: [], normal: [], color: [] };
+    const m = new THREE.Matrix4();
+    for (const pl of z.plants) {
+      const rec = this.records.find((r) => r.id === pl.id);
+      if (!rec || this.picked.has(pl.id)) continue;
+      const kind = pl.kind === 'whip' ? null : null;
+      const f = pl.kind === 'whip'
+        ? buildWhip(rec.seed)
+        : buildStem(rec);
+      const y = pl.baseY - (f.sink || 0);
+      rec.headPos = (f.headPos || new THREE.Vector3(0, f.height * 0.7, 0))
+        .clone().add(new THREE.Vector3(pl.x, y, pl.z));
+      m.makeTranslation(pl.x, y, pl.z);
+      f.geometry.applyMatrix4(m);
+      this._append(arrays, f.geometry);
+      f.geometry.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(arrays.position, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(arrays.normal, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(arrays.color, 3));
+    z.mesh = new THREE.Mesh(geo, this.plantMat);
+    z.mesh.castShadow = true;
+    z.mesh.receiveShadow = true;
+    z.mesh.frustumCulled = false;
+    this.scene.add(z.mesh);
+  }
+
+  // The meadow beyond the fence: unreachable, unpickable, generous. It
+  // hugs the fence in a dense ring — that's the band the fog actually
+  // lets you see — and thins out fast beyond it.
+  _buildMeadow(rng) {
+    const arrays = { position: [], normal: [], color: [] };
+    const m = new THREE.Matrix4();
+    const inside = (x, z) => Math.abs(x) < W + 0.6 && Math.abs(z) < D + 0.6;
+
+    // pick a point just outside the fence: a side, a spot along it, and
+    // a push outward biased toward "close" so the band reads dense
+    const ringPoint = () => {
+      const side = Math.floor(rng() * 4);
+      const push = 0.4 + Math.pow(rng(), 2.2) * 34;
+      if (side < 2) {
+        const z = -D + rng() * D * 2;
+        const x = (side === 0 ? -W : W) + (side === 0 ? -push : push);
+        return [x, z];
+      }
+      const x = -W + rng() * W * 2;
+      const z = (side === 2 ? -D : D) + (side === 2 ? -push : push);
+      return [x, z];
+    };
+
+    const kinds = ['daisy', 'daisy', 'spray', 'poppy', 'plume', 'plume', 'umbel', 'tulip', 'bells'];
+    for (let i = 0; i < 340; i++) {
+      const [x, z] = ringPoint();
+      if (inside(x, z)) continue;
+      const kind = kinds[Math.floor(rng() * kinds.length)];
+      const f = buildStem({ kind, seed: Math.floor(rng() * 0xffffffff), cut: 1 });
+      m.makeTranslation(x, 0, z);
+      f.geometry.applyMatrix4(m);
+      this._append(arrays, f.geometry);
+      f.geometry.dispose();
+    }
+
+    // grass, in here and out there
+    const blade = new THREE.PlaneGeometry(0.025, 0.22, 1, 2);
+    blade.translate(0, 0.11, 0);
+    const bp = blade.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const f = Math.max(0, bp.getY(i) / 0.22);
+      bp.setX(i, bp.getX(i) * (1 - f * 0.8));
+      bp.setZ(i, f * f * 0.06);
+    }
+    blade.computeVertexNormals();
+    const tc = new THREE.Color();
+    const bm = new THREE.Matrix4(), sm = new THREE.Matrix4();
+    const inBed = (x, z) => this.beds.some((b) =>
+      Math.abs(x - b.x) < b.w / 2 + 0.4 && Math.abs(z - b.z) < b.d / 2 + 0.4);
+    const nm = new THREE.Matrix3();
+    const v = new THREE.Vector3(), nv = new THREE.Vector3();
+    for (let i = 0; i < 1100; i++) {
+      const far = i > 380;
+      const x = far ? (rng() - 0.5) * 100 : -W + 0.5 + rng() * (W * 2 - 1);
+      const z = far ? (rng() - 0.5) * 100 : -D + 0.5 + rng() * (D * 2 - 1);
+      if (far && inside(x, z)) continue;
+      if (!far && (inBed(x, z) || Math.abs(x) < 0.85)) continue;
+      tc.setHSL(0.2 + rng() * 0.07, 0.36, 0.24 + rng() * 0.14);
+      const sc = 0.6 + rng() * 1.0;
+      for (let k = 0; k < 2; k++) {
+        bm.makeRotationY(rng() * Math.PI * 2);
+        bm.setPosition(x + (rng() - 0.5) * 0.06, 0, z + (rng() - 0.5) * 0.06);
+        sm.makeScale(sc, sc * (0.6 + rng() * 0.9), sc);
+        bm.multiply(sm);
+        nm.getNormalMatrix(bm);
+        const p2 = blade.attributes.position, n2 = blade.attributes.normal;
+        for (let j = 0; j < p2.count; j++) {
+          v.fromBufferAttribute(p2, j).applyMatrix4(bm);
+          arrays.position.push(v.x, v.y, v.z);
+          nv.fromBufferAttribute(n2, j).applyMatrix3(nm).normalize();
+          arrays.normal.push(nv.x, nv.y, nv.z);
+          arrays.color.push(tc.r, tc.g, tc.b);
         }
       }
-      blade.dispose();
     }
-
-    // whips climbing the north wall, gone entirely feral
-    for (let i = 0; i < 5; i++) {
-      const seed = Math.floor(rng() * 0xffffffff);
-      const id = `g${idx++}`;
-      const x = -W + 2 + i * (W * 2 - 4) / 4 + (rng() - 0.5);
-      const rec = { id, seed, kind: 'whip', pos: new THREE.Vector3(x, 0, -D + 0.35) };
-      this.records.push(rec);
-      if (this.picked.has(id)) continue;
-      const wg = buildWhip(seed);
-      rec.headPos = new THREE.Vector3(x, wg.height * 0.7, -D + 0.35);
-      m.makeTranslation(x, 0, -D + 0.35);
-      wg.geometry.applyMatrix4(m);
-      this._append(arrays, wg.geometry);
-      wg.geometry.dispose();
-    }
+    blade.dispose();
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(arrays.position, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(arrays.normal, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(arrays.color, 3));
-    this._plantMesh = new THREE.Mesh(geo, this.plantMat);
-    this._plantMesh.castShadow = true;
-    this._plantMesh.receiveShadow = true;
-    this._plantMesh.frustumCulled = false;
-    this.scene.add(this._plantMesh);
+    const mesh = new THREE.Mesh(geo, this.plantMat);
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    this.scene.add(mesh);
   }
 
   _append(arrays, geo) {
@@ -332,14 +526,13 @@ export class Garden {
     this.butterflies = [];
     const wing = new THREE.PlaneGeometry(0.035, 0.05);
     wing.translate(0.018, 0, 0);
-    for (let i = 0; i < 3; i++) {
-      const col = i === 2 ? 0xd8a45a : 0xf0ead6;
+    for (let i = 0; i < 4; i++) {
+      const col = i === 2 ? 0xd8a45a : i === 3 ? 0xc8ccdb : 0xf0ead6;
       const mat = new THREE.MeshLambertMaterial({ color: col, side: THREE.DoubleSide });
       const b = new THREE.Group();
       const l = new THREE.Mesh(wing, mat), r = new THREE.Mesh(wing, mat);
       r.rotation.y = Math.PI;
       b.add(l); b.add(r);
-      b.position.set((Math.random() - 0.5) * W, 0.9 + Math.random(), (Math.random() - 0.5) * D);
       this.scene.add(b);
       this.butterflies.push({ b, l, r, ph: Math.random() * 20, sp: 0.7 + Math.random() * 0.5 });
     }
@@ -353,8 +546,11 @@ export class Garden {
   }
 
   update(dt, elapsed, camera) {
+    if (!this._built) { // the garden plants itself the first time you arrive
+      this._built = true;
+      this._layout();
+    }
     this._t += dt;
-    // the morning holds still, but breathes a little
     const drift = 0.5 + 0.5 * Math.sin(elapsed * 0.013);
     this.hemi.intensity = 1.45 + drift * 0.15;
     this.sun.intensity = 1.05 + drift * 0.2;
@@ -396,7 +592,7 @@ export class Garden {
     if (!rec) return null;
     this.picked.add(rec.id);
     localStorage.setItem(STORE_KEY, JSON.stringify([...this.picked]));
-    this._rebuildPlants();
+    this._rebuildZone(rec.zone);
     this.target = null;
     return { kind: rec.kind, seed: rec.seed, cut: 1 };
   }

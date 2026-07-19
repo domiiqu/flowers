@@ -838,6 +838,254 @@ export function buildArtichoke(seed, opts = {}) {
   return { geometry: toGeometry(arrays), height: H, headPos, headR: headR * 2.4 };
 }
 
+// A nasturtium — round lily-pad leaves on wandering stems, and flowers
+// like little flames. Entirely edible, entirely ungovernable.
+export function buildNasturtium(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const arrays = { position: [], normal: [], color: [] };
+  const stemCol = new THREE.Color('#6f8a4a').lerp(STEM_DRIED, w * 0.6);
+  const leafCol = new THREE.Color('#5d7a3f').lerp(new THREE.Color('#a8a04e'), w * 0.65);
+  const veinCol = leafCol.clone().lerp(new THREE.Color('#c8d2a0'), 0.5);
+  let top = 0.05;
+
+  const nStems = 3 + Math.floor(rng() * 3);
+  for (let i = 0; i < nStems; i++) {
+    const az = rng() * Math.PI * 2;
+    const len = (0.09 + rng() * 0.14) * cut;
+    const rise = 0.5 + rng() * 0.7 - w * 0.45;
+    const end = new THREE.Vector3(
+      Math.cos(az) * len, Math.max(0.03, len * rise), Math.sin(az) * len);
+    const mid = end.clone().multiplyScalar(0.5);
+    mid.y += len * 0.18;
+    const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.01, 0), mid, end]);
+    push(arrays, new THREE.TubeGeometry(c, 4 * d, 0.0022, 4), _m.identity(), stemCol);
+    // the round peltate leaf, cupped, stem meeting it at the very centre
+    const r = 0.02 + rng() * 0.018;
+    const leaf = new THREE.CircleGeometry(r, 9 + 3 * d);
+    const lp = leaf.attributes.position;
+    for (let k = 0; k < lp.count; k++) {
+      const dx = lp.getX(k), dy = lp.getY(k);
+      const dist = Math.sqrt(dx * dx + dy * dy) / r;
+      lp.setZ(k, dist * dist * r * (0.25 + w * 0.5));
+    }
+    leaf.computeVertexNormals();
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      -Math.PI / 2 + (rng() - 0.5) * 0.5 + w * 0.3, rng() * Math.PI * 2, 0, 'YXZ'));
+    _m.compose(end, q, new THREE.Vector3(1, 1, 1));
+    const lc = leafCol.clone(), vc = veinCol.clone();
+    push(arrays, leaf, _m, (v) => {
+      const dist = Math.sqrt(v.x * v.x + v.y * v.y) / r;
+      return lc.clone().lerp(vc, Math.max(0, 1 - dist * 2.2));
+    });
+    leaf.dispose();
+    top = Math.max(top, end.y + r * 0.5);
+  }
+
+  // the flames
+  const flameHues = ['#d8641e', '#d89b1e', '#c24a28'];
+  const nFl = 1 + Math.floor(rng() * 3);
+  for (let i = 0; i < nFl; i++) {
+    if (rng() < w * 0.75) continue; // flowers are the first to go
+    const az = rng() * Math.PI * 2;
+    const len = (0.1 + rng() * 0.1) * cut;
+    const end = new THREE.Vector3(
+      Math.cos(az) * len * 0.7, len * (0.8 - w * 0.3), Math.sin(az) * len * 0.7);
+    const c = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.01, 0),
+      end.clone().multiplyScalar(0.5).add(new THREE.Vector3(0, len * 0.15, 0)), end]);
+    push(arrays, new THREE.TubeGeometry(c, 4, 0.0018, 4), _m.identity(), stemCol);
+    const fc = new THREE.Color(flameHues[Math.floor(rng() * flameHues.length)]);
+    const fDir = new THREE.Vector3(Math.cos(az) * 0.5, 0.8, Math.sin(az) * 0.5).normalize();
+    const fQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), fDir);
+    const petal = petalGeometry(0.016, 0.014, 0.25, 0.5, d);
+    const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+    for (let pI = 0; pI < 5; pI++) {
+      q1.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 1.15 + (rng() - 0.5) * 0.2);
+      q2.setFromAxisAngle(new THREE.Vector3(0, 0, 1), (pI / 5) * Math.PI * 2);
+      q2.multiply(q1).premultiply(fQ);
+      _m.compose(end, q2, new THREE.Vector3(1, 1, 1));
+      push(arrays, petal, _m, fc, fc.clone().lerp(new THREE.Color('#f2d24a'), 0.45));
+    }
+    petal.dispose();
+    top = Math.max(top, end.y + 0.02);
+  }
+
+  return {
+    geometry: toGeometry(arrays), height: top,
+    headPos: new THREE.Vector3(0, top * 0.8, 0), headR: 0.16,
+  };
+}
+
+// Chives — a sheaf of hollow green spears, one or two crowned with a
+// purple pom that bees would cross a county for.
+export function buildChive(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const arrays = { position: [], normal: [], color: [] };
+  const green = new THREE.Color('#4c7038').lerp(new THREE.Color('#a8a04e'), w * 0.65);
+  let top = 0.1;
+  const nSpears = 6 + Math.floor(rng() * 5);
+  let pomCount = 1 + Math.floor(rng() * 2);
+  for (let i = 0; i < nSpears; i++) {
+    const az = rng() * Math.PI * 2;
+    const lean = 0.03 + rng() * 0.1 + w * 0.12;
+    const h = (0.16 + rng() * 0.16) * cut;
+    const tip = new THREE.Vector3(Math.cos(az) * lean, h, Math.sin(az) * lean);
+    const c = new THREE.CatmullRomCurve3([
+      new THREE.Vector3((rng() - 0.5) * 0.015, 0, (rng() - 0.5) * 0.015),
+      tip.clone().multiplyScalar(0.55), tip]);
+    push(arrays, new THREE.TubeGeometry(c, 4 * d, 0.0018, 4), _m.identity(), green);
+    top = Math.max(top, h);
+    if (pomCount > 0 && i >= nSpears - 3 && rng() < 0.8 && w < 0.85) {
+      pomCount--;
+      const pom = new THREE.SphereGeometry(0.011 + rng() * 0.004, 7 * d, 5 * d);
+      _m.makeTranslation(tip.x, tip.y + 0.008, tip.z);
+      const pc = new THREE.Color('#8a5a9c').lerp(new THREE.Color('#8a7a5c'), w * 0.6);
+      push(arrays, pom, _m, pc, pc.clone().lerp(new THREE.Color('#c8aad4'), 0.55));
+      pom.dispose();
+      top = Math.max(top, tip.y + 0.02);
+    }
+  }
+
+  return {
+    geometry: toGeometry(arrays), height: top,
+    headPos: new THREE.Vector3(0, top * 0.9, 0), headR: 0.1,
+  };
+}
+
+// A pea vine — it wants nothing in the world but to climb, and carries
+// its own white flowers and hanging pods along the way.
+export function buildPeavine(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const H = (1.1 + rng() * 0.6) * cut * (1 - 0.08 * w);
+  // climbing: mostly vertical with a searching wobble
+  const pts = [new THREE.Vector3(0, 0, 0)];
+  const nSeg = 6;
+  for (let i = 1; i <= nSeg; i++) {
+    pts.push(new THREE.Vector3(
+      (rng() - 0.5) * 0.12 * (1 + w), (i / nSeg) * H, (rng() - 0.5) * 0.12));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const arrays = { position: [], normal: [], color: [] };
+  const green = new THREE.Color('#5c7a44').lerp(new THREE.Color('#ab9a52'), w * 0.7);
+  push(arrays, new THREE.TubeGeometry(curve, 12 * d, 0.0032, 4 + d), _m.identity(), green);
+
+  const q = new THREE.Quaternion();
+  // paired oval leaflets all the way up
+  const leaflet = new THREE.PlaneGeometry(0.02, 0.034, 1, 2);
+  leaflet.translate(0, 0.017, 0);
+  for (let t = 0.12; t < 0.98; t += 0.09) {
+    const at = curve.getPoint(t);
+    for (const side of [-1, 1]) {
+      q.setFromEuler(new THREE.Euler(
+        -(0.9 + rng() * 0.4 + w * 0.4), rng() * 0.6 + (side < 0 ? Math.PI : 0), 0, 'YXZ'));
+      _m.compose(at, q, new THREE.Vector3(1, 1, 1));
+      push(arrays, leaflet, _m, green, green.clone().lerp(new THREE.Color('#88a860'), 0.4));
+    }
+  }
+  leaflet.dispose();
+
+  // tendrils, blossoms, pods
+  for (let i = 0; i < 4; i++) {
+    const t = 0.35 + rng() * 0.6;
+    const at = curve.getPoint(t);
+    const roll = rng();
+    if (roll < 0.38) { // a small white blossom, wings up
+      if (rng() < w * 0.7) continue;
+      const bc = new THREE.Color('#eee8da').lerp(new THREE.Color('#c8aab8'), rng() * 0.3);
+      const petal = petalGeometry(0.014, 0.012, 0.3, 0.6, d);
+      for (let pI = 0; pI < 3; pI++) {
+        q.setFromEuler(new THREE.Euler(
+          -(0.4 + rng() * 0.7), rng() * Math.PI * 2, 0, 'YXZ'));
+        _m.compose(at, q, new THREE.Vector3(1, 1, 1));
+        push(arrays, petal, _m, bc);
+      }
+      petal.dispose();
+    } else if (roll < 0.72) { // a pod, hanging
+      const pod = new THREE.SphereGeometry(0.008, 6 * d, 5 * d);
+      pod.scale(1, 3.6, 0.6);
+      const pc = new THREE.Color('#688a48').lerp(new THREE.Color('#8a7a48'), w * 0.7);
+      _m.compose(at.clone().add(new THREE.Vector3(0.01, -0.026, 0)),
+        q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.4, 0, 0.3 + rng() * 0.3)),
+        new THREE.Vector3(1, 1, 1));
+      push(arrays, pod, _m, pc, pc.clone().lerp(new THREE.Color('#a8c078'), 0.3));
+      pod.dispose();
+    } else { // a tendril, asking around
+      const tp = [at.clone()];
+      const td = new THREE.Vector3(rng() - 0.5, 0.4, rng() - 0.5).normalize();
+      for (let k = 1; k < 6; k++) {
+        td.applyAxisAngle(new THREE.Vector3(0, 0, 1), 0.55).normalize();
+        tp.push(tp[k - 1].clone().addScaledVector(td, 0.016));
+      }
+      push(arrays, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(tp), 8, 0.0009, 4),
+        _m.identity(), green.clone().lerp(new THREE.Color('#9ab070'), 0.4));
+    }
+  }
+
+  return { geometry: toGeometry(arrays), height: H, headPos: pts[nSeg].clone(), headR: 0.16 };
+}
+
+// Rainbow chard — the garden's stained glass: stems in magenta, gold,
+// orange, or white, under big crinkled leaves.
+export function buildChard(seed, opts = {}) {
+  const rng = mulberry32(seed);
+  const cut = opts.cut ?? 1;
+  const w = opts.wilt ?? 0;
+  const d = opts.detail ?? 1;
+
+  const arrays = { position: [], normal: [], color: [] };
+  const ribHues = ['#c02a6a', '#d8a02a', '#cc5a20', '#e8e2d2'];
+  const rib = new THREE.Color(ribHues[Math.floor(rng() * ribHues.length)])
+    .lerp(new THREE.Color('#8a7a5c'), w * 0.5);
+  const leafCol = new THREE.Color('#3c5a30').lerp(new THREE.Color('#8a8a48'), w * 0.6);
+  let top = 0.1;
+
+  const nLeaves = 4 + Math.floor(rng() * 3);
+  for (let i = 0; i < nLeaves; i++) {
+    const az = (i / nLeaves) * Math.PI * 2 + rng() * 0.7;
+    const lean = 0.05 + rng() * 0.09 + w * 0.1;
+    const h = (0.1 + rng() * 0.1) * cut;
+    const tip = new THREE.Vector3(Math.cos(az) * lean, h, Math.sin(az) * lean);
+    const c = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0), tip.clone().multiplyScalar(0.6), tip]);
+    push(arrays, new THREE.TubeGeometry(c, 4 * d, 0.004, 5), _m.identity(), rib);
+    // the crinkled blade
+    const len = (0.1 + rng() * 0.08) * cut;
+    const leaf = new THREE.PlaneGeometry(len * 0.62, len, 2, 6 * d);
+    leaf.translate(0, len / 2, 0);
+    const lp = leaf.attributes.position;
+    for (let k = 0; k < lp.count; k++) {
+      const f = Math.max(0, lp.getY(k) / len);
+      lp.setX(k, lp.getX(k) * Math.sin(Math.min(1, 0.2 + f) * Math.PI) * 1.15);
+      lp.setZ(k, f * f * len * (0.5 + w * 0.8)
+        + Math.sin(f * 19 + lp.getX(k) * 60) * 0.006); // the crinkle
+    }
+    leaf.computeVertexNormals();
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      -(0.3 + rng() * 0.45 + w * 0.55), az, 0, 'YXZ'));
+    _m.compose(tip, q, new THREE.Vector3(1, 1, 1));
+    push(arrays, leaf, _m, rib, leafCol); // colour runs rib -> leaf
+    leaf.dispose();
+    top = Math.max(top, tip.y + len * 0.75);
+  }
+
+  return {
+    geometry: toGeometry(arrays), height: top,
+    headPos: new THREE.Vector3(0, top * 0.8, 0), headR: 0.15,
+  };
+}
+
 // A whip — one of those long pale tendrils that loops off on its own
 // errand. No flower to speak of; it is all gesture.
 export function buildWhip(seed, opts = {}) {
@@ -894,6 +1142,10 @@ const BUILDERS = {
   carrot: buildCarrot,
   ramp: buildRamp,
   artichoke: buildArtichoke,
+  nasturtium: buildNasturtium,
+  chive: buildChive,
+  peavine: buildPeavine,
+  chard: buildChard,
 };
 
 export const STEM_NAMES = {
@@ -910,6 +1162,10 @@ export const STEM_NAMES = {
   carrot: 'carrot',
   ramp: 'ramp',
   artichoke: 'artichoke',
+  nasturtium: 'nasturtium',
+  chive: 'chive blossom',
+  peavine: 'pea vine',
+  chard: 'rainbow chard',
 };
 
 export function buildStem(entry, detail = 1) {
