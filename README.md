@@ -17,6 +17,15 @@ them.
 A flower you pick is gone from the field, and the field remembers — walk
 back tomorrow and the gap is still there.
 
+Near where you wake, a door stands alone in the grass. Through it is the
+walled garden: a held morning — lighter, sunnier, quieter, only birdsong
+and a few butterflies. Raised beds were planted in rows once and have had
+their own ideas since: carrots (in the garden only the feathered greens
+show; the orange is a surprise you earn by pulling), ramps with their
+burgundy throats, architectural artichokes, weeds along the walls, whips
+gone feral over the north wall. Everything pulls, everything arranges,
+everything wilts. The blue door in the south wall goes back to the field.
+
 Very rarely, the field gives something up: a lost locket, an old tin, a
 striped stone, an ammonite. Treasures go in the bag too, and can stand in
 the still life beside the flowers. They do not wilt — a treasure is a
@@ -76,7 +85,8 @@ served over http, not file://)
 | walk | `W A S D` / arrows |
 | look (full 360) | mouse (click once to take hold of the view) |
 | pick a flower | look at it, come close, click (or `E`) |
-| the studio / the field | `Tab` |
+| the garden | find the lone door in the field, click it; the blue door leads back |
+| the studio | `Tab` (and `Tab` again returns you to wherever you were) |
 | walk the studio | `W A S D`; drag to look around |
 | see a stem properly | rest on it in the bag at the bottom |
 | take a stem | click it in the bag |
@@ -109,12 +119,12 @@ machinery.
 - `src/post.js` — the lens: depth of field, bloom, the filmic grade
 - `src/flower.js` — flowers and whips, grown from seeds
 - `src/field.js` — the endless field, in remembering chunks
+- `src/garden.js` — the walled garden, one held morning
 - `src/studio.js` — the table, the shelf, the arranging
 - `src/main.js` — walking, the bag, photographs, wind
 
-## later, maybe (v2)
+## later, maybe
 
-- a harvestable garden — carrots, lemons, branches for the arrangements
 - adjustable studio lighting (the field's hour already leaks into the room)
 - stars at night, a moon
 - sound of footsteps in grass

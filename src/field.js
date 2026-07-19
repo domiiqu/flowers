@@ -107,6 +107,30 @@ export class Field {
     this.transU = makeTransUniforms();
     this.transU.dir.value.set(26, 20, -44).normalize();
     this.plantMat = makePlantMaterial(uTime, true, false, this.transU);
+
+    // and somewhere near where you wake, a door stands alone in the
+    // grass, opening onto nothing you can see from here
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x7a6f58 });
+    const doorGrp = new THREE.Group();
+    for (const dx of [-0.62, 0.62]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.13, 2.2, 0.16), frameMat);
+      post.position.set(dx, 1.1, 0);
+      doorGrp.add(post);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.15, 0.18), frameMat);
+    lintel.position.set(0, 2.22, 0);
+    doorGrp.add(lintel);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.02, 0.07),
+      new THREE.MeshStandardMaterial({ color: 0x647082, roughness: 0.85 }));
+    panel.position.set(0.04, 1.01, 0.01);
+    panel.rotation.y = -0.1; // ajar, always
+    doorGrp.add(panel);
+    doorGrp.traverse((o) => { o.castShadow = true; });
+    doorGrp.position.set(7, 0, 3);
+    doorGrp.rotation.y = 0.7;
+    this.scene.add(doorGrp);
+    this.doorPos = new THREE.Vector3(7, 1.1, 3);
+    this.doorTarget = false;
     this.chunks = new Map();   // "cx,cz" -> { mesh, records }
     this.picked = new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
     this.target = null;        // record currently in reach + in gaze
@@ -327,6 +351,9 @@ export class Field {
     // what are you looking at, and is it close enough to reach?
     camera.getWorldDirection(this._dir);
     this.target = null;
+    const toDoor = this._tmp.copy(this.doorPos).sub(camera.position);
+    this.doorTarget = toDoor.length() < 3.4
+      && toDoor.normalize().dot(this._dir) > 0.92;
     let best = 0.93;
     for (const [, ch] of this.chunks) {
       for (const rec of ch.records) {
@@ -338,6 +365,7 @@ export class Field {
         if (align > best) { best = align; this.target = rec; }
       }
     }
+    if (this.doorTarget) this.target = null;
   }
 
   // Is the walker pushing through standing grass here?
