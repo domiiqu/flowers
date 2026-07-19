@@ -1,6 +1,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { Field } from './field.js';
 import { Studio } from './studio.js';
+import { Garden } from './garden.js';
 import { Post } from './post.js';
 import { buildStem, makePlantMaterial, STEM_NAMES } from './flower.js';
 import { buildObject, disposeObject, OBJECT_NAMES } from './objects.js';
@@ -33,9 +34,9 @@ document.getElementById('stage').appendChild(renderer.domElement);
 
 const post = new Post(renderer);
 function postOpts() {
-  return mode === 'field'
-    ? { dof: 0, bloom: 0.30, focus: 10, range: 20 }
-    : { dof: 0, bloom: 0.18, focus: 3, range: 3 }; // the room stays sharp
+  if (mode === 'field') return { dof: 0, bloom: 0.30, focus: 10, range: 20 };
+  if (mode === 'garden') return { dof: 0, bloom: 0.24, focus: 10, range: 20 };
+  return { dof: 0, bloom: 0.18, focus: 3, range: 3 }; // the room stays sharp
 }
 
 const uTime = { value: 0 };
@@ -176,11 +177,15 @@ function makeEnvironment() {
   pmrem.dispose();
   return env;
 }
+const garden = new Garden(uTime);
+
 const ENV = makeEnvironment();
 studio.scene.environment = ENV;
 field.scene.environment = ENV;
+garden.scene.environment = ENV;
 
 let mode = 'field';
+let prevWorld = 'field'; // the last outdoor place; Tab from the studio returns here
 let switching = false;
 
 function setMode(next) {
@@ -189,6 +194,7 @@ function setMode(next) {
   veil.classList.add('on');
   setTimeout(() => {
     mode = next;
+    if (mode !== 'studio') prevWorld = mode;
     document.body.dataset.mode = mode;
     audio.setMode(mode);
     if (mode === 'studio') {
@@ -202,14 +208,20 @@ function setMode(next) {
 
 // ---------------------------------------------------------------- walking
 const keys = new Set();
-let yaw = -2.35, pitch = 0, bobPhase = 0;
+const views = {
+  field: { yaw: -2.35, pitch: 0 },
+  garden: { yaw: Math.PI, pitch: -0.04 },
+};
+let bobPhase = 0;
+const worldOf = () => (mode === 'garden' ? garden : field);
+const worldCam = () => (mode === 'garden' ? garden.camera : fieldCam);
 addEventListener('keydown', (e) => {
-  if (e.code === 'Tab') { e.preventDefault(); setMode(mode === 'field' ? 'studio' : 'field'); return; }
+  if (e.code === 'Tab') { e.preventDefault(); setMode(mode === 'studio' ? prevWorld : 'studio'); return; }
   if (e.code === 'KeyP') { photograph(); return; }
   if (e.code === 'KeyM') { audio.muted = !audio.muted; say(audio.muted ? 'quiet' : 'wind', 1200); return; }
   if (e.code === 'BracketLeft') { timeOffset -= 0.02; return; }
   if (e.code === 'BracketRight') { timeOffset += 0.02; return; }
-  if (e.code === 'KeyE' && mode === 'field') { tryPick(); return; }
+  if (e.code === 'KeyE' && mode !== 'studio') { tryPick(); return; }
   keys.add(e.code);
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -219,9 +231,10 @@ const pointerNdc = new THREE.Vector2();
 const drag = { down: false, moved: false, x: 0, y: 0 };
 
 document.addEventListener('mousemove', (e) => {
-  if (mode === 'field' && document.pointerLockElement === renderer.domElement) {
-    yaw -= e.movementX * 0.0021;
-    pitch = THREE.MathUtils.clamp(pitch - e.movementY * 0.0021, -1.2, 1.2);
+  if (mode !== 'studio' && document.pointerLockElement === renderer.domElement) {
+    const v = views[mode];
+    v.yaw -= e.movementX * 0.0021;
+    v.pitch = THREE.MathUtils.clamp(v.pitch - e.movementY * 0.0021, -1.2, 1.2);
   }
   if (mode === 'studio') {
     pointerNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -242,11 +255,14 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   audio.ensure();
   if (started === false) { begin(); return; }
-  if (mode === 'field') {
+  if (mode !== 'studio') {
     if (document.pointerLockElement !== renderer.domElement) {
       renderer.domElement.requestPointerLock();
       return;
     }
+    // a door before a flower, always
+    if (mode === 'field' && field.doorTarget) { setMode('garden'); return; }
+    if (mode === 'garden' && garden.doorTarget) { setMode('field'); return; }
     tryPick();
   } else {
     drag.down = true; drag.moved = false;
@@ -286,9 +302,10 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 function tryPick() {
-  if (!field.target) return;
+  const world = worldOf();
+  if (!world.target) return;
   if (bag.length >= BAG_MAX) { say('the bag is full'); return; }
-  const entry = field.pick();
+  const entry = world.pick();
   if (entry) {
     entry.pickedAt = clock.elapsedTime;
     entry.wilt = 0;
@@ -299,19 +316,22 @@ function tryPick() {
 }
 
 function movePlayer(dt) {
+  const cam = worldCam();
+  const v = views[mode];
   const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const inGrass = field.grassAt(fieldCam.position.x, fieldCam.position.z);
+  const inGrass = mode === 'field' && field.grassAt(cam.position.x, cam.position.z);
   const speed = 2.15 * (inGrass ? 0.48 : 1); // standing grass takes effort
   const moving = fwd !== 0 || str !== 0;
   if (moving) {
-    const sy = Math.sin(yaw), cy = Math.cos(yaw);
-    fieldCam.position.x += (-sy * fwd + cy * str) * speed * dt;
-    fieldCam.position.z += (-cy * fwd - sy * str) * speed * dt;
+    const sy = Math.sin(v.yaw), cy = Math.cos(v.yaw);
+    cam.position.x += (-sy * fwd + cy * str) * speed * dt;
+    cam.position.z += (-cy * fwd - sy * str) * speed * dt;
+    if (mode === 'garden') garden.clampPos(cam.position);
     bobPhase += dt * (inGrass ? 4.0 : 5.6);
   }
-  fieldCam.position.y = 1.55 + Math.sin(bobPhase) * (moving ? 0.026 : 0.004);
-  fieldCam.rotation.set(pitch, yaw, 0);
+  cam.position.y = 1.55 + Math.sin(bobPhase) * (moving ? 0.026 : 0.004);
+  cam.rotation.set(v.pitch, v.yaw, 0);
 }
 
 // ---------------------------------------------------------------- let go
@@ -519,8 +539,40 @@ function makeRadio(ctx, dest) {
   return { out };
 }
 
+function makeBirds(ctx, dest) {
+  const out = ctx.createGain();
+  out.gain.value = 0;
+  out.connect(dest);
+  const chirp = (t0, f0) => {
+    const n = 2 + Math.floor(Math.random() * 4);
+    let t = t0;
+    for (let i = 0; i < n; i++) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      const f = f0 * (0.9 + Math.random() * 0.25);
+      const dur = 0.05 + Math.random() * 0.1;
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(
+        f * (Math.random() < 0.5 ? 0.72 : 1.3), t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.022, t + 0.008);
+      g.gain.setTargetAtTime(0, t + dur * 0.6, 0.03);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + dur + 0.3);
+      t += dur + 0.04 + Math.random() * 0.12;
+    }
+  };
+  setInterval(() => {
+    if (out.gain.value < 0.01) return; // no one is listening from here
+    if (Math.random() < 0.16) chirp(ctx.currentTime + 0.05, 2400 + Math.random() * 1600);
+  }, 700);
+  return { out };
+}
+
 const audio = {
-  ctx: null, master: null, windG: null, radio: null, _m: false, _mode: 'field',
+  ctx: null, master: null, windG: null, radio: null, birds: null, _m: false, _mode: 'field',
   ensure() {
     if (this.ctx) return;
     try {
@@ -553,6 +605,7 @@ const audio = {
       srcN.connect(filt).connect(swell).connect(this.windG).connect(this.master);
       srcN.start(); lfo.start();
       this.radio = makeRadio(this.ctx, this.master);
+      this.birds = makeBirds(this.ctx, this.master);
       this.setMode(this._mode);
     } catch { /* silence is acceptable */ }
   },
@@ -561,8 +614,11 @@ const audio = {
     this._mode = mode;
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.windG.gain.setTargetAtTime(mode === 'field' ? 0.05 : 0, t, 0.7);
+    // the field has wind; the studio, the radio; the garden, only birds
+    this.windG.gain.setTargetAtTime(
+      mode === 'field' ? 0.05 : mode === 'garden' ? 0.012 : 0, t, 0.7);
     this.radio.out.gain.setTargetAtTime(mode === 'studio' ? 1 : 0, t, 0.7);
+    this.birds.out.gain.setTargetAtTime(mode === 'garden' ? 1 : 0, t, 0.7);
   },
   pluck() {
     if (!this.ctx || this.muted) return;
@@ -602,6 +658,8 @@ function onResize() {
   post.setSize(db.x, db.y);
   fieldCam.aspect = innerWidth / innerHeight;
   fieldCam.updateProjectionMatrix();
+  garden.camera.aspect = innerWidth / innerHeight;
+  garden.camera.updateProjectionMatrix();
   studio.camera.aspect = innerWidth / innerHeight;
   studio.camera.updateProjectionMatrix();
 }
@@ -638,10 +696,17 @@ renderer.setAnimationLoop(() => {
   if (mode === 'field') {
     if (started) movePlayer(dt);
     field.update(worldT, fieldCam, clock.elapsedTime);
-    reticle.classList.toggle('near', !!field.target);
-    retLabel.textContent = field.target
-      ? (field.target.object ? NAMES[field.target.kind] : 'pick') : '';
+    reticle.classList.toggle('near', !!field.target || field.doorTarget);
+    retLabel.textContent = field.doorTarget ? 'the garden'
+      : field.target ? (field.target.object ? NAMES[field.target.kind] : 'pick') : '';
     post.render(field.scene, fieldCam, postOpts());
+  } else if (mode === 'garden') {
+    if (started) movePlayer(dt);
+    garden.update(dt, clock.elapsedTime, garden.camera);
+    reticle.classList.toggle('near', !!garden.target || garden.doorTarget);
+    retLabel.textContent = garden.doorTarget ? 'the field'
+      : garden.target ? 'pull' : '';
+    post.render(garden.scene, garden.camera, postOpts());
   } else {
     const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
     const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -667,9 +732,10 @@ renderBag();
 
 // a small back door, for tests and for the curious
 window.__game = {
-  setMode, field, studio, bag, fieldCam, renderBag, begin, wiltTick, wiltOf,
+  setMode, field, studio, garden, bag, fieldCam, renderBag, begin, wiltTick, wiltOf,
   scrub: (t) => { timeOffset = t - clock.elapsedTime / CYCLE; },
-  look: (y, p) => { yaw = y; pitch = p; },
+  look: (y, p) => { views[mode === 'garden' ? 'garden' : 'field'].yaw = y;
+    views[mode === 'garden' ? 'garden' : 'field'].pitch = p; },
   ageAll: (s) => {
     for (const e of bag) e.pickedAt -= s;
     if (studio.held) studio.held.entry.pickedAt -= s;

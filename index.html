@@ -76,6 +76,9 @@
   #bag .stem.umbel { background-color: #7a7663; }
   #bag .stem.plume { background-color: #8a7f5e; }
   #bag .stem.bells { background-color: #665d70; }
+  #bag .stem.carrot { background-color: #9c5518; }
+  #bag .stem.ramp { background-color: #5f7245; }
+  #bag .stem.artichoke { background-color: #5e6b50; }
   #bag .stem.locket, #bag .stem.can, #bag .stem.stone, #bag .stem.fossil {
     background-color: #4a4438; box-shadow: 0 0 0 1px rgba(220, 190, 120, 0.55); }
   #bag .stem:hover { transform: translateY(-4px); }
@@ -99,8 +102,10 @@
   .hints button { background: none; border: none; color: var(--ink); font: inherit;
     letter-spacing: inherit; cursor: pointer; padding: 0; margin-left: auto; }
   .hints button:hover { color: rgba(244, 240, 230, 0.95); }
-  body[data-mode="field"] #hint-studio { display: none; }
-  body[data-mode="studio"] #hint-field { display: none; }
+  #hint-field, #hint-studio, #hint-garden { display: none; }
+  body[data-mode="field"] #hint-field { display: block; }
+  body[data-mode="studio"] #hint-studio { display: block; }
+  body[data-mode="garden"] #hint-garden { display: block; }
 
   #letgo { position: relative; }
   #letgo::after { content: ''; position: absolute; left: 0; bottom: -2px; height: 1px;
@@ -127,8 +132,15 @@
   <div class="hints" id="hint-field">
     <span>walk — w a s d &nbsp;·&nbsp; look — mouse</span>
     <span>pick — click</span>
+    <span>somewhere, a door</span>
     <span>photograph — p</span>
     <span>the studio — tab</span>
+  </div>
+  <div class="hints" id="hint-garden">
+    <span>walk — w a s d &nbsp;·&nbsp; look — mouse</span>
+    <span>pull — click</span>
+    <span>the blue door — back to the field</span>
+    <span>photograph — p &nbsp;·&nbsp; the studio — tab</span>
   </div>
   <div class="hints" id="hint-studio">
     <span>walk — w a s d &nbsp;·&nbsp; drag — look around</span>
@@ -145,7 +157,8 @@
   <div id="title">
     <div>
       <h1>picking flowers</h1>
-      <p>an endless field at dusk. a table with a cloth on it.<br>
+      <p>an endless field at dusk. a walled garden, one held morning.<br>
+      a table with a cloth on it.<br>
       the flowers you pick are gone from the field.<br>
       the arrangements you make cannot be kept — only photographed.</p>
       <div class="go">click to begin</div>
