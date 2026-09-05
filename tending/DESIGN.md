@@ -1,8 +1,9 @@
-# tending — a day-book that grows
+# life emergent — a day-book that grows
 
-A life-tracking system living beside *picking flowers*, at
-`/tending/` in this repo (→ https://domiiqu.github.io/flowers/tending/ once
-merged to main). Not a dashboard: a place. Same world as the field — dusk
+A life-tracking system living beside *picking flowers*. The app is named
+**Life Emergent**; it lives at `/tending/` in this repo
+(→ https://domiiqu.github.io/flowers/tending/ — the path keeps the working
+verb, the app carries the name). Not a dashboard: a place. Same world as the field — dusk
 ground, Georgia serif, whispered italics, film grain — but this room is a
 day-book you keep, and the keeping itself must feel like the nightly unwind:
 easy, seductive, one screen, no hunting.
