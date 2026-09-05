@@ -143,6 +143,9 @@ export function mountDay(app, date) {
   const bed = h('div', { class: 'bed' });
   root.appendChild(bed);
 
+  const hoursLine = h('div', { class: 'hours-line' });
+  root.appendChild(hoursLine);
+
   const pollen = h('div', { class: 'pollen' });
   root.appendChild(pollen);
 
@@ -210,6 +213,33 @@ export function mountDay(app, date) {
           renderPollen();
         }
       });
+    }
+  }
+
+  function renderHoursLine() {
+    clear(hoursLine);
+    const moments = store.momentsFor(date);
+    const track = h('div', { class: 'hours-track' });
+    hoursLine.appendChild(track);
+    if (!moments.length) return;
+    let dayIdx = 0;
+    for (const m of moments) {
+      let leftPct;
+      if (m.f.Sure === 'day') {
+        leftPct = 1.5 + dayIdx * 2.6;
+        dayIdx++;
+      } else {
+        const parts = (m.f.Time || '00:00').split(':').map(Number);
+        const minutes = (parts[0] || 0) * 60 + (parts[1] || 0);
+        leftPct = Math.min(98, (minutes / 1440) * 100);
+      }
+      const mote = h('button', { class: 'hour-mote plain', style: `left:${leftPct.toFixed(2)}%` });
+      mote.appendChild(h('span', { class: 'dot' }));
+      mote.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showRibbon(m.f.Key, momentDetail(m.f.Key));
+      });
+      track.appendChild(mote);
     }
   }
 
@@ -332,8 +362,137 @@ export function mountDay(app, date) {
     noteLine.appendChild(input);
   }
 
+  // -------------------------------------------------- moments, caught in passing
+  const backdrop = h('div', { class: 'moment-backdrop' });
+  const sheet = h('div', { class: 'moment-sheet' });
+  const ribbon = h('div', { class: 'moment-ribbon' });
+  const nowMote = h('button', { class: 'now-mote', 'aria-label': 'catch a moment' }, [h('span', { class: 'now-label italic' }, 'now')]);
+  app.appendChild(backdrop);
+  app.appendChild(sheet);
+  app.appendChild(ribbon);
+  app.appendChild(nowMote);
+
+  let ribbonTimer = null;
+  function hideRibbon() {
+    clearTimeout(ribbonTimer);
+    ribbon.classList.remove('open');
+  }
+  function showRibbon(momentKey, detailText) {
+    clearTimeout(ribbonTimer);
+    clear(ribbon);
+    if (detailText) ribbon.appendChild(h('div', { class: 'ribbon-detail italic' }, detailText));
+    const line = h('div', { class: 'ribbon-line' });
+    ribbon.appendChild(line);
+    function main() {
+      clear(line);
+      const mk = (label, fn) => { const b = h('button', { class: 'plain' }, label); b.addEventListener('click', fn); return b; };
+      line.appendChild(mk('just now', () => hideRibbon()));
+      line.appendChild(mk('about then', async () => { await store.adjustMoment(momentKey, { Sure: 'about' }); renderHoursLine(); hideRibbon(); }));
+      line.appendChild(mk('earlier…', () => offsets()));
+      line.appendChild(mk('all day', async () => { await store.adjustMoment(momentKey, { Sure: 'day' }); renderHoursLine(); hideRibbon(); }));
+      line.appendChild(mk('✕', async () => { await store.removeMoment(momentKey); renderHoursLine(); hideRibbon(); }));
+    }
+    function offsets() {
+      clearTimeout(ribbonTimer);
+      clear(line);
+      const OFFS = [
+        ['−15m', (t) => addMinutes(t, -15)],
+        ['−1h', (t) => addMinutes(t, -60)],
+        ['−3h', (t) => addMinutes(t, -180)],
+        ['this morning', () => '08:00'],
+      ];
+      const m = store.S.data.Moments.find((x) => x.f.Key === momentKey);
+      const baseTime = (m && m.f.Time) || '00:00';
+      for (const [label, fn] of OFFS) {
+        const b = h('button', { class: 'plain' }, label);
+        b.addEventListener('click', async () => {
+          await store.adjustMoment(momentKey, { Time: fn(baseTime), Sure: 'about' });
+          renderHoursLine();
+          hideRibbon();
+        });
+        line.appendChild(b);
+      }
+      ribbonTimer = setTimeout(hideRibbon, 4000);
+    }
+    main();
+    ribbon.classList.add('open');
+    ribbonTimer = setTimeout(hideRibbon, 4000);
+  }
+  function addMinutes(hhmm, delta) {
+    const [hh, mm] = hhmm.split(':').map(Number);
+    let total = ((hh || 0) * 60 + (mm || 0) + delta) % 1440;
+    if (total < 0) total += 1440;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  }
+
+  function closeSheet() {
+    sheet.classList.remove('open');
+    backdrop.classList.remove('open');
+    nowMote.classList.remove('away');
+  }
+  function openSheet() {
+    hideRibbon();
+    nowMote.classList.add('away');
+    clear(sheet);
+    const chips = h('div', { class: 'chip-row' });
+    for (const tag of store.tagChips(8)) {
+      const chip = h('button', { class: 'chip' }, tag);
+      chip.addEventListener('click', () => captureFromChip(tag));
+      chips.appendChild(chip);
+    }
+    sheet.appendChild(chips);
+    const input = h('input', { class: 'field new-tag', placeholder: 'type a tag…' });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) captureFromChip(input.value.trim());
+    });
+    sheet.appendChild(input);
+    sheet.classList.add('open');
+    backdrop.classList.add('open');
+  }
+  function momentDetail(key) {
+    const m = store.S.data.Moments.find((x) => x.f.Key === key);
+    if (!m) return '';
+    const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
+    const val = m.f.Value != null ? ` ${m.f.Value}` : '';
+    return `${label} · ${m.f.Tag}${val} — ${m.f.Sure}`;
+  }
+  async function captureFromChip(tag) {
+    const key = await store.captureMoment({ tag, date });
+    renderHoursLine();
+    const tracker = store.activeTrackers().find((t) => t.f.Name === tag && t.f.Kind === 'scale');
+    if (tracker) petalStep(tracker, key);
+    else { closeSheet(); showRibbon(key, momentDetail(key)); }
+  }
+  function petalStep(tracker, key) {
+    clear(sheet);
+    const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
+    sheet.appendChild(h('div', { class: 'dim italic petal-hint' }, `${tracker.f.Name} — optional`));
+    const row = h('div', { class: 'mini-petals' });
+    for (let i = min; i <= max; i++) {
+      const p = h('button', { class: 'mini-petal' }, String(i));
+      p.addEventListener('click', async () => {
+        await store.adjustMoment(key, { Value: i });
+        renderHoursLine();
+        closeSheet();
+        showRibbon(key, momentDetail(key));
+      });
+      row.appendChild(p);
+    }
+    sheet.appendChild(row);
+    const skip = h('button', { class: 'plain italic petal-skip' }, 'skip');
+    skip.addEventListener('click', () => { closeSheet(); showRibbon(key, momentDetail(key)); });
+    sheet.appendChild(skip);
+  }
+
+  nowMote.addEventListener('click', () => {
+    if (sheet.classList.contains('open')) closeSheet();
+    else openSheet();
+  });
+  backdrop.addEventListener('click', () => closeSheet());
+
   renderWallet();
   renderBed();
+  renderHoursLine();
   renderPollen();
   renderSchedule();
   renderInstruments();
@@ -344,7 +503,7 @@ export function mountDay(app, date) {
     onRight: () => (location.hash = `#/day/${store.addDays(date, -1)}`),
   });
 
-  return () => { unbindSwipe(); };
+  return () => { unbindSwipe(); clearTimeout(ribbonTimer); };
 }
 
 function displayFor(tracker, entry) {
@@ -428,6 +587,12 @@ export function mountMeadow(app) {
   const days = [];
   for (let i = N - 1; i >= 0; i--) days.push(store.addDays(today, -i));
 
+  // a full-habit day stands tall — roughly 40-45% of the viewport; even a
+  // bare day still stands (the field is continuous, never gappy).
+  const vh = window.innerHeight || 700;
+  const PH = Math.round(vh * 0.525) + 12;
+  const PW = Math.round(PH * 0.3);
+
   for (const d of days) {
     const ticksForDay = store.S.data.Ticks.filter((t) => t.f.Date === d);
     const ticks = ticksForDay.length;
@@ -436,28 +601,31 @@ export function mountMeadow(app) {
     const fog = store.entryFor(d, 'brain fog');
     const fed = store.entryFor(d, 'ate enough');
     const heldHour = store.S.data.Hours.some((hh) => hh.f.Date === d && hh.f.Outcome === 'held');
+    const daySeed = d.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 
-    const summary = {
-      doneRatio, ticks,
-      mood: mood && mood.f.Value != null ? mood.f.Value : null,
-      fog: fog && fog.f.Value != null ? fog.f.Value : null,
-      fed: fed && fed.f.Value != null ? fed.f.Value : null,
-      heldHour,
-    };
+    const moodVal = mood && mood.f.Value != null ? mood.f.Value : null;
+    const fogVal = fog && fog.f.Value != null ? fog.f.Value : null;
+    const fedVal = fed && fed.f.Value != null ? fed.f.Value : null;
+    const noData = ticks === 0 && moodVal == null && fogVal == null && fedVal == null && !heldHour;
+
+    const summary = { doneRatio, ticks, mood: moodVal, fog: fogVal, fed: fedVal, heldHour, noData, daySeed };
 
     const cell = h('div', { class: 'meadow-day' });
-    cell.innerHTML = daySVG(summary, 40, 100);
+    cell.innerHTML = daySVG(summary, PW, PH);
     const parts = [store.fmtDate(d)];
-    parts.push(`${ticks} of ${habitsCount}`);
-    if (summary.fog != null) parts.push(`fog ${summary.fog}`);
-    if (summary.fed != null) parts.push(summary.fed ? 'fed yes' : 'fed no');
+    if (noData) parts.push('nothing kept');
+    else {
+      parts.push(`${ticks} of ${habitsCount}`);
+      if (fogVal != null) parts.push(`fog ${fogVal}`);
+      if (fedVal != null) parts.push(fedVal ? 'fed yes' : 'fed no');
+    }
     const tag = h('div', { class: 'tag' }, parts.join(' — '));
     cell.insertBefore(tag, cell.firstChild);
     cell.addEventListener('click', () => (location.hash = `#/day/${d}`));
     strip.appendChild(cell);
   }
-  // land on "today" without a giant initial scroll-jump feeling
-  requestAnimationFrame(() => { strip.scrollLeft = strip.scrollWidth; });
+  // land on "today" — after the browser has actually laid the strip out
+  requestAnimationFrame(() => requestAnimationFrame(() => { strip.scrollLeft = strip.scrollWidth; }));
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
@@ -691,11 +859,15 @@ export function mountUnwind(app) {
       fed: fed && fed.f.Value != null ? fed.f.Value : null,
       heldHour,
     };
+    // the moment of the night — grown large, centered, before "goodnight."
+    const vh = window.innerHeight || 700;
+    const fh = Math.round(vh * 0.5);
+    const fw = Math.round(fh * 0.44);
     const plant = h('div', { class: 'unwind-plant' });
-    plant.innerHTML = daySVG(summary, 90, 170);
+    plant.innerHTML = daySVG(summary, fw, fh);
     plant.style.opacity = '0';
-    plant.style.transform = 'scale(0.85)';
-    plant.style.transition = 'opacity 1.4s ease, transform 1.4s ease';
+    plant.style.transform = 'scale(0.7)';
+    plant.style.transition = 'opacity 1.5s ease, transform 1.5s ease';
     root.appendChild(plant);
     root.appendChild(h('div', { class: 'unwind-goodnight' }, 'goodnight.'));
     requestAnimationFrame(() => requestAnimationFrame(() => {

@@ -174,12 +174,28 @@ const MOOD_WARM = '#d9a066';
 
 /**
  * daySVG(summary, w, h) — a day-plant for the meadow.
- * summary: { doneRatio, ticks, mood(0-5|null), fog(0-5|null), fed(0|1|null), heldHour }
+ * summary: { doneRatio, ticks, mood(0-5|null), fog(0-5|null), fed(0|1|null), heldHour, noData, daySeed }
+ * a day with no signal at all (noData) draws as a small dry stub at the
+ * ground line, rather than nothing — the field stays continuous.
  */
 export function daySVG(summary = {}, w = 46, h = 100) {
-  const { doneRatio = 0, ticks = 0, mood = null, fog = null, fed = null, heldHour = false } = summary;
+  const { doneRatio = 0, ticks = 0, mood = null, fog = null, fed = null, heldHour = false, noData = false, daySeed = 0 } = summary;
+
+  if (noData) {
+    const rng = mulberry(101 + (daySeed % 4999));
+    const baseX = w * 0.5, baseY = h - 3;
+    const stubH = h * (0.05 + rng() * 0.03);
+    const sway = (rng() - 0.5) * w * 0.12;
+    const topX = baseX + sway, topY = baseY - stubH;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<path d="M${baseX.toFixed(1)},${baseY.toFixed(1)} L${topX.toFixed(1)},${topY.toFixed(1)}" stroke="${C.fade}" stroke-width="1" stroke-linecap="round" opacity="0.5"/>`;
+    svg += `<circle cx="${topX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(w * 0.028).toFixed(1)}" fill="${C.fade}" opacity="0.45"/>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
   const seed = Math.max(1, Math.round(
-    (doneRatio * 977) + (ticks * 131) + ((mood ?? -1) * 53 + 61) + ((fog ?? -1) * 37 + 41) + ((fed ?? -1) * 19 + 23)
+    (doneRatio * 977) + (ticks * 131) + ((mood ?? -1) * 53 + 61) + ((fog ?? -1) * 37 + 41) + ((fed ?? -1) * 19 + 23) + (daySeed % 41)
   ));
   const rng = mulberry(seed);
 
@@ -226,8 +242,22 @@ export function daySVG(summary = {}, w = 46, h = 100) {
   }
 
   if (fog != null && fog > 0) {
-    const op = 0.07 + (fog / 5) * 0.4;
-    svg += `<ellipse cx="${(w / 2).toFixed(1)}" cy="${(h * 0.42).toFixed(1)}" rx="${(w * 0.62).toFixed(1)}" ry="${(h * 0.5).toFixed(1)}" fill="#aeb9c8" opacity="${op.toFixed(2)}"/>`;
+    // a soft haze hugging the plant itself — sized to how tall it stands
+    // today, not the full (now much taller) canvas, and soft-edged so it
+    // reads as weather, not a grey card behind the flower.
+    const fogId = uid('fog');
+    const cy = (baseY + topY) / 2;
+    // keep the whole soft-edged ellipse inside the canvas — otherwise the
+    // gradient never gets to fade before the SVG clips it, and a haze
+    // reads as a hard-edged slab instead.
+    const rawRy = Math.max(h * 0.07, Math.abs(baseY - topY) * 0.32);
+    const ry = Math.max(6, Math.min(rawRy, cy - 4, h - 4 - cy));
+    const rx = Math.min(w * 0.24, w / 2 - 6);
+    const op = 0.12 + (fog / 5) * 0.24;
+    svg += `<defs><radialGradient id="${fogId}" cx="50%" cy="50%" r="55%">` +
+      `<stop offset="0%" stop-color="#aeb9c8" stop-opacity="${op.toFixed(2)}"/>` +
+      `<stop offset="100%" stop-color="#aeb9c8" stop-opacity="0"/></radialGradient></defs>`;
+    svg += `<ellipse cx="${(w / 2).toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="url(#${fogId})"/>`;
   }
 
   svg += `</svg>`;
