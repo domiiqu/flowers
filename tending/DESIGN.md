@@ -29,6 +29,11 @@ toggles anything:
   (press-and-hold — a deliberate, tactile act). After 3 days they
   **wither** — visibly, with a quiet count of what was lost. Urgency, but
   in the world's voice.
+- Gathering's *home* is the nightly unwind — its final movement is **the
+  harvest**, where waiting seeds swarm in as part of the ritual (this is
+  the pull that opens the app each night). But the pollen line on the day
+  page gathers at any hour: miss a night and tomorrow, or the day after,
+  still catches it. The 3-day grace is exactly this forgiveness.
 - Gathered seeds are the wallet. The **shop** (self-made gift shop —
   spending kept in sight) redeems them: press-and-hold on an item to buy.
 - **The hour** (scary mode): sixty minutes, do not stop. Holding it earns a
@@ -81,10 +86,14 @@ Hover/tap a plant: `tuesday · sep 2 — 3 of 5 · fog 4 · fed no`. Click →
 that day's page. A one-line legend at the bottom, italic, dim.
 
 ### the shop — `#/shop`
-A shelf. Each item: its Sign (emoji), name, cost in seeds. Wallet shown
-large but calm. Press-and-hold an item to redeem (the hold is the
-ceremony); can't-afford items sit dimmer, cost in dull red. Below, small:
-the last few redemptions ("what the seeds became").
+A shelf. Each item: its Sign (emoji), name, cost in seeds, and — when it
+has a `Link` — a small `↗` that opens the thing itself in a new tab (the
+cart, the book, the listing). She names anything, links out, sets a
+price: material and immaterial rewards alike. Wallet shown large but
+calm. Press-and-hold an item to redeem (the hold is the ceremony);
+can't-afford items sit dimmer, cost in dull red. After redeeming a linked
+item, offer its link once more — *"go get it ↗"*. Below, small: the last
+few redemptions ("what the seeds became").
 
 ### the hour — `#/hour`
 Entry: near-black room, one line — *"sixty minutes. do not stop."* — a
@@ -107,7 +116,9 @@ fog today?"). Answer with one touch:
 - number → large stepper (long-press repeats)
 - words → one calm textarea
 Auto-advance ~500ms after an answer (Esc leaves anytime; every answer
-already saved). Last card: *a line for the day* (→ Note), then today's
+already saved). Then *a line for the day* (→ Note). Then **the harvest**:
+if unclaimed seeds are waiting, they appear as motes and one press-and-hold
+gathers them all — the nightly ritual is also payday. Last: today's
 finished day-plant grows in before her eyes — the day, summarized as a
 flower — and *"goodnight."*
 
@@ -134,8 +145,27 @@ permanent — tend."*
   `daySVG`, seeded rng), `src/views.js` (the rooms), `src/scary.js` (the
   hour), `src/main.js` (hash router + glue).
 - Hash routing; works from any static server; relative paths only.
-- Phone-first sizes: every target ≥ 44px; hold-to-act everywhere
-  destructive or ceremonial; pointer events, not hover-dependent.
+
+### touch is the first-class hand (she lives on iPad and phone)
+- Every target ≥ 44px; pointer events only; **nothing depends on hover or
+  a keyboard** — arrow keys and shortcuts are conveniences layered on top.
+- **Swipe** left/right anywhere calm on the day page moves between days
+  (with a soft slide); the header arrows remain for taps.
+- Press-and-hold is the ceremonial verb everywhere — so every holdable
+  element gets `-webkit-touch-callout: none; user-select: none;
+  touch-action: manipulation;` and holds are driven by
+  pointerdown/pointerup/pointercancel (a hold must survive the finger
+  wobbling a few pixels; cancel only on real movement > ~12px).
+- No double-tap-to-zoom surprises: `touch-action: manipulation` on
+  interactive things; layout breathes at 320px wide and at iPad width.
+- **The hour cannot rely on the Fullscreen API** (iPhone Safari has none):
+  it must be its own fixed full-viewport layer regardless, fullscreen
+  request just a bonus. Audio starts only from the begin tap (iOS gesture
+  rule). `visibilitychange` still catches tab-switching for *"it sees
+  you."*
+- Inline edits (schedule, note) use plain textareas/inputs sized ≥ 16px
+  font so iOS doesn't zoom the page when they focus.
+- Phone-first sizes; hold-to-act everywhere destructive or ceremonial.
 - The grain + vignette from the field's index.html, always on, quiet.
 - Offline: store.js already queues writes; the UI just trusts it and never
   blocks on the network. A tiny dot in a corner when writes are queued.

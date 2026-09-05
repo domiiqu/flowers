@@ -62,6 +62,7 @@ export const SCHEMA = [
     { name: 'Name', type: 'singleLineText' },
     { name: 'Cost', type: 'number', options: { precision: 0 } },
     { name: 'Sign', type: 'singleLineText' },
+    { name: 'Link', type: 'url' },
     { name: 'Order', type: 'number', options: { precision: 0 } },
     { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
     { name: 'Notes', type: 'multilineText' },
@@ -107,7 +108,8 @@ const DEFAULTS = {
     { Name: 'a fancy coffee',            Cost: 15, Sign: '☕', Order: 1, Active: true },
     { Name: 'an idle hour, guilt-free',  Cost: 25, Sign: '🕯', Order: 2, Active: true },
     { Name: 'a new book',                Cost: 40, Sign: '📖', Order: 3, Active: true },
-    { Name: 'the thing in the cart',     Cost: 80, Sign: '🎁', Order: 4, Active: true },
+    { Name: 'the thing in the cart',     Cost: 80, Sign: '🎁', Order: 4, Active: true,
+      Link: 'https://example.com/replace-me-with-the-cart' },
   ],
 };
 
