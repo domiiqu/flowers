@@ -162,6 +162,52 @@
   .note-line { margin-top: auto; padding-top: 10px; }
   .note-line input { text-align: center; }
 
+  /* ---- the hours line: moments strung on a thread through the day --- */
+  .hours-line { position: relative; height: 26px; margin: 2px 0 4px; }
+  .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line); }
+  .hour-mote { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    padding: 0; border: none; background: none; cursor: pointer; }
+  .hour-mote .dot { display: block; width: 7px; height: 7px; margin: 9.5px auto 0; border-radius: 50%;
+    background: var(--gold); opacity: 0.8; box-shadow: 0 0 5px var(--gold); }
+  .hour-mote:hover .dot { opacity: 1; }
+
+  /* ---- the "now" mote + its calm chip sheet ------------------------- */
+  .now-mote { position: fixed; right: 18px; bottom: 180px; width: 50px; height: 50px; border-radius: 50%;
+    z-index: 12; border: 1px solid rgba(217, 179, 106, 0.5);
+    background: radial-gradient(circle at 50% 45%, rgba(217, 179, 106, 0.5), rgba(217, 179, 106, 0.08) 70%);
+    box-shadow: 0 0 14px rgba(217, 179, 106, 0.35); animation: mote-breathe 3.2s ease-in-out infinite; cursor: pointer;
+    transition: opacity 0.25s ease, transform 0.25s ease; }
+  .now-mote.away { opacity: 0; transform: scale(0.6); pointer-events: none; }
+  @keyframes mote-breathe { 0%, 100% { box-shadow: 0 0 10px rgba(217, 179, 106, 0.25); } 50% { box-shadow: 0 0 18px rgba(217, 179, 106, 0.5); } }
+  .now-mote .now-label { display: block; font-size: 0.66rem; color: var(--ink-strong); }
+  .moment-backdrop { position: fixed; inset: 0; background: rgba(6, 6, 9, 0.4); opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease; z-index: 10; }
+  .moment-backdrop.open { opacity: 1; pointer-events: auto; }
+  .moment-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; background: #181a22;
+    border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 22px 20px calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(105%); transition: transform 0.32s ease; max-height: 60vh; overflow-y: auto; }
+  .moment-sheet.open { transform: translateY(0); }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px 10px; justify-content: center; margin-bottom: 14px; }
+  .chip { border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px; min-height: 44px;
+    background: var(--panel); color: var(--ink); font-family: inherit; font-style: italic; cursor: pointer; }
+  .chip:hover { color: var(--ink-strong); border-color: var(--ink-dim); }
+  .new-tag { text-align: center; }
+  .petal-hint { text-align: center; margin-bottom: 12px; }
+  .mini-petals { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .mini-petal { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); font-family: inherit; font-style: italic; cursor: pointer; }
+  .mini-petal:hover { border-color: var(--gold); color: var(--ink-strong); }
+  .petal-skip { display: block; margin: 0 auto; }
+  .moment-ribbon { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%) translateY(12px);
+    z-index: 13; opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease;
+    text-align: center; max-width: 92vw; }
+  .moment-ribbon.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+  .ribbon-detail { display: inline-block; font-size: 0.76rem; color: var(--ink-strong); margin-bottom: 6px;
+    background: rgba(8, 8, 12, 0.92); border: 1px solid var(--line); border-radius: 12px; padding: 5px 12px; }
+  .ribbon-line { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 0.72rem;
+    background: rgba(8, 8, 12, 0.92); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; }
+  .ribbon-line button { min-height: 30px; }
+
   /* ===================== the meadow ===================== */
   .meadow-strip { position: relative; flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden;
     padding: 12px 18px 30px; align-items: flex-end; min-height: 220px;
