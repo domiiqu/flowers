@@ -949,7 +949,7 @@ export function mountTend(app) {
     const blob = new Blob([store.exportAll()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `tending-${store.todayISO()}.json`;
+    a.href = url; a.download = `life-emergent-${store.todayISO()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   });

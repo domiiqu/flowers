@@ -131,7 +131,7 @@ machinery.
 - `src/studio.js` — the table, the shelf, the arranging
 - `src/main.js` — walking, the bag, photographs, wind
 
-## tending
+## life emergent
 
 A day-book growing beside the field, at **[/tending/](https://domiiqu.github.io/flowers/tending/)**.
 Habits bloom into procedurally grown flowers, seeds gather and — left too
