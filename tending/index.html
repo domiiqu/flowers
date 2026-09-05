@@ -163,9 +163,12 @@
   .note-line input { text-align: center; }
 
   /* ===================== the meadow ===================== */
-  .meadow-strip { display: flex; gap: 4px; overflow-x: auto; padding: 20px 10px 14px; align-items: flex-end;
+  .meadow-strip { position: relative; flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden;
+    padding: 12px 18px 30px; align-items: flex-end; min-height: 220px;
     -webkit-overflow-scrolling: touch; }
-  .meadow-day { flex: 0 0 auto; text-align: center; cursor: pointer; padding: 4px 6px; position: relative; }
+  .meadow-strip::before { content: ''; position: absolute; left: 0; right: 0; bottom: 30px; height: 1px;
+    background: rgba(244, 240, 230, 0.16); }
+  .meadow-day { flex: 0 0 auto; text-align: center; cursor: pointer; padding: 0 3px; position: relative; z-index: 1; }
   .meadow-day .tag { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px);
     font-size: 0.62rem; opacity: 0; transition: opacity 0.2s ease; white-space: nowrap;
     font-style: italic; color: var(--ink-strong); background: rgba(10,10,14,0.85); padding: 3px 8px;

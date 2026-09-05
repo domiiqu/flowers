@@ -428,6 +428,12 @@ export function mountMeadow(app) {
   const days = [];
   for (let i = N - 1; i >= 0; i--) days.push(store.addDays(today, -i));
 
+  // a full-habit day stands tall — roughly 40-45% of the viewport; even a
+  // bare day still stands (the field is continuous, never gappy).
+  const vh = window.innerHeight || 700;
+  const PH = Math.round(vh * 0.525) + 12;
+  const PW = Math.round(PH * 0.3);
+
   for (const d of days) {
     const ticksForDay = store.S.data.Ticks.filter((t) => t.f.Date === d);
     const ticks = ticksForDay.length;
@@ -436,28 +442,31 @@ export function mountMeadow(app) {
     const fog = store.entryFor(d, 'brain fog');
     const fed = store.entryFor(d, 'ate enough');
     const heldHour = store.S.data.Hours.some((hh) => hh.f.Date === d && hh.f.Outcome === 'held');
+    const daySeed = d.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 
-    const summary = {
-      doneRatio, ticks,
-      mood: mood && mood.f.Value != null ? mood.f.Value : null,
-      fog: fog && fog.f.Value != null ? fog.f.Value : null,
-      fed: fed && fed.f.Value != null ? fed.f.Value : null,
-      heldHour,
-    };
+    const moodVal = mood && mood.f.Value != null ? mood.f.Value : null;
+    const fogVal = fog && fog.f.Value != null ? fog.f.Value : null;
+    const fedVal = fed && fed.f.Value != null ? fed.f.Value : null;
+    const noData = ticks === 0 && moodVal == null && fogVal == null && fedVal == null && !heldHour;
+
+    const summary = { doneRatio, ticks, mood: moodVal, fog: fogVal, fed: fedVal, heldHour, noData, daySeed };
 
     const cell = h('div', { class: 'meadow-day' });
-    cell.innerHTML = daySVG(summary, 40, 100);
+    cell.innerHTML = daySVG(summary, PW, PH);
     const parts = [store.fmtDate(d)];
-    parts.push(`${ticks} of ${habitsCount}`);
-    if (summary.fog != null) parts.push(`fog ${summary.fog}`);
-    if (summary.fed != null) parts.push(summary.fed ? 'fed yes' : 'fed no');
+    if (noData) parts.push('nothing kept');
+    else {
+      parts.push(`${ticks} of ${habitsCount}`);
+      if (fogVal != null) parts.push(`fog ${fogVal}`);
+      if (fedVal != null) parts.push(fedVal ? 'fed yes' : 'fed no');
+    }
     const tag = h('div', { class: 'tag' }, parts.join(' — '));
     cell.insertBefore(tag, cell.firstChild);
     cell.addEventListener('click', () => (location.hash = `#/day/${d}`));
     strip.appendChild(cell);
   }
-  // land on "today" without a giant initial scroll-jump feeling
-  requestAnimationFrame(() => { strip.scrollLeft = strip.scrollWidth; });
+  // land on "today" — after the browser has actually laid the strip out
+  requestAnimationFrame(() => requestAnimationFrame(() => { strip.scrollLeft = strip.scrollWidth; }));
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
@@ -691,11 +700,15 @@ export function mountUnwind(app) {
       fed: fed && fed.f.Value != null ? fed.f.Value : null,
       heldHour,
     };
+    // the moment of the night — grown large, centered, before "goodnight."
+    const vh = window.innerHeight || 700;
+    const fh = Math.round(vh * 0.5);
+    const fw = Math.round(fh * 0.44);
     const plant = h('div', { class: 'unwind-plant' });
-    plant.innerHTML = daySVG(summary, 90, 170);
+    plant.innerHTML = daySVG(summary, fw, fh);
     plant.style.opacity = '0';
-    plant.style.transform = 'scale(0.85)';
-    plant.style.transition = 'opacity 1.4s ease, transform 1.4s ease';
+    plant.style.transform = 'scale(0.7)';
+    plant.style.transition = 'opacity 1.5s ease, transform 1.5s ease';
     root.appendChild(plant);
     root.appendChild(h('div', { class: 'unwind-goodnight' }, 'goodnight.'));
     requestAnimationFrame(() => requestAnimationFrame(() => {
