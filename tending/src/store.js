@@ -79,6 +79,18 @@ export const SCHEMA = [
     { name: 'Schedule', type: 'multilineText' },
     { name: 'Note', type: 'multilineText' },
   ]},
+  { name: 'Moments', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Time', type: 'singleLineText' },
+    { name: 'Tag', type: 'singleLineText' },
+    { name: 'Value', type: 'number', options: { precision: 2 } },
+    { name: 'Sure', type: 'singleSelect', options: { choices: [
+      { name: 'exact', color: 'greenLight1' },
+      { name: 'about', color: 'yellowLight1' },
+      { name: 'day', color: 'grayLight1' } ] } },
+    { name: 'Words', type: 'multilineText' },
+  ]},
   { name: 'Hours', fields: [
     { name: 'Key', type: 'singleLineText' },
     { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
@@ -309,7 +321,7 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Ticks: [], Trackers: [], Entries: [], Shop: [], Redemptions: [], Days: [], Hours: [] },
+  data: { Habits: [], Ticks: [], Trackers: [], Entries: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
   loaded: false,
   problem: null,
 };
@@ -441,6 +453,65 @@ export async function saveDay(date, patch) {
   if (existing) Object.assign(existing.f, fields);
   else S.data.Days.push({ id: 'tmp' + Math.random(), f: fields });
   write({ kind: 'upsert', table: 'Days', mergeField: 'Key', fields });
+}
+
+// moments — caught in passing. append-only but keyed, so the little
+// after-ribbon (adjusting time or sureness) is just an upsert, and a
+// mis-tap can be taken back.
+export async function captureMoment({ tag, value, words, time, sure = 'exact', date }) {
+  const now = new Date();
+  const d = date || todayISO();
+  const t = time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const fields = { Key: `${d} ${t}:${ss} · ${tag}`, Date: d, Time: t, Tag: tag, Sure: sure };
+  if (value !== undefined && value !== null && value !== '') fields.Value = Number(value);
+  if (words) fields.Words = words;
+  S.data.Moments.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Moments', mergeField: 'Key', fields });
+  return fields.Key;
+}
+
+export async function adjustMoment(momentKey, patch) {
+  const m = S.data.Moments.find(x => x.f.Key === momentKey);
+  if (!m) return;
+  Object.assign(m.f, patch);
+  write({ kind: 'upsert', table: 'Moments', mergeField: 'Key', fields: { Key: momentKey, ...patch } });
+}
+
+export async function removeMoment(momentKey) {
+  S.data.Moments = S.data.Moments.filter(x => x.f.Key !== momentKey);
+  write({ kind: 'destroyByKey', table: 'Moments', key: momentKey });
+}
+
+export function momentsFor(date) {
+  return S.data.Moments
+    .filter(m => m.f.Date === date)
+    .sort((a, b) => (a.f.Time || '').localeCompare(b.f.Time || ''));
+}
+
+// the chips: her own vocabulary, surfacing by recency then frequency.
+// before any history exists, the trackers lend their names.
+export function tagChips(n = 8) {
+  const seen = new Map(); // tag -> { count, last }
+  for (const m of S.data.Moments) {
+    const tag = m.f.Tag;
+    if (!tag) continue;
+    const cur = seen.get(tag) || { count: 0, last: '' };
+    cur.count++;
+    const stamp = `${m.f.Date} ${m.f.Time || ''}`;
+    if (stamp > cur.last) cur.last = stamp;
+    seen.set(tag, cur);
+  }
+  const ranked = [...seen.entries()]
+    .sort((a, b) => b[1].last.localeCompare(a[1].last) || b[1].count - a[1].count)
+    .map(([tag]) => tag);
+  if (ranked.length < n) {
+    for (const t of activeTrackers()) {
+      if (ranked.length >= n) break;
+      if ((t.f.Kind === 'scale' || t.f.Kind === 'yesno') && !ranked.includes(t.f.Name)) ranked.push(t.f.Name);
+    }
+  }
+  return ranked.slice(0, n);
 }
 
 export async function logHour(minutes, outcome) {

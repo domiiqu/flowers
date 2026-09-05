@@ -71,6 +71,41 @@ One screen. No scrolling on desktop; a single gentle column on phones.
 - Corner hints (exact idiom of the field's `.hints`): `the meadow · the
   shop · the hour · unwind · tend`.
 
+### moments — caught in passing (lives inside the day page)
+The second capture primitive, beside the nightly trackers: **moments** are
+timestamped (or deliberately un-timestamped) tags — `adderall 10mg` at
+exactly 14:32, `mood 2` mid-afternoon, `cramps` sometime today. Built for
+running out the door with a poor memory: capture must cost two taps, and
+trusting the timestamp must cost zero.
+
+- A small glowing mote labelled **now** sits fixed in the thumb zone
+  (bottom-right) of every day page. Tap → a calm layer slides up:
+  - her tag vocabulary as chips (`store.tagChips()` — recency then
+    frequency, trackers lend names before history exists), plus one line
+    to type a new tag (it joins the vocabulary forever after).
+  - tap a chip → **saved instantly** (`captureMoment`, time = now,
+    sure = 'exact'), layer starts dismissing. Two taps total.
+  - if the tag matches a scale-kind tracker's name, six small petals
+    appear for one optional extra tap (the value); skipping is fine.
+- **The after-ribbon** (the timestamp-validation idea): for ~4 seconds
+  after a capture, one dim line: *just now · about then · earlier… ·
+  all day · ✕*. Ignore it — 'exact' stands. One tap softens it:
+  *about then* → `Sure: 'about'`; *earlier…* → a row of quiet offsets
+  (−15m · −1h · −3h · this morning) that shift `Time` and set 'about';
+  *all day* → `Sure: 'day'` (time-agnostic tags: `heavy`, `light`,
+  `cramps`); ✕ takes the moment back (`removeMoment`).
+- **The hours line**: on the day page, beneath the bed — one thin
+  horizontal line, midnight to midnight, the day's moments strung on it
+  as tiny motes (day-sure ones rest at the line's start, slightly apart).
+  Tap a mote: `14:32 · adderall 10mg — exact`, with the same ribbon to
+  adjust or remove. Nothing else; it is a string of fireflies, not a
+  timeline widget.
+- Voltage: calm. The layer must never feel like a form. No required
+  fields, no confirm buttons, nothing modal that traps.
+- Later verses: wearables write straight into `Moments` (same shape);
+  the meadow's day-plants grow fireflies hovering at heights matching
+  their hour.
+
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated
 day-plants (horizontal scroll inside its own container), each grown from
