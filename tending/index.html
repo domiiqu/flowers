@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="tending — a day-book that grows beside the field.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='9' fill='%23d9b36a'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%232a1e18'/%3E%3C/svg%3E">
+<title>tending</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --ink: rgba(244, 240, 230, 0.62);
+    --ink-strong: rgba(244, 240, 230, 0.92);
+    --ink-dim: rgba(244, 240, 230, 0.38);
+    --accent: #c98d84;
+    --gold: #d9b36a;
+    --line: rgba(244, 240, 230, 0.14);
+    --panel: rgba(244, 240, 230, 0.04);
+    --bad: #a35b32;
+  }
+  * { margin: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; background: var(--bg); }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--ink);
+    overflow-x: hidden;
+    transition: background 0.6s ease, color 0.6s ease;
+  }
+  img, svg { max-width: 100%; }
+  button, input, textarea, select { font-family: inherit; }
+  a { color: inherit; }
+
+  /* ---- room voltages ------------------------------------------------ */
+  body[data-room="shop"] { --accent: var(--gold); }
+  body[data-room="hour"] {
+    --bg: #0d0507; --ink: rgba(240, 220, 216, 0.7); --ink-strong: rgba(250, 235, 230, 0.96);
+    --ink-dim: rgba(240, 220, 216, 0.3); --accent: #b23a3a; --line: rgba(200, 90, 90, 0.22);
+  }
+  body[data-room="unwind"] {
+    --bg: #12101a; --ink: rgba(226, 224, 240, 0.68); --ink-strong: rgba(236, 234, 248, 0.95);
+    --ink-dim: rgba(226, 224, 240, 0.34); --accent: #7d8ab0; --line: rgba(160, 170, 210, 0.16);
+  }
+  body[data-room="tend"] { font-size: 0.94rem; }
+
+  /* ---- grain + vignette, copied from the field, always on, quiet ---- */
+  #grain { position: fixed; inset: -60px; pointer-events: none; z-index: 5; opacity: .06;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grain 0.9s steps(4) infinite; }
+  @keyframes grain {
+    0% { transform: translate(0, 0); } 25% { transform: translate(-18px, 12px); }
+    50% { transform: translate(12px, -20px); } 75% { transform: translate(-10px, -8px); }
+    100% { transform: translate(0, 0); } }
+  #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4;
+    background: radial-gradient(ellipse at 50% 48%, transparent 55%, rgba(8, 8, 12, 0.42) 100%);
+    transition: background 0.6s ease; }
+  body[data-room="hour"] #vignette {
+    background: radial-gradient(ellipse at 50% 48%, transparent 40%, rgba(60, 8, 8, 0.5) 100%); }
+
+  /* ---- layout --------------------------------------------------- */
+  #app { position: relative; z-index: 2; min-height: 100vh; }
+
+  .hints { position: fixed; right: 22px; bottom: 18px; text-align: right; z-index: 7;
+    font-size: 0.7rem; letter-spacing: 0.16em; line-height: 2.1; font-style: italic;
+    opacity: 0.42; transition: opacity 0.4s ease; }
+  .hints:hover { opacity: 0.85; }
+  .hints a, .hints button { display: block; background: none; border: none; color: var(--ink);
+    font: inherit; letter-spacing: inherit; cursor: pointer; padding: 4px 0; margin-left: auto;
+    text-decoration: none; }
+  .hints a:hover, .hints button:hover { color: var(--ink-strong); }
+
+  #whisper { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    font-style: italic; font-size: 0.82rem; letter-spacing: 0.1em; opacity: 0; text-align: center;
+    max-width: 86vw; transition: opacity 1s ease; z-index: 20; pointer-events: none; color: var(--ink-strong); }
+  #whisper.show { opacity: 0.9; }
+
+  #queuedot { position: fixed; left: 16px; top: 16px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--gold); opacity: 0; z-index: 20; transition: opacity 0.4s ease; }
+  #queuedot.show { opacity: 0.85; box-shadow: 0 0 6px var(--gold); }
+
+  /* ---- press & hold underline idiom, from the field's "let go" ------ */
+  .hold { position: relative; touch-action: manipulation; -webkit-touch-callout: none;
+    -webkit-user-select: none; user-select: none; }
+  .hold::after { content: ''; position: absolute; left: 0; bottom: -3px; height: 1px;
+    width: calc(var(--p, 0) * 100%); background: currentColor; transition: width 0.05s linear; }
+
+  /* iOS: any focusable text control must be >=16px or the page zooms in */
+  input, textarea, select { font-size: 16px; touch-action: manipulation; }
+
+  /* ---- shared bits used across rooms --------------------------------- */
+  .room { max-width: 720px; margin: 0 auto; padding: 28px 20px 90px; min-height: 100vh;
+    display: flex; flex-direction: column; }
+  .italic { font-style: italic; }
+  .dim { color: var(--ink-dim); }
+  .muted { opacity: 0.7; }
+  button.plain { background: none; border: none; color: var(--ink); font-family: inherit;
+    cursor: pointer; padding: 0; }
+  button.plain:hover { color: var(--ink-strong); }
+  .btn { display: inline-block; border: 1px solid var(--line); border-radius: 20px; padding: 10px 18px;
+    background: var(--panel); color: var(--ink); font-family: inherit; font-style: italic;
+    letter-spacing: 0.06em; cursor: pointer; min-height: 44px; }
+  .btn:hover { border-color: var(--ink-dim); color: var(--ink-strong); }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .field { background: transparent; border: none; border-bottom: 1px solid var(--line);
+    color: var(--ink-strong); font-family: inherit; font-style: italic; padding: 6px 2px;
+    min-height: 34px; width: 100%; }
+  .field:focus { outline: none; border-color: var(--ink-dim); }
+  textarea.field { resize: vertical; }
+
+  /* ===================== the day ===================== */
+  .day-header { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 20px; }
+  .day-header button { font-size: 1.1rem; min-width: 44px; min-height: 44px; }
+  .day-header h1 { font-weight: normal; font-style: italic; font-size: 1.05rem; letter-spacing: 0.08em; text-align: center; }
+  .today-link { text-align: center; margin-top: -12px; margin-bottom: 14px; font-size: 0.74rem; }
+
+  .bed { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; align-items: flex-end;
+    padding: 6px 0 10px; position: relative; min-height: 130px; }
+  .plant-slot { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;
+    padding: 4px; min-width: 60px; min-height: 118px; justify-content: flex-end; user-select: none; }
+  .plant-slot svg { animation: sway 6s ease-in-out infinite; transform-origin: 50% 95%; }
+  @keyframes sway { 0%, 100% { transform: rotate(-1.1deg); } 50% { transform: rotate(1.1deg); } }
+  .plant-slot .label { font-size: 0.66rem; font-style: italic; letter-spacing: 0.03em; text-align: center;
+    margin-top: 4px; max-width: 76px; line-height: 1.25; color: var(--ink-dim); }
+  .plant-slot.bloom .label { color: var(--ink); }
+  .plant-slot .float { position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+    font-style: italic; font-size: 0.78rem; color: var(--gold); opacity: 0; pointer-events: none; }
+  .plant-slot .float.go { animation: floatup 1.1s ease-out forwards; }
+  @keyframes floatup { 0% { opacity: 0; transform: translate(-50%, 6px); } 20% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -34px); } }
+
+  .pollen { margin: 6px 0 22px; text-align: center; }
+  .pollen .cohorts { font-size: 0.78rem; font-style: italic; line-height: 1.9; color: var(--ink); }
+  .pollen .cohorts .n { color: var(--gold); }
+  .pollen .gather { margin-top: 8px; font-size: 0.82rem; }
+
+  .wallet { position: fixed; top: 16px; right: 18px; z-index: 6; font-size: 0.8rem; font-style: italic;
+    background: none; border: none; color: var(--ink); cursor: pointer; padding: 8px; min-height: 44px; }
+  .wallet .dot { color: var(--gold); }
+
+  .schedule { margin: 6px 0 20px; text-align: center; min-height: 40px; cursor: text; }
+  .schedule .line { font-size: 0.86rem; font-style: italic; line-height: 1.9; }
+  .schedule textarea { width: 100%; min-height: 90px; text-align: left; background: transparent; }
+  .schedule .empty { color: var(--ink-dim); }
+
+  .instruments { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin: 8px 0 18px;
+    font-size: 0.78rem; font-style: italic; }
+  .instrument { cursor: pointer; padding: 6px 4px; min-height: 44px; display: flex; align-items: center; }
+  .instrument .k { color: var(--ink-dim); margin-right: 4px; }
+  .instrument .v { color: var(--ink-strong); }
+  .instrument-panel { width: 100%; text-align: center; margin: -6px 0 16px; font-size: 0.8rem; }
+  .dots { display: inline-flex; gap: 6px; }
+  .dots button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line);
+    background: transparent; cursor: pointer; min-width: 32px; min-height: 32px; }
+  .dots button.on { background: var(--accent); border-color: var(--accent); }
+  .yesno-row { display: flex; justify-content: center; gap: 40px; }
+  .yesno-row button { min-height: 44px; padding: 8px 16px; }
+  .yesno-row button.on { color: var(--gold); }
+  .stepper { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .stepper button { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+    background: transparent; color: var(--ink); cursor: pointer; font-size: 1rem; }
+  .stepper .val { min-width: 3.5em; text-align: center; font-style: italic; }
+
+  .note-line { margin-top: auto; padding-top: 10px; }
+  .note-line input { text-align: center; }
+
+  /* ===================== the meadow ===================== */
+  .meadow-strip { display: flex; gap: 4px; overflow-x: auto; padding: 20px 10px 14px; align-items: flex-end;
+    -webkit-overflow-scrolling: touch; }
+  .meadow-day { flex: 0 0 auto; text-align: center; cursor: pointer; padding: 4px 6px; position: relative; }
+  .meadow-day .tag { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px);
+    font-size: 0.62rem; opacity: 0; transition: opacity 0.2s ease; white-space: nowrap;
+    font-style: italic; color: var(--ink-strong); background: rgba(10,10,14,0.85); padding: 3px 8px;
+    border-radius: 10px; pointer-events: none; z-index: 3; }
+  .meadow-day.open .tag, .meadow-day:hover .tag { opacity: 0.85; }
+  .legend { text-align: center; font-size: 0.7rem; font-style: italic; color: var(--ink-dim);
+    letter-spacing: 0.04em; margin-top: 10px; }
+  .meadow-title { text-align: center; font-style: italic; margin-bottom: 4px; }
+
+  /* ===================== the shop ===================== */
+  .shelf { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
+  .shop-item { display: flex; align-items: center; gap: 14px; padding: 14px 8px; border-bottom: 1px solid var(--line);
+    cursor: pointer; min-height: 56px; position: relative; }
+  .shop-item .sign { font-size: 1.4rem; }
+  .shop-item .name { flex: 1; font-style: italic; }
+  .shop-item .cost { font-size: 0.85rem; }
+  .shop-item.cant .cost { color: var(--bad); opacity: 0.85; }
+  .shop-item.cant { opacity: 0.55; }
+  .shop-wallet { text-align: center; font-size: 1.3rem; font-style: italic; margin: 8px 0 6px; }
+  .link-out { margin-left: 2px; color: var(--gold); text-decoration: none; font-style: normal;
+    font-size: 1.1rem; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .go-get { text-align: center; min-height: 1.4em; margin: 4px 0 8px; }
+  .go-get-link { color: var(--gold); text-decoration: none; font-size: 0.86rem; }
+  .redemptions { margin-top: 26px; font-size: 0.76rem; }
+  .redemptions .r { color: var(--ink-dim); line-height: 2; font-style: italic; }
+
+  /* ===================== the hour ===================== */
+  .hour-room { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 26px; z-index: 2; }
+  .hour-line { font-style: italic; font-size: 1rem; letter-spacing: 0.06em; }
+  .hour-duration { font-size: 1.1rem; font-style: italic; letter-spacing: 0.1em; cursor: pointer;
+    border-bottom: 1px dashed var(--line); padding: 6px 4px; min-height: 44px; }
+  .hour-clock { font-size: 4.5rem; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; font-weight: normal;
+    color: var(--ink-strong); }
+  .hour-pulse { position: fixed; inset: 0; pointer-events: none; z-index: 1;
+    background: radial-gradient(ellipse at 50% 50%, transparent 30%, rgba(178, 58, 58, var(--pulse, 0)) 100%); }
+  .hour-giveup { font-size: 0.82rem; letter-spacing: 0.08em; opacity: 0.7; padding: 10px 6px; }
+  .hour-notice { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); font-style: italic;
+    font-size: 0.85rem; opacity: 0; transition: opacity 0.5s ease; z-index: 6; }
+  .hour-notice.show { opacity: 0.9; }
+  .hour-flood { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 1.2s ease; pointer-events: none; font-style: italic; font-size: 1.2rem; }
+  .hour-flood.gold { background: radial-gradient(ellipse at center, rgba(217,179,106,0.9), #0d0507 78%); color: #2a1e10; }
+  .hour-flood.grey { background: #1c1c1c; color: rgba(230,230,230,0.8); }
+  .hour-flood.show { opacity: 1; pointer-events: auto; }
+  .mute-btn { position: fixed; top: 6px; right: 6px; font-size: 0.72rem; opacity: 0.5; z-index: 6;
+    min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+
+  /* ===================== unwind ===================== */
+  .unwind-room { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 24px; gap: 30px; z-index: 2; }
+  .unwind-q { font-style: italic; font-size: 1.3rem; letter-spacing: 0.02em; max-width: 560px; line-height: 1.5; }
+  .petals { position: relative; width: 260px; height: 260px; }
+  .petal { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink); display: flex;
+    align-items: center; justify-content: center; font-style: italic; cursor: pointer;
+    transform-origin: center; transition: background 0.2s ease, color 0.2s ease; }
+  .petal.on { background: var(--accent); color: #14161c; border-color: var(--accent); }
+  .unwind-yesno { display: flex; gap: 60px; }
+  .unwind-yesno button { min-height: 54px; padding: 10px 22px; font-size: 1.1rem; }
+  .unwind-note { width: min(560px, 88vw); min-height: 120px; text-align: center; font-size: 1.05rem; }
+  .unwind-esc { position: fixed; top: 18px; right: 20px; font-size: 0.72rem; opacity: 0.5; }
+  .unwind-goodnight { font-style: italic; font-size: 1.4rem; letter-spacing: 0.1em; }
+  .unwind-plant { display: flex; justify-content: center; }
+
+  /* ===================== tend ===================== */
+  .tend-section { margin: 26px 0; }
+  .tend-section h2 { font-style: italic; font-weight: normal; font-size: 0.95rem; letter-spacing: 0.06em;
+    margin-bottom: 10px; opacity: 0.85; }
+  .tend-report { font-size: 0.76rem; color: var(--ink-dim); line-height: 1.8; margin-top: 8px; }
+  .tend-list { display: flex; flex-direction: column; gap: 6px; }
+  .tend-row { display: grid; grid-template-columns: 1fr 70px 60px; gap: 8px; align-items: center; }
+  .tend-row input[type="text"], .tend-row input[type="number"] { min-height: 38px; }
+  .tend-status { font-size: 0.78rem; }
+  .tend-warning { font-size: 0.72rem; color: var(--ink-dim); margin-top: 6px; }
+  .checklabel { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+
+  @media (max-width: 520px) {
+    .hour-clock { font-size: 3.4rem; }
+    .petals { width: 240px; height: 240px; }
+    .petal { width: 44px; height: 44px; font-size: 0.85rem; }
+    .tend-row { grid-template-columns: 1fr 56px 46px; }
+  }
+</style>
+</head>
+<body data-room="day">
+  <div id="app"></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="whisper"></div>
+  <div id="queuedot" title="writes waiting to sync"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

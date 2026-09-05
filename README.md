@@ -131,6 +131,15 @@ machinery.
 - `src/studio.js` — the table, the shelf, the arranging
 - `src/main.js` — walking, the bag, photographs, wind
 
+## tending
+
+A day-book growing beside the field, at **[/tending/](https://domiiqu.github.io/flowers/tending/)**.
+Habits bloom into procedurally grown flowers, seeds gather and — left too
+long — wither, there's a small self-made shop, an hour of high-adrenaline
+focus, and a meadow where ninety days stand as one strip of grown
+day-plants. Airtable is the soil once you connect it; until then a sandbox
+grows quietly in your browser. Same dusk, same restraint, no build step.
+
 ## later, maybe
 
 - adjustable studio lighting (the field's hour already leaks into the room)
