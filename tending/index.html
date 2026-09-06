@@ -167,6 +167,10 @@
 
   /* ---- the hours line: moments strung on a thread through the day --- */
   .hours-line { position: relative; height: 26px; margin: 2px 0 4px; }
+  .moments-text { text-align: center; font-size: 0.72rem; line-height: 1.7; margin: 0 0 12px;
+    color: var(--ink); word-break: break-word; }
+  .moment-chip { color: var(--ink); }
+  .moment-chip:hover { color: var(--ink-strong); }
   .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line); }
   .hour-mote { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
     padding: 0; border: none; background: none; cursor: pointer; }
@@ -187,9 +191,16 @@
     transition: opacity 0.3s ease; z-index: 10; }
   .moment-backdrop.open { opacity: 1; pointer-events: auto; }
   .moment-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; background: #181a22;
-    border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 22px 20px calc(28px + env(safe-area-inset-bottom, 0px));
-    transform: translateY(105%); transition: transform 0.32s ease; max-height: 60vh; overflow-y: auto; }
+    border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 6px 20px calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(105%); transition: transform 0.32s ease; max-height: 74vh; overflow-y: auto;
+    display: flex; flex-direction: column; }
   .moment-sheet.open { transform: translateY(0); }
+  .sheet-top { position: sticky; top: 0; background: #181a22; display: flex; align-items: center;
+    justify-content: center; padding: 10px 0 12px; touch-action: none; }
+  .sheet-handle { width: 40px; height: 4px; border-radius: 3px; background: var(--line); }
+  .sheet-close { position: absolute; right: 0; top: 6px; min-width: 44px; min-height: 44px;
+    font-size: 0.9rem; color: var(--ink-dim); }
+  .sheet-close:hover { color: var(--ink-strong); }
   .chip-row { display: flex; flex-wrap: wrap; gap: 8px 10px; justify-content: center; margin-bottom: 14px; }
   .chip { border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px; min-height: 44px;
     background: var(--panel); color: var(--ink); font-family: inherit; font-style: italic; cursor: pointer; }
@@ -210,6 +221,17 @@
   .ribbon-line { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 0.72rem;
     background: rgba(8, 8, 12, 0.92); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; }
   .ribbon-line button { min-height: 30px; }
+
+  /* ---- the rapid-dump stream, inside the sheet ---------------------- */
+  .stream-label { text-align: center; font-size: 0.7rem; margin: 4px 0 6px; }
+  .stream { display: flex; flex-direction: column; gap: 2px; padding-bottom: 4px; }
+  .stream-entry { border-bottom: 1px solid var(--line); }
+  .stream-row { display: block; width: 100%; text-align: center; font-style: italic;
+    font-size: 0.82rem; color: var(--ink-strong); padding: 10px 4px; min-height: 44px; }
+  .stream-row:hover { color: var(--gold); }
+  .stream-detail { display: flex; justify-content: center; padding-bottom: 8px; }
+  .stream-detail[hidden] { display: none; }
+  .stream-detail .ribbon-line { background: none; border: none; padding: 0; }
 
   /* ===================== the meadow ===================== */
   .meadow-strip { position: relative; flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden;
@@ -280,6 +302,9 @@
   .unwind-yesno button { min-height: 54px; padding: 10px 22px; font-size: 1.1rem; }
   .unwind-note { width: min(560px, 88vw); min-height: 120px; text-align: center; font-size: 1.05rem; }
   .unwind-esc { position: fixed; top: 18px; right: 20px; font-size: 0.72rem; opacity: 0.5; }
+  .unwind-skip-row { display: flex; gap: 22px; margin-top: 8px; }
+  .unwind-skip-row button { font-size: 0.72rem; opacity: 0.55; min-height: 44px; }
+  .unwind-skip-row button:hover { opacity: 0.9; }
   .unwind-goodnight { font-style: italic; font-size: 1.4rem; letter-spacing: 0.1em; }
   .unwind-plant { display: flex; justify-content: center; }
 
