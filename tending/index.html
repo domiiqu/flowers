@@ -39,6 +39,13 @@
     --bg: #0d0507; --ink: rgba(240, 220, 216, 0.7); --ink-strong: rgba(250, 235, 230, 0.96);
     --ink-dim: rgba(240, 220, 216, 0.3); --accent: #b23a3a; --line: rgba(200, 90, 90, 0.22);
   }
+  /* the day is lit like paper — a lighter ground, ink gone dark. every
+     other room keeps the dusk palette above. */
+  body[data-room="day"] {
+    --bg: #ece7d8; --ink: rgba(44, 39, 30, 0.74); --ink-strong: rgba(28, 24, 17, 0.95);
+    --ink-dim: rgba(44, 39, 30, 0.44); --accent: #b0653f; --gold: #b8863a;
+    --line: rgba(44, 39, 30, 0.18); --panel: rgba(44, 39, 30, 0.045);
+  }
   body[data-room="tend"] { font-size: 0.94rem; }
 
   /* ---- grain + vignette, copied from the field, always on, quiet ---- */
@@ -54,6 +61,8 @@
     transition: background 0.6s ease; }
   body[data-room="hour"] #vignette {
     background: radial-gradient(ellipse at 50% 48%, transparent 40%, rgba(60, 8, 8, 0.5) 100%); }
+  body[data-room="day"] #vignette {
+    background: radial-gradient(ellipse at 50% 46%, transparent 62%, rgba(96, 82, 54, 0.14) 100%); }
 
   /* ---- layout --------------------------------------------------- */
   #app { position: relative; z-index: 2; min-height: 100vh; }
@@ -116,27 +125,41 @@
     max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
-  /* ---- the plate: the day itself, painted --------------------------- */
-  .plate { width: 100%; margin: 4px 0 20px; min-height: 60vh; transition: opacity 0.22s ease; }
-  .plate svg { display: block; width: 100%; height: auto; border-radius: 2px; }
+  /* ---- the plate: the day itself, painted — portrait, centered ------ */
+  .plate { width: 100%; margin: 4px 0 16px; display: flex; justify-content: center;
+    transition: opacity 0.22s ease; }
+  .plate svg { display: block; height: auto; max-width: 100%; border-radius: 2px; }
 
-  /* ---- the provenance ledger: habits as words ----------------------- */
-  .ledger { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0 0 20px; }
-  .ledger-word { font-size: 0.88rem; color: var(--ink-dim); padding: 9px 10px; min-height: 40px; }
+  /* ---- the provenance ledger: habits as a dot-separated line -------- */
+  .ledger { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+    gap: 0; margin: 0 auto 16px; }
+  .ledger-word { font-size: 0.9rem; color: var(--ink-dim); padding: 4px 7px; line-height: 1.5; }
   .ledger-word.done { color: var(--ink-strong); }
+  .ledger-sep { color: var(--ink-dim); opacity: 0.5; padding: 0 1px; user-select: none; }
 
-  /* ---- the hours line: moments strung on a thread through the day --- */
-  .hours-line { position: relative; height: 26px; margin: 2px 0 4px; }
-  .moments-text { text-align: center; font-size: 0.72rem; line-height: 1.7; margin: 0 0 12px;
-    color: var(--ink); word-break: break-word; }
+  /* ---- the hours line: the day, midnight to midnight; moments are
+       dots you can recolour, drag through time, or take back ---------- */
+  .hours-line { position: relative; height: 30px; margin: 2px auto 4px; touch-action: pan-y; }
+  .moments-text { text-align: center; font-size: 0.72rem; line-height: 1.7; margin: 0 auto 12px;
+    color: var(--ink); word-break: break-word; transition: opacity 0.25s ease; }
   .moment-chip { color: var(--ink); }
   .moment-chip:hover { color: var(--ink-strong); }
-  .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line); }
-  .hour-mote { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
-    padding: 0; border: none; background: none; cursor: pointer; }
-  .hour-mote .dot { display: block; width: 7px; height: 7px; margin: 9.5px auto 0; border-radius: 50%;
-    background: var(--gold); opacity: 0.8; box-shadow: 0 0 5px var(--gold); }
+  .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line);
+    transition: opacity 0.25s ease; }
+  .hour-mote { position: absolute; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+    padding: 0; border: none; background: none; cursor: grab; touch-action: none;
+    -webkit-touch-callout: none; user-select: none; transition: opacity 0.25s ease; }
+  .hour-mote .dot { display: block; width: 8px; height: 8px; margin: 11px auto 0; border-radius: 50%;
+    background: var(--dot, var(--gold)); opacity: 0.85;
+    box-shadow: 0 0 5px var(--dot, var(--gold)); transition: width 0.15s ease, height 0.15s ease, margin 0.15s ease; }
   .hour-mote:hover .dot { opacity: 1; }
+  /* editing a moment: it is singled out, the rest recede so a stray tap
+     can't land on the wrong one */
+  .hours-line.focus .hour-mote:not(.sel) { opacity: 0.22; pointer-events: none; }
+  .hours-line.focus .hours-track { opacity: 0.5; }
+  .hour-mote.sel { cursor: grab; }
+  .hour-mote.sel .dot { width: 13px; height: 13px; margin: 8.5px auto 0; opacity: 1; }
+  .moments-text.faded .moment-chip { opacity: 0.28; pointer-events: none; }
 
   /* ---- the "now" mote + its calm chip sheet ------------------------- */
   .now-mote { position: fixed; right: 18px; bottom: 180px; width: 50px; height: 50px; border-radius: 50%;
@@ -150,6 +173,12 @@
   .moment-backdrop { position: fixed; inset: 0; background: rgba(6, 6, 9, 0.4); opacity: 0; pointer-events: none;
     transition: opacity 0.3s ease; z-index: 10; }
   .moment-backdrop.open { opacity: 1; pointer-events: auto; }
+  /* the capture sheet + the moment ribbon keep the dusk palette even when
+     the day itself is lit like paper — they are their own night layer. */
+  .moment-sheet, .moment-ribbon {
+    --ink: rgba(244, 240, 230, 0.62); --ink-strong: rgba(244, 240, 230, 0.92);
+    --ink-dim: rgba(244, 240, 230, 0.38); --line: rgba(244, 240, 230, 0.14);
+    --panel: rgba(244, 240, 230, 0.04); color: var(--ink); }
   .moment-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; background: #181a22;
     border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 6px 20px calc(28px + env(safe-area-inset-bottom, 0px));
     transform: translateY(105%); transition: transform 0.32s ease; max-height: 74vh; overflow-y: auto;
@@ -161,11 +190,17 @@
   .sheet-close { position: absolute; right: 0; top: 6px; min-width: 44px; min-height: 44px;
     font-size: 0.9rem; color: var(--ink-dim); }
   .sheet-close:hover { color: var(--ink-strong); }
-  .chip-row { display: flex; flex-wrap: wrap; gap: 8px 10px; justify-content: center; margin-bottom: 14px; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px 10px; justify-content: center;
+    align-items: center; margin-bottom: 14px; }
   .chip { border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px; min-height: 44px;
     background: var(--panel); color: var(--ink); font-family: inherit; font-style: italic; cursor: pointer; }
   .chip:hover { color: var(--ink-strong); border-color: var(--ink-dim); }
-  .new-tag { text-align: center; }
+  /* the "create a tag" line lives at the end of the chips, not below them */
+  .new-tag-inline { flex: 0 1 168px; min-width: 128px; width: auto; text-align: center;
+    border: 1px dashed var(--line); border-radius: 20px; padding: 10px 16px; min-height: 44px;
+    background: transparent; color: var(--ink-strong); font-family: inherit; font-style: italic; }
+  .new-tag-inline:focus { outline: none; border-color: var(--ink-dim); border-style: solid; }
+  .new-tag-inline::placeholder { color: var(--ink-dim); font-style: italic; }
   .petal-hint { text-align: center; margin-bottom: 12px; }
   .mini-petals { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .mini-petal { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
@@ -185,13 +220,11 @@
   /* ---- the rapid-dump stream, inside the sheet ---------------------- */
   .stream-label { text-align: center; font-size: 0.7rem; margin: 4px 0 6px; }
   .stream { display: flex; flex-direction: column; gap: 2px; padding-bottom: 4px; }
-  .stream-entry { border-bottom: 1px solid var(--line); }
-  .stream-row { display: block; width: 100%; text-align: center; font-style: italic;
-    font-size: 0.82rem; color: var(--ink-strong); padding: 10px 4px; min-height: 44px; }
-  .stream-row:hover { color: var(--gold); }
-  .stream-detail { display: flex; justify-content: center; padding-bottom: 8px; }
-  .stream-detail[hidden] { display: none; }
-  .stream-detail .ribbon-line { background: none; border: none; padding: 0; }
+  .stream-entry { border-bottom: 1px solid var(--line); display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; padding: 8px 4px; min-height: 44px; }
+  .stream-text { font-style: italic; font-size: 0.82rem; color: var(--ink-strong); }
+  .stream-x { color: var(--ink-dim); min-width: 40px; min-height: 40px; font-size: 0.85rem; }
+  .stream-x:hover { color: var(--accent); }
 
   /* ---- shared room heading, used by the shop and tend --------------- */
   .meadow-title { text-align: center; font-style: italic; margin-bottom: 4px; }

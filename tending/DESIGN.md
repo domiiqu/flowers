@@ -15,7 +15,7 @@ toggles anything:
 
 | room | voltage | palette |
 |---|---|---|
-| the day (default) | calm, gentle | night ground `#14161c`, ink `rgba(244,240,230,.62)`, warm accents |
+| the day (default) | calm, gentle | **lit like paper** — light ground `#ece7d8`, ink gone dark `rgba(44,39,30,.74)`, warm accents. Every other room keeps the dusk palette; the capture sheet + moment ribbon stay their own night layer even here |
 | the meadow (history) | contemplative | same, hazier |
 | the shop | small delight | same + gold `#d9b36a` |
 | the hour (scary mode) | HIGH ADRENALINE | near-black `#0d0507`, blood reds, pulse |
@@ -79,28 +79,38 @@ exactly 14:32, `mood 2` mid-afternoon, `cramps` sometime today. Built for
 running out the door with a poor memory: capture must cost two taps, and
 trusting the timestamp must cost zero.
 
-- A small glowing mote labelled **now** sits fixed in the thumb zone
+- A small glowing mote labelled **tag** sits fixed in the thumb zone
   (bottom-right) of every day page. Tap → a calm layer slides up:
   - her tag vocabulary as chips (`store.tagChips()` — recency then
-    frequency, trackers lend names before history exists), plus one line
-    to type a new tag (it joins the vocabulary forever after).
+    frequency, trackers lend names before history exists), and at the end
+    of that same chip row one **create a tag…** line to type a new tag
+    (it joins the vocabulary forever after).
   - tap a chip → **saved instantly** (`captureMoment`, time = now,
     sure = 'exact'), layer starts dismissing. Two taps total.
   - if the tag matches a scale-kind tracker's name, six small petals
     appear for one optional extra tap (the value); skipping is fine.
-- **The after-ribbon** (the timestamp-validation idea): for ~4 seconds
-  after a capture, one dim line: *just now · about then · earlier… ·
-  all day · ✕*. Ignore it — 'exact' stands. One tap softens it:
-  *about then* → `Sure: 'about'`; *earlier…* → a row of quiet offsets
-  (−15m · −1h · −3h · this morning) that shift `Time` and set 'about';
-  *all day* → `Sure: 'day'` (time-agnostic tags: `heavy`, `light`,
-  `cramps`); ✕ takes the moment back (`removeMoment`).
-- **The hours line**: on the day page, beneath the bed — one thin
-  horizontal line, midnight to midnight, the day's moments strung on it
-  as tiny motes (day-sure ones rest at the line's start, slightly apart).
-  Tap a mote: `14:32 · adderall 10mg — exact`, with the same ribbon to
-  adjust or remove. Nothing else; it is a string of fireflies, not a
-  timeline widget.
+- **Sureness has a colour, and it lives on the dot.** A new tag times to
+  now and lands as a **red** dot (`Sure: 'exact'` — the timestamp is
+  trusted). The whole after-the-fact adjustment happens on the hours
+  line, not in a fleeting ribbon (`SURE_COLOR`/`SURE_WORD`/`SURE_NEXT` in
+  `views.js`): red **exact** → rose **roughly** (`'about'`) → blue **all
+  day** (`'day'`, time-agnostic: `heavy`, `light`, `cramps`).
+- **The hours line**: on the day page, beneath the plate and sized to it —
+  one thin horizontal line, midnight to midnight (the 24-hour day), the
+  day's moments strung on it as coloured dots. All-day (blue) dots gather
+  at the day's **end** and stack back from it; timed ones fall where their
+  clock says. The line is a small instrument:
+  - **tap a dot** → it is singled out (enlarged), every other dot and the
+    tag stream fade and go untappable, and a detail card shows
+    `14:32 · adderall 10mg — exact` with the sureness word (in its colour)
+    and a ✕ to take the moment back (`removeMoment`).
+  - **tap the selected dot again** (or its word) → walk the colour ring
+    exact → roughly → all-day (`adjustMoment` on `Sure`); becoming all-day
+    slides it to the end, leaving it un-fades it back.
+  - **press-and-drag a dot** → slide it through the hours; release commits
+    the new `Time`. Dragging an all-day dot gives it a place in time again
+    (`Sure: 'about'`).
+  - a tap anywhere off the line and off the card lets the moment go.
 - Voltage: calm. The layer must never feel like a form. No required
   fields, no confirm buttons, nothing modal that traps.
 - Later verses: wearables write straight into `Moments` (same shape);
@@ -173,11 +183,17 @@ optional: unwind leads with the harvest and the day-plate; scales (fog,
 mood, sleep, energy) remain but "ate enough" retires in favor of b/l/d
 tags. After a week of real tag data, the structure gets revisited.
 
+**The plate is portrait** — taller than wide on every screen (never the
+old square on iPad or landscape on desktop); the ledger, hours line and
+tag stream are all sized to it and centered, so the day reads as one
+column.
+
 **The provenance ledger (new day-page concept, replacing click-the-flower):**
-under the plate, the habits stand as a column of small grey words, like a
-print's documentation — edition notes, a serial line. Tap a word → it inks
-to black, the plate redraws (its cloud becomes its plant), one seed is
-earned. The plate is the day; the words are its provenance. Economy
+under the plate, the habits stand as a single **dot-separated line** of
+small grey words, full plate width — like a print's documentation, a
+serial line (`moved my body · went outside · made something`). Tap a word
+→ it inks to black, the plate redraws (its cloud becomes its plant), one
+seed is earned. The plate is the day; the words are its provenance. Economy
 simplifies with it: **every habit = 1 seed**, a held hour = 4; gather and
 wither rules unchanged; shop default prices rescale accordingly.
 
