@@ -4,12 +4,13 @@
 // verbatim from bloom.js:5 rather than imported, on purpose.
 //
 // Look: flat gouache fills at opacity 1.0 everywhere — depth is carried by
-// value and a single uniform ink contour line, never by transparency. Every
-// ink line is drawn twice: once as a faint rust "ghost" (a slight
-// misregistration offset, like a print's key plate slipping a fraction off
-// the color plate) and once crisp on top. A per-print grain filter sits
-// over the paper only. This deliberately inverts bloom.js's opacity-as-
-// shading approach.
+// value, warmth and a single uniform ink contour line, never by
+// transparency. Every ink line is drawn twice: once as a faint rust
+// "ghost" (a slight misregistration offset, like a print's key plate
+// slipping a fraction off the color plate) and once crisp on top. A
+// per-print grain filter sits over the paper only, biased toward neutral
+// so it adds texture without dimming the plate. This deliberately inverts
+// bloom.js's opacity-as-shading approach.
 
 export function mulberry(seed) {
   let a = (seed >>> 0) || 1;
@@ -41,18 +42,22 @@ const SKY_STOPS = [
 ];
 
 const SUN = '#f2e7c8';
-const MOON = '#dfe1de';
-const CLOUD = '#f4f1e8';
-const FIELD_LIGHT = '#7d9c6a';
-const FIELD_DARK = '#5f7d52';
-const DESERT = '#ddd3b8';
-const NEUTRAL_GROUND = '#cec5ac';
+const MOON = '#e8e0c8';       // pale cream — the brightest thing in an indigo sky
+const CLOUD = '#f4f1e2';      // chalk white, never grey
+const PATH_COLOR = '#e3d7b8'; // the winding dust path
 const ROCK_DARK = '#a84428';
 const ROCK_LIGHT = '#c15f33';
-const FOG = '#e6e3d8';
+const FOG = '#e6e3d8';        // pale weather, never grey-dark
 const SHADOW = '#4a4238';
 const MONOLITH = '#efe9d8';
 const FLORA = ['#e8e2d2', '#c98d84', '#a35b32', '#eee6cf', '#d9b36a', '#8d86a8'];
+
+// three-tone ground ramps: far (cool, pale) -> mid -> near (warmer, darker)
+const GROUND = {
+  field: ['#a8c092', '#7d9c6a', '#5a6b3a'],
+  desert: ['#e6dcc0', '#ddd3b8', '#c7a877'],
+  neutral: ['#d6cdb4', '#cec5ac', '#b3a37e'],
+};
 
 function hex2rgb(hx) {
   const n = parseInt(hx.slice(1), 16);
@@ -77,58 +82,45 @@ function lightScore(hour) {
   return Math.max(0, Math.min(1, (hour - 5) / 17));
 }
 
-// ------------------------------------------------------------ flora, flat
+// ------------------------------------------------------- flora, petalled
 
-function drawFlora(rng, addInk, cx, baseY, size) {
-  const kind = Math.floor(rng() * 6);
-  const stemH = size * (1.5 + rng() * 0.5);
-  const topY = baseY - stemH;
-  const sway = (rng() - 0.5) * size * 0.4;
-  const headX = cx + sway;
-  addInk('line', { x1: cx, y1: baseY, x2: headX, y2: topY }, 1.1);
+// a single asymmetric teardrop petal, pointing outward from (cx,cy) at
+// `angle`, length `len`, half-width `w`.
+function petalPath(cx, cy, angle, len, w) {
+  const tipX = cx + Math.sin(angle) * len, tipY = cy - Math.cos(angle) * len;
+  const lx = cx + Math.sin(angle - 0.55) * w, ly = cy - Math.cos(angle - 0.55) * w;
+  const rx = cx + Math.sin(angle + 0.55) * w, ry = cy - Math.cos(angle + 0.55) * w;
+  return `M${cx.toFixed(1)},${cy.toFixed(1)} Q${lx.toFixed(1)},${ly.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)} `
+    + `Q${rx.toFixed(1)},${ry.toFixed(1)} ${cx.toFixed(1)},${cy.toFixed(1)} Z`;
+}
+
+// one stylized plant, off-vertical, with an asymmetric petalled head —
+// never a filled disc on a stick. `depth` (0 far/small .. 1 near/large)
+// sets size and line weight.
+function drawFlora(rng, addInk, cx, baseY, size, depth = 0.5) {
+  const kind = Math.floor(rng() * FLORA.length);
   const color = FLORA[kind];
+  const lean = (rng() - 0.5) * 0.7; // radians — a visible off-vertical lean
+  const stemH = size * (1.7 + rng() * 0.5);
+  const topX = cx + Math.sin(lean) * stemH * 0.7;
+  const topY = baseY - Math.cos(lean) * stemH;
+  const midX = cx + Math.sin(lean) * stemH * 0.32;
+  const midY = baseY - Math.cos(lean) * stemH * 0.5;
+  const sw = 0.7 + depth * 0.6;
+  addInk('path', { d: `M${cx.toFixed(1)},${baseY.toFixed(1)} Q${midX.toFixed(1)},${midY.toFixed(1)} ${topX.toFixed(1)},${topY.toFixed(1)}`, fill: 'none' }, sw);
+
+  const petals = 5 + Math.floor(rng() * 4); // 5-8, asymmetric
+  const baseAngle = rng() * Math.PI * 2;
   let fill = '';
-  if (kind === 0) { // daisy — a filled disc, ink petal ticks radiating
-    fill += `<circle cx="${headX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(size * 0.32).toFixed(1)}" fill="${color}"/>`;
-    addInk('circle', { cx: headX, cy: topY, r: size * 0.32 }, 1.1);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const x1 = headX + Math.sin(a) * size * 0.36, y1 = topY - Math.cos(a) * size * 0.36;
-      const x2 = headX + Math.sin(a) * size * 0.56, y2 = topY - Math.cos(a) * size * 0.56;
-      addInk('line', { x1, y1, x2, y2 }, 0.9);
-    }
-  } else if (kind === 1) { // tulip — a flat cup
-    const w = size * 0.34, hh = size * 0.5;
-    const d = `M${headX.toFixed(1)},${(topY - hh).toFixed(1)} C${(headX - w).toFixed(1)},${(topY - hh * 0.3).toFixed(1)} ${(headX - w * 0.8).toFixed(1)},${(topY + hh * 0.3).toFixed(1)} ${headX.toFixed(1)},${(topY + hh * 0.2).toFixed(1)} C${(headX + w * 0.8).toFixed(1)},${(topY + hh * 0.3).toFixed(1)} ${(headX + w).toFixed(1)},${(topY - hh * 0.3).toFixed(1)} ${headX.toFixed(1)},${(topY - hh).toFixed(1)} Z`;
+  for (let i = 0; i < petals; i++) {
+    const a = baseAngle + (i / petals) * Math.PI * 2 + (rng() - 0.5) * 0.5;
+    const len = size * (0.28 + rng() * 0.16);
+    const w = size * (0.16 + rng() * 0.06);
+    const d = petalPath(topX, topY, a, len, w);
     fill += `<path d="${d}" fill="${color}"/>`;
-    addInk('path', { d }, 1.1);
-  } else if (kind === 2) { // poppy — a wide flat bowl, dark ink center
-    fill += `<circle cx="${headX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(size * 0.42).toFixed(1)}" fill="${color}"/>`;
-    addInk('circle', { cx: headX, cy: topY, r: size * 0.42 }, 1.1);
-    fill += `<circle cx="${headX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(size * 0.13).toFixed(1)}" fill="${INK}"/>`;
-  } else if (kind === 3) { // umbel — a small dome of dots
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 4 - 0.5) * 1.6;
-      const x = headX + Math.sin(a) * size * 0.34, y = topY - Math.abs(Math.cos(a)) * size * 0.18;
-      fill += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(size * 0.1).toFixed(1)}" fill="${color}"/>`;
-      addInk('circle', { cx: x, cy: y, r: size * 0.1 }, 0.9);
-    }
-  } else if (kind === 4) { // seedhead — a filled disc with dry radiating lines
-    fill += `<circle cx="${headX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(size * 0.3).toFixed(1)}" fill="${color}"/>`;
-    addInk('circle', { cx: headX, cy: topY, r: size * 0.3 }, 1.1);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      addInk('line', {
-        x1: headX + Math.sin(a) * size * 0.12, y1: topY - Math.cos(a) * size * 0.12,
-        x2: headX + Math.sin(a) * size * 0.3, y2: topY - Math.cos(a) * size * 0.3,
-      }, 0.7);
-    }
-  } else { // harebell — a hanging bell
-    const w = size * 0.26, hh = size * 0.4;
-    const d = `M${(headX - w).toFixed(1)},${(topY - hh * 0.2).toFixed(1)} Q${headX.toFixed(1)},${(topY + hh).toFixed(1)} ${(headX + w).toFixed(1)},${(topY - hh * 0.2).toFixed(1)} Q${headX.toFixed(1)},${(topY - hh * 0.4).toFixed(1)} ${(headX - w).toFixed(1)},${(topY - hh * 0.2).toFixed(1)} Z`;
-    fill += `<path d="${d}" fill="${color}"/>`;
-    addInk('path', { d }, 1.1);
+    addInk('path', { d }, Math.max(0.6, sw * 0.75));
   }
+  fill += `<circle cx="${topX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${(size * 0.12).toFixed(1)}" fill="${INK}"/>`;
   return fill;
 }
 
@@ -140,8 +132,8 @@ function drawFlora(rng, addInk, cx, baseY, size) {
  */
 export function dayPrint(data = {}, w = 300, h = 380) {
   const {
-    seed = 1, lightHour = 13.5, habitsDone = 0, habitsTotal = 5,
-    fog = null, fed = null, heldHour = false, moments = 0,
+    seed = 1, lightHour = 13.5, habitsDone = 0, fog = null, fed = null,
+    heldHour = false, moments = 0,
   } = data;
   const rng = mulberry(seed);
   const inkShapes = [];
@@ -153,31 +145,38 @@ export function dayPrint(data = {}, w = 300, h = 380) {
   const mount = MOUNTS[Math.floor(rng() * MOUNTS.length)];
   fills += `<rect x="0" y="0" width="${w}" height="${h}" fill="${mount}"/>`;
 
-  // 2. paper — inset cream plate, thin ink frame
+  // 2. paper — the outer cream plate, thin ink frame
   const margin = Math.min(w, h) * 0.075;
   const px = margin, py = margin * 0.85, pBottom = margin * 1.7;
   const pw = w - 2 * margin, ph = h - py - pBottom;
   fills += `<rect x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pw.toFixed(1)}" height="${ph.toFixed(1)}" fill="${PAPER}"/>`;
   addInk('rect', { x: px, y: py, width: pw, height: ph }, 1.5);
 
-  // 3. sky — one flat colour from the light score
+  // the picture window — inset from the paper edge, so a visible cream
+  // margin (the plate's own white border) sits between the picture and
+  // the frame, like the reference postcards.
+  const win = Math.min(pw, ph) * 0.06;
+  const ix = px + win, iy = py + win, iw = pw - 2 * win, ih = ph - 2 * win;
+  addInk('rect', { x: ix, y: iy, width: iw, height: ih }, 1.0);
+
+  // 3. sky — one flat colour from the light score, low horizon (~62%)
   const t = lightScore(lightHour);
   const isNight = t > 0.82;
-  const skyH = ph * 0.62;
-  const skyTop = py, skyBottom = py + skyH;
-  fills += `<rect x="${px.toFixed(1)}" y="${skyTop.toFixed(1)}" width="${pw.toFixed(1)}" height="${skyH.toFixed(1)}" fill="${skyColor(t)}"/>`;
+  const skyH = ih * 0.62;
+  const skyTop = iy, horizonY = iy + skyH;
+  fills += `<rect x="${ix.toFixed(1)}" y="${skyTop.toFixed(1)}" width="${iw.toFixed(1)}" height="${skyH.toFixed(1)}" fill="${skyColor(t)}"/>`;
 
-  const bodyR = Math.min(pw, ph) * 0.045;
-  const bodyX = px + pw * (0.2 + rng() * 0.6);
-  const bodyY = skyTop + skyH * (0.22 + rng() * 0.16);
+  const bodyR = Math.min(iw, ih) * 0.042;
+  const bodyX = ix + iw * (0.2 + rng() * 0.6);
+  const bodyY = skyTop + skyH * (0.2 + rng() * 0.15);
   fills += `<circle cx="${bodyX.toFixed(1)}" cy="${bodyY.toFixed(1)}" r="${bodyR.toFixed(1)}" fill="${isNight ? MOON : SUN}"/>`;
-  addInk('circle', { cx: bodyX, cy: bodyY, r: bodyR }, 1.1);
+  addInk('circle', { cx: bodyX, cy: bodyY, r: bodyR }, 1.0);
 
   if (rng() < 0.45) {
     const side = rng() < 0.5 ? 0.14 : 0.62;
-    const ccx = px + pw * (side + rng() * 0.12);
-    const ccy = skyTop + skyH * (0.42 + rng() * 0.22);
-    const cw = pw * (0.15 + rng() * 0.07), ch = cw * 0.3;
+    const ccx = ix + iw * (side + rng() * 0.12);
+    const ccy = skyTop + skyH * (0.4 + rng() * 0.2);
+    const cw = iw * (0.15 + rng() * 0.07), ch = cw * 0.3;
     const d = `M${(ccx - cw / 2).toFixed(1)},${(ccy + ch / 2).toFixed(1)} `
       + `h${(cw * 0.16).toFixed(1)} v${(-ch * 0.35).toFixed(1)} h${(cw * 0.18).toFixed(1)} v${(-ch * 0.3).toFixed(1)} `
       + `h${(cw * 0.32).toFixed(1)} v${(ch * 0.3).toFixed(1)} h${(cw * 0.18).toFixed(1)} v${(ch * 0.35).toFixed(1)} `
@@ -186,58 +185,70 @@ export function dayPrint(data = {}, w = 300, h = 380) {
     addInk('path', { d }, 1.0);
   }
 
-  // 4. land — terrain grammar as consequence
-  const landTop = skyBottom, landH = ph - skyH;
+  // 4. ground — one plane, horizon to bottom, in 2-3 flat bands that get
+  // warmer and darker toward the viewer (not a second horizontal strip)
+  const groundH = ih - skyH;
+  const ramp = fed === 0 ? GROUND.desert : fed === 1 ? GROUND.field : GROUND.neutral;
+  const bandSplits = [0, 0.22, 0.52, 1];
+  for (let i = 0; i < 3; i++) {
+    const y0 = horizonY + groundH * bandSplits[i];
+    const y1 = horizonY + groundH * bandSplits[i + 1];
+    fills += `<rect x="${ix.toFixed(1)}" y="${y0.toFixed(1)}" width="${iw.toFixed(1)}" height="${(y1 - y0).toFixed(1)}" fill="${ramp[i]}"/>`;
+  }
+  addInk('line', { x1: ix, y1: horizonY, x2: ix + iw, y2: horizonY }, 1.4);
+
   if (fed === 0) {
-    fills += `<rect x="${px.toFixed(1)}" y="${landTop.toFixed(1)}" width="${pw.toFixed(1)}" height="${landH.toFixed(1)}" fill="${DESERT}"/>`;
-    addInk('line', { x1: px, y1: landTop, x2: px + pw, y2: landTop }, 1.5);
     const cracks = 2 + Math.floor(rng() * 2);
     for (let i = 0; i < cracks; i++) {
-      const sx = px + pw * (0.15 + rng() * 0.7), sy = landTop + landH * (0.3 + rng() * 0.45);
-      const d = `M${sx.toFixed(1)},${sy.toFixed(1)} l${((rng() - 0.5) * pw * 0.08).toFixed(1)},${(landH * 0.12).toFixed(1)} `
-        + `l${((rng() - 0.5) * pw * 0.06).toFixed(1)},${(landH * 0.1).toFixed(1)}`;
+      const sx = ix + iw * (0.15 + rng() * 0.7), sy = horizonY + groundH * (0.35 + rng() * 0.5);
+      const d = `M${sx.toFixed(1)},${sy.toFixed(1)} l${((rng() - 0.5) * iw * 0.08).toFixed(1)},${(groundH * 0.12).toFixed(1)} `
+        + `l${((rng() - 0.5) * iw * 0.06).toFixed(1)},${(groundH * 0.1).toFixed(1)}`;
       addInk('path', { d }, 0.8);
     }
-  } else if (fed === 1) {
-    const midY = landTop + landH * 0.45;
-    fills += `<rect x="${px.toFixed(1)}" y="${landTop.toFixed(1)}" width="${pw.toFixed(1)}" height="${(landH * 0.45).toFixed(1)}" fill="${FIELD_LIGHT}"/>`;
-    fills += `<rect x="${px.toFixed(1)}" y="${midY.toFixed(1)}" width="${pw.toFixed(1)}" height="${(landH * 0.55).toFixed(1)}" fill="${FIELD_DARK}"/>`;
-    addInk('line', { x1: px, y1: landTop, x2: px + pw, y2: landTop }, 1.5);
-    addInk('line', { x1: px, y1: midY, x2: px + pw, y2: midY }, 0.9);
-  } else {
-    fills += `<rect x="${px.toFixed(1)}" y="${landTop.toFixed(1)}" width="${pw.toFixed(1)}" height="${landH.toFixed(1)}" fill="${NEUTRAL_GROUND}"/>`;
-    addInk('line', { x1: px, y1: landTop, x2: px + pw, y2: landTop }, 1.5);
   }
 
   if (rng() < 0.35) {
     const side = rng() < 0.5 ? 0 : 1;
-    const rw = pw * (0.18 + rng() * 0.1), rh = landH * (0.45 + rng() * 0.3);
-    const rx = side === 0 ? px + pw * 0.04 : px + pw - rw - pw * 0.04;
-    const ry = landTop + landH - rh;
-    const outline = `M${rx.toFixed(1)},${(landTop + landH).toFixed(1)} L${(rx + rw * 0.15).toFixed(1)},${(ry + rh * 0.2).toFixed(1)} `
+    const rw = iw * (0.16 + rng() * 0.09), rh = groundH * (0.4 + rng() * 0.28);
+    const rx = side === 0 ? ix + iw * 0.03 : ix + iw - rw - iw * 0.03;
+    const ry = iy + ih - rh;
+    const outline = `M${rx.toFixed(1)},${(iy + ih).toFixed(1)} L${(rx + rw * 0.15).toFixed(1)},${(ry + rh * 0.2).toFixed(1)} `
       + `L${(rx + rw * 0.5).toFixed(1)},${ry.toFixed(1)} L${(rx + rw * 0.85).toFixed(1)},${(ry + rh * 0.25).toFixed(1)} `
-      + `L${(rx + rw).toFixed(1)},${(landTop + landH).toFixed(1)} Z`;
+      + `L${(rx + rw).toFixed(1)},${(iy + ih).toFixed(1)} Z`;
     fills += `<path d="${outline}" fill="${ROCK_DARK}"/>`;
     const lit = `M${(rx + rw * 0.5).toFixed(1)},${ry.toFixed(1)} L${(rx + rw * 0.85).toFixed(1)},${(ry + rh * 0.25).toFixed(1)} `
-      + `L${(rx + rw).toFixed(1)},${(landTop + landH).toFixed(1)} L${(rx + rw * 0.55).toFixed(1)},${(landTop + landH).toFixed(1)} Z`;
+      + `L${(rx + rw).toFixed(1)},${(iy + ih).toFixed(1)} L${(rx + rw * 0.55).toFixed(1)},${(iy + ih).toFixed(1)} Z`;
     fills += `<path d="${lit}" fill="${ROCK_LIGHT}"/>`;
-    addInk('path', { d: outline }, 1.2);
+    addInk('path', { d: outline }, 1.1);
   }
 
-  // 6. fog — a hard-edged bank with a stepped top, sliding in, swallowing
-  // the horizon past 4 (Moebius fog is a solid shape, never a gradient).
-  // Drawn behind the flora and the figure — it rolls at the horizon, not
-  // over what's standing close to the viewer.
+  // the winding path — the Moebius signature: a pale flat road from the
+  // foreground to a vanishing point at the horizon, ink on both edges
+  const vpX = ix + iw * (0.4 + rng() * 0.2);
+  const baseW = iw * (0.2 + rng() * 0.08);
+  const baseX = ix + iw * (0.32 + rng() * 0.36);
+  const bendL = (rng() - 0.5) * iw * 0.14;
+  const bendR = (rng() - 0.5) * iw * 0.14;
+  const baseY2 = iy + ih;
+  const pathD = `M${(baseX - baseW / 2).toFixed(1)},${baseY2.toFixed(1)} `
+    + `C${(baseX - baseW / 2 + bendL).toFixed(1)},${(baseY2 - groundH * 0.55).toFixed(1)} ${(vpX - 3 + bendL * 0.3).toFixed(1)},${(horizonY + groundH * 0.12).toFixed(1)} ${(vpX - 2).toFixed(1)},${horizonY.toFixed(1)} `
+    + `L${(vpX + 2).toFixed(1)},${horizonY.toFixed(1)} `
+    + `C${(vpX + 3 + bendR * 0.3).toFixed(1)},${(horizonY + groundH * 0.12).toFixed(1)} ${(baseX + baseW / 2 + bendR).toFixed(1)},${(baseY2 - groundH * 0.55).toFixed(1)} ${(baseX + baseW / 2).toFixed(1)},${baseY2.toFixed(1)} Z`;
+  fills += `<path d="${pathD}" fill="${PATH_COLOR}"/>`;
+  addInk('path', { d: pathD }, 1.1);
+
+  // 5. fog — a hard-edged, pale weather bank with a stepped top, menacing
+  // by size, never by darkness; drawn behind the flora and the figure
   if (fog != null && fog > 0) {
     const fromLeft = rng() < 0.5;
-    const fw = pw * (0.2 + (fog / 5) * 0.62);
-    const fh = landH * (0.3 + (fog / 5) * 0.85);
-    const fx = fromLeft ? px : px + pw - fw;
-    const baseTop = landTop + landH - fh;
+    const fw = iw * (0.2 + (fog / 5) * 0.62);
+    const fh = groundH * (0.3 + (fog / 5) * 0.85);
+    const fx = fromLeft ? ix : ix + iw - fw;
+    const baseTop = horizonY + groundH - fh;
     const steps = 4;
     const stepW = fw / steps;
     const heights = Array.from({ length: steps }, () => 0.5 + rng() * 0.5).sort((a, b) => (fromLeft ? b - a : a - b));
-    let d = fromLeft ? `M${fx.toFixed(1)},${(landTop + landH).toFixed(1)} ` : `M${(fx + fw).toFixed(1)},${(landTop + landH).toFixed(1)} `;
+    let d = fromLeft ? `M${fx.toFixed(1)},${(horizonY + groundH).toFixed(1)} ` : `M${(fx + fw).toFixed(1)},${(horizonY + groundH).toFixed(1)} `;
     const xs = fromLeft ? fx : fx + fw;
     for (let i = 0; i < steps; i++) {
       const stepX = fromLeft ? xs + i * stepW : xs - i * stepW;
@@ -246,53 +257,71 @@ export function dayPrint(data = {}, w = 300, h = 380) {
       const nextX = fromLeft ? xs + (i + 1) * stepW : xs - (i + 1) * stepW;
       d += `L${nextX.toFixed(1)},${stepY.toFixed(1)} `;
     }
-    d += `L${(fromLeft ? fx + fw : fx).toFixed(1)},${(landTop + landH).toFixed(1)} Z`;
+    d += `L${(fromLeft ? fx + fw : fx).toFixed(1)},${(horizonY + groundH).toFixed(1)} Z`;
     fills += `<path d="${d}" fill="${FOG}"/>`;
-    addInk('path', { d }, 1.2);
+    addInk('path', { d }, 1.1);
   }
 
-  // 5. flora — one per habit done, absent (not dimmed) when not
+  // 6. flora — clumped in 1-2 loose groups on the ground plane, not
+  // spread evenly; depth (near horizon = far = tiny, near bottom = large)
+  // sets size, so at most one plant reads as foreground
   const n = Math.max(0, Math.min(5, habitsDone));
-  for (let i = 0; i < n; i++) {
-    const fx = px + pw * ((i + 1) / (n + 1));
-    const fy = landTop + landH * 0.94;
-    fills += drawFlora(rng, addInk, fx, fy, Math.min(pw, ph) * 0.09);
+  if (n > 0) {
+    const groups = n <= 2 || rng() < 0.55 ? 1 : 2;
+    const centers = Array.from({ length: groups }, () => ix + iw * (0.22 + rng() * 0.56));
+    const foregroundIdx = rng() < 0.6 ? 0 : -1;
+    for (let i = 0; i < n; i++) {
+      const g = i % groups;
+      const depth = i === foregroundIdx ? 0.72 + rng() * 0.24 : 0.12 + rng() * 0.4;
+      const fy = horizonY + groundH * depth;
+      const fx = centers[g] + (rng() - 0.5) * iw * (0.05 + depth * 0.06);
+      const size = Math.min(iw, ih) * (0.035 + 0.09 * depth);
+      fills += drawFlora(rng, addInk, fx, fy, size, depth);
+    }
   }
 
-  // 7. the figure — tiny, lone, flat ink, standing apart from the flora
-  // (near the horizon, not among the plants) so it reads as *distance*.
-  const figH = ph * 0.032;
-  const figX = px + pw * (0.15 + rng() * 0.7);
-  let figBaseY = landTop + landH * (0.08 + rng() * 0.2);
+  // 7. the figure — tiny, standing mid-distance ON the path; a held hour
+  // earns a monolith + long shadow
+  const figFrac = 0.28 + rng() * 0.24; // how far up the path, 0=horizon..1=bottom
+  const figH = ih * (0.022 + 0.02 * figFrac);
+  const pathCenterX = vpX + (baseX - vpX) * figFrac;
+  const figX = pathCenterX + (rng() - 0.5) * baseW * figFrac * 0.3;
+  let figBaseY = horizonY + groundH * figFrac;
   if (heldHour) {
     const mw = figH * 1.1, mh = figH * 0.7;
     fills += `<rect x="${(figX - mw / 2).toFixed(1)}" y="${(figBaseY - mh).toFixed(1)}" width="${mw.toFixed(1)}" height="${mh.toFixed(1)}" fill="${MONOLITH}"/>`;
     addInk('rect', { x: figX - mw / 2, y: figBaseY - mh, width: mw, height: mh }, 1.0);
     figBaseY -= mh;
-    const shx = figX + figH * 2.6, shy = figBaseY + figH * 0.15;
-    const shadow = `M${figX.toFixed(1)},${figBaseY.toFixed(1)} L${shx.toFixed(1)},${shy.toFixed(1)} L${shx.toFixed(1)},${(shy + figH * 0.35).toFixed(1)} L${figX.toFixed(1)},${(figBaseY + figH * 0.3).toFixed(1)} Z`;
+    const shx = figX + figH * 2.8, shy = figBaseY + figH * 0.15;
+    const shadow = `M${figX.toFixed(1)},${figBaseY.toFixed(1)} L${shx.toFixed(1)},${shy.toFixed(1)} L${shx.toFixed(1)},${(shy + figH * 0.3).toFixed(1)} L${figX.toFixed(1)},${(figBaseY + figH * 0.28).toFixed(1)} Z`;
     fills += `<path d="${shadow}" fill="${SHADOW}"/>`;
   }
   fills += figureMark(figX, figBaseY, figH);
 
   // 8. birds — a tick-mark per captured moment
   for (let i = 0; i < Math.min(moments, 8); i++) {
-    const bx = px + pw * (0.1 + rng() * 0.8);
+    const bx = ix + iw * (0.1 + rng() * 0.8);
     const by = skyTop + skyH * (0.12 + rng() * 0.45);
-    const bw = pw * 0.018;
+    const bw = iw * 0.018;
     const d = `M${(bx - bw).toFixed(1)},${by.toFixed(1)} Q${bx.toFixed(1)},${(by - bw * 0.9).toFixed(1)} ${(bx + bw).toFixed(1)},${by.toFixed(1)}`;
     addInk('path', { d, fill: 'none' }, 0.9);
   }
 
-  // 9. print finish — grain over the paper, then the ink (ghost, then real)
+  // 9. print finish — grain over the paper (biased neutral, so it adds
+  // texture without dimming the plate), then the ink (ghost, then real)
   const grainId = uid('grain');
   const grainSeed = Math.floor(rng() * 900) + 1;
   const defs = `<defs><filter id="${grainId}" x="-5%" y="-5%" width="110%" height="110%">`
-    + `<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="${grainSeed}" result="n"/>`
-    + `<feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.1 1.1 1.1 0 0"/>`
+    + `<feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="${grainSeed}" result="n"/>`
+    + `<feColorMatrix in="n" type="matrix" `
+    + `values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" result="grey"/>`
     + `</filter></defs>`;
+  // a neutral-grey noise field, blended with 'overlay' rather than
+  // 'multiply': mid-grey pixels leave the plate unchanged, only the noise
+  // itself (lighter and darker specks alike) reads as grain — it cannot
+  // wash the whole plate dark the way a black multiply layer does.
   const grain = `<rect x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pw.toFixed(1)}" height="${ph.toFixed(1)}" `
-    + `fill="#000" filter="url(#${grainId})" opacity="0.65" style="mix-blend-mode:multiply"/>`;
+    + `filter="url(#${grainId})" style="mix-blend-mode:overlay"/>`;
 
   const inkLayer = (color, opacity, dx, dy) => {
     let s = `<g transform="translate(${dx},${dy})" fill="none" stroke="${color}" stroke-opacity="${opacity}" `
@@ -314,8 +343,8 @@ export function dayPrint(data = {}, w = 300, h = 380) {
   svg += defs;
   svg += fills;
   svg += grain;
-  svg += inkLayer(INK_GHOST, 0.4, slip, slip * 0.9); // misregistration ghost
-  svg += inkLayer(INK, 1, 0, 0);                      // crisp ink, on top
+  svg += inkLayer(INK_GHOST, 0.45, slip, slip * 0.9); // misregistration ghost
+  svg += inkLayer(INK, 1, 0, 0);                       // crisp ink, on top
   svg += `</svg>`;
   return svg;
 }
