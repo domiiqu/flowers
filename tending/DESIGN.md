@@ -145,6 +145,34 @@ never a lookup table of finished cards. Two clocks run:
   re-enter the equations; no fixed Variety needed (renaming a habit
   regrows its plant — provenance shifts, and that is acceptable).
 
+**The oak (decided):** the plate's centerpiece is a single tree, not a
+bed of flowers — many small ink flowers go line-messy; the references
+always hold one subject in a vast space. Habits done = leaf mass and
+branch reach; wind (a hard day) visibly bends it and strips leaves
+leeward; high aridity bares the branches. Undone habits remain clouds;
+completing one still clears the sky and fills the tree. Flowers become
+rare small ground-marks, spent sparingly. Past plates always render from
+that day's *recorded* ticks, never the current roster — roster edits
+never rewrite history.
+
+**The archive (replaces the meadow):** history is a wall of small plates —
+the postcards themselves, scrollable, tap one to visit the day. The
+meadow view and daySVG retire when the plate wiring lands.
+
+**Capture, reworked — the tag dump (urgent, before the plate wiring):**
+the now-sheet becomes a rapid-dump surface: it STAYS OPEN after each
+tag — tap tap tap, each entry logs with its timestamp and flashes into a
+small running stream inside the sheet; close is explicit (swipe down or ✕).
+The type-a-tag line autofocuses and Enter logs + clears for the next.
+Starter vocabulary (shown only until her own tags take over): b · l · d ·
+snack · dairy · coffee · adderall 10mg · fog rolls in · cramps · heavy ·
+light. The day page shows the day's tag stream with visible times
+(`13:05 b · 14:32 adderall 10mg`), and the hours line + now-mote get an
+empty-state hint so capture is discoverable. Nightly questions demote to
+optional: unwind leads with the harvest and the day-plate; scales (fog,
+mood, sleep, energy) remain but "ate enough" retires in favor of b/l/d
+tags. After a week of real tag data, the structure gets revisited.
+
 **The provenance ledger (new day-page concept, replacing click-the-flower):**
 under the plate, the habits stand as a column of small grey words, like a
 print's documentation — edition notes, a serial line. Tap a word → it inks
