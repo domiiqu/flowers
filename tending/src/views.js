@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js';
-import { dayPrint } from './print.js';
-import { computeWorldState } from './world.js';
+import * as store from './store.js?v=2';
+import { dayPrint } from './print.js?v=2';
+import { computeWorldState } from './world.js?v=2';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
