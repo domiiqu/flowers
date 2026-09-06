@@ -65,6 +65,10 @@ const FLORA = ['#e8e2d2', '#c98d84', '#a35b32', '#eee6cf', '#d9b36a', '#8d86a8']
 const FLORA_STEM = '#5f6b45';
 const OAK_TRUNK = '#6b5a3f';
 const OAK_LEAVES = ['#6f8f52', '#5a7a42', '#84a35f', '#4f6b3a'];
+// same order, shifted warmer/duller — where a leaf-cluster's color lands
+// as aridity climbs, so drought reads in the leaves themselves, not just
+// in how few of them there are
+const OAK_LEAVES_DRY = ['#a39a5a', '#8f8a4c', '#b3a468', '#7d7748'];
 
 // four aridity keyframes: green field -> sparse scrub -> cracked earth ->
 // pale dunes, each a far/mid/near three-tone ramp (cooler+paler far,
@@ -123,7 +127,7 @@ function petalPath(cx, cy, angle, len, w) {
 // seed, so renaming a habit regrows its plant but a stable name always
 // grows the same one. `layoutRng` (the day's own seeded stream) only ever
 // decides *where* it stands, never *what* it is.
-function drawFlora(name, addInk, cx, baseY, size, depth = 0.5) {
+function drawFlora(name, addInk, addFill, cx, baseY, size, depth = 0.5) {
   const nrng = mulberry(hashName(name));
   const color = FLORA[Math.floor(nrng() * FLORA.length)];
   const lean = (nrng() - 0.5) * 0.7;
@@ -142,7 +146,7 @@ function drawFlora(name, addInk, cx, baseY, size, depth = 0.5) {
   const br = { x: cx + baseHalf * stemW, y: baseY + baseHalfY * stemW };
   const stemD = `M${bl.x.toFixed(1)},${bl.y.toFixed(1)} Q${midX.toFixed(1)},${midY.toFixed(1)} ${topX.toFixed(1)},${topY.toFixed(1)} `
     + `Q${midX.toFixed(1)},${midY.toFixed(1)} ${br.x.toFixed(1)},${br.y.toFixed(1)} Z`;
-  let fill = `<path d="${stemD}" fill="${FLORA_STEM}"/>`;
+  addFill(`<path d="${stemD}" fill="${FLORA_STEM}"/>`);
   addInk('path', { d: stemD }, sw);
 
   // two leaves off the stem
@@ -153,7 +157,7 @@ function drawFlora(name, addInk, cx, baseY, size, depth = 0.5) {
     const side = i % 2 === 0 ? 1 : -1;
     const la = lean + side * 1.1;
     const d = petalPath(lx, ly, la, size * 0.32, size * 0.11);
-    fill += `<path d="${d}" fill="${FLORA_STEM}"/>`;
+    addFill(`<path d="${d}" fill="${FLORA_STEM}"/>`);
     addInk('path', { d }, Math.max(0.6, sw * 0.7));
   }
 
@@ -165,81 +169,161 @@ function drawFlora(name, addInk, cx, baseY, size, depth = 0.5) {
     const len = size * (0.3 + nrng() * 0.14);
     const w = size * (0.19 + nrng() * 0.06);
     const d = petalPath(topX, topY, a, len, w);
-    fill += `<path d="${d}" fill="${color}"/>`;
+    addFill(`<path d="${d}" fill="${color}"/>`);
     addInk('path', { d }, Math.max(0.6, sw * 0.75));
   }
   const discR = size * 0.19;
-  fill += `<circle cx="${topX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${discR.toFixed(1)}" fill="#d9b36a"/>`;
+  addFill(`<circle cx="${topX.toFixed(1)}" cy="${topY.toFixed(1)}" r="${discR.toFixed(1)}" fill="#d9b36a"/>`);
   addInk('circle', { cx: topX, cy: topY, r: discR }, sw * 0.8);
-  return fill;
 }
 
 // ---------------------------------------------------------------- the oak
 
 // a leaf-cluster keyed by a habit's name, not chance — the same habit
-// always grows the same clump wherever it lands on the crown.
-function leafCluster(name, addInk, cx, cy, size) {
+// always grows the same clump wherever it lands on the crown. drawn as
+// ONE wobbly, rounded, closed shape (a single ink contour) with a couple
+// of unoutlined accent blobs on top for shading — several individually
+// outlined blobs read as a scatter of dots, not foliage; one contour
+// reads as a mass.
+function leafCluster(name, addInk, addFill, cx, cy, size, aridity = 0) {
   const nrng = mulberry(hashName('leaf:' + name));
-  const color = OAK_LEAVES[Math.floor(nrng() * OAK_LEAVES.length)];
-  const count = 4 + Math.floor(nrng() * 3);
-  let fill = '';
-  for (let i = 0; i < count; i++) {
-    const a = nrng() * Math.PI * 2;
-    const len = size * (0.42 + nrng() * 0.3);
-    const w = size * (0.24 + nrng() * 0.08);
-    const d = petalPath(cx, cy, a, len, w);
-    fill += `<path d="${d}" fill="${color}"/>`;
-    addInk('path', { d }, 0.7);
+  const dryness = Math.max(0, Math.min(1, (aridity - 0.15) / 0.55));
+  const baseIdx = Math.floor(nrng() * OAK_LEAVES.length);
+  const shadeIdx = (baseIdx + 1 + Math.floor(nrng() * (OAK_LEAVES.length - 1))) % OAK_LEAVES.length;
+  const color = lerpColor(OAK_LEAVES[baseIdx], OAK_LEAVES_DRY[baseIdx], dryness);
+  const shade = lerpColor(OAK_LEAVES[shadeIdx], OAK_LEAVES_DRY[shadeIdx], dryness);
+
+  const lobes = 6 + Math.floor(nrng() * 2);
+  const pts = [];
+  for (let i = 0; i < lobes; i++) {
+    const a = (i / lobes) * Math.PI * 2 + nrng() * 0.3;
+    const r = size * (0.6 + nrng() * 0.22);
+    pts.push({ x: cx + Math.sin(a) * r, y: cy - Math.cos(a) * r * 0.88 });
   }
-  return fill;
+  let cloudD = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} `;
+  for (let i = 0; i < lobes; i++) {
+    const p0 = pts[i], p1 = pts[(i + 1) % lobes];
+    const bulge = size * 0.32;
+    const mx = (p0.x + p1.x) / 2 + (nrng() - 0.5) * bulge;
+    const my = (p0.y + p1.y) / 2 + (nrng() - 0.5) * bulge;
+    cloudD += `Q${mx.toFixed(1)},${my.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)} `;
+  }
+  cloudD += 'Z';
+  addFill(`<path d="${cloudD}" fill="${color}"/>`);
+  addInk('path', { d: cloudD }, 0.9);
+
+  // accent blobs, well inside the silhouette, no ink of their own — depth
+  // without a second contour
+  const accents = 2 + Math.floor(nrng() * 2);
+  for (let i = 0; i < accents; i++) {
+    const a = nrng() * Math.PI * 2;
+    const r = size * (0.16 + nrng() * 0.16);
+    const ax = cx + Math.sin(a) * size * 0.3;
+    const ay = cy - Math.cos(a) * size * 0.26;
+    addFill(`<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r.toFixed(1)}" fill="${shade}"/>`);
+  }
 }
 
-// the oak — the plate's centerpiece, off the path. habits done drive leaf
-// mass and how far the branches reach; 0 done is a bare armature. wind
-// (fog ≥ 4 or aridity ≥ 0.7) bends the whole crown leeward and loosens a
-// few leaves into the air; high aridity thins the leaves toward bare
-// regardless of how many habits are done — a drought doesn't care.
-function drawOak(rng, addInk, cx, baseY, scale, doneHabits, windy, aridity) {
-  let fill = '';
-  const lean = windy ? (rng() < 0.5 ? -0.3 : 0.3) : (rng() - 0.5) * 0.08;
-  const trunkH = scale * (1.15 + Math.min(1, doneHabits.length / 5) * 0.35);
-  const topX = cx + Math.sin(lean) * trunkH * 0.4;
-  const topY = baseY - Math.cos(lean) * trunkH;
-  const midX = cx + Math.sin(lean) * trunkH * 0.18, midY = baseY - trunkH * 0.55;
-  const trunkW = scale * 0.1;
-  const trunkD = `M${(cx - trunkW).toFixed(1)},${baseY.toFixed(1)} Q${(midX - trunkW * 0.6).toFixed(1)},${midY.toFixed(1)} `
-    + `${(topX - trunkW * 0.35).toFixed(1)},${topY.toFixed(1)} L${(topX + trunkW * 0.35).toFixed(1)},${topY.toFixed(1)} `
-    + `Q${(midX + trunkW * 0.6).toFixed(1)},${midY.toFixed(1)} ${(cx + trunkW).toFixed(1)},${baseY.toFixed(1)} Z`;
-  fill += `<path d="${trunkD}" fill="${OAK_TRUNK}"/>`;
-  addInk('path', { d: trunkD }, 1.2);
+// the oak — the plate's centerpiece, off the path. the armature (trunk +
+// limbs, each forking once) is fixed and always full, whether 0 or 5
+// habits are done — a bare winter oak is an intricate silhouette, not a
+// stub. habits done light up leaf-clusters at limb ends (which limb is a
+// hash of the habit's own name, so the same habit always lights the same
+// limb). wind (fog ≥ 4 or aridity ≥ 0.7) leans the whole crown leeward and,
+// if there's foliage to lose, loosens a few leaves downwind of it. high
+// aridity bares the crown and dulls whatever leaves remain, regardless of
+// how many habits are done — a drought doesn't care.
+function drawOak(rng, addInk, addFill, cx, baseY, scale, doneHabits, windy, aridity, boundsX) {
+  const lean = windy ? (rng() < 0.5 ? -0.24 : 0.24) : (rng() - 0.5) * 0.06;
 
-  // a fixed armature of branch slots — filled with leaf-clusters for as
-  // many habits as are done today, the rest staying bare wood
-  const slots = Math.max(3, Math.min(6, doneHabits.length || 3));
-  const bareFactor = Math.max(0, 1 - Math.max(0, (aridity - 0.6) / 0.4)); // drought thins leaves toward 0
-  for (let i = 0; i < slots; i++) {
-    const frac = slots === 1 ? 0.5 : i / (slots - 1);
-    const angle = lean + (frac - 0.5) * 2.3;
-    const blen = scale * (0.5 + rng() * 0.3) * (0.85 + Math.min(1, doneHabits.length / 5) * 0.3);
-    const bx = topX + Math.sin(angle) * blen;
-    const by = topY - Math.abs(Math.cos(angle)) * blen * 0.55 - blen * 0.25;
-    addInk('line', { x1: topX, y1: topY, x2: bx, y2: by, fill: 'none' }, 1.0);
-    if (i < doneHabits.length && bareFactor > 0.08) {
-      fill += leafCluster(doneHabits[i].name, addInk, bx, by, scale * 0.34 * bareFactor);
+  // trunk — a filled, tapered silhouette with one gentle S-curve (two Q
+  // segments per side) and a flared root, ink-outlined like everything else
+  const trunkH = scale * 1.05;
+  const rootHW = scale * 0.115, topHW = scale * 0.05;
+  const sBend = trunkH * 0.05;
+  const p1x = cx + Math.sin(lean) * trunkH * 0.16 + sBend, p1y = baseY - trunkH * 0.36;
+  const p2x = cx + Math.sin(lean) * trunkH * 0.32, p2y = baseY - trunkH * 0.62;
+  const p3x = p2x - sBend * 0.8, p3y = baseY - trunkH * 0.86;
+  const topX = cx + Math.sin(lean) * trunkH * 0.4, topY = baseY - trunkH;
+  const hw = (t) => rootHW + (topHW - rootHW) * t;
+  const trunkD = `M${(cx - rootHW).toFixed(1)},${baseY.toFixed(1)} `
+    + `Q${(p1x - hw(0.35)).toFixed(1)},${p1y.toFixed(1)} ${(p2x - hw(0.6)).toFixed(1)},${p2y.toFixed(1)} `
+    + `Q${(p3x - hw(0.85)).toFixed(1)},${p3y.toFixed(1)} ${(topX - topHW).toFixed(1)},${topY.toFixed(1)} `
+    + `L${(topX + topHW).toFixed(1)},${topY.toFixed(1)} `
+    + `Q${(p3x + hw(0.85)).toFixed(1)},${p3y.toFixed(1)} ${(p2x + hw(0.6)).toFixed(1)},${p2y.toFixed(1)} `
+    + `Q${(p1x + hw(0.35)).toFixed(1)},${p1y.toFixed(1)} ${(cx + rootHW).toFixed(1)},${baseY.toFixed(1)} Z`;
+  addFill(`<path d="${trunkD}" fill="${OAK_TRUNK}"/>`);
+  addInk('path', { d: trunkD }, 1.4);
+
+  // limbs — filled tapered quads curving up and outward from the crown of
+  // the trunk, each forking once near its end into two thinner secondary
+  // branches (ink strokes: the fork is fine wood, not worth its own fill)
+  const limbCount = 4 + (rng() < 0.5 ? 0 : 1); // 4-5, varies day to day
+  const spread = 2.5;
+  const bareFactor = Math.max(0, 1 - Math.max(0, (aridity - 0.6) / 0.4)); // drought bares it
+  const limbEnds = [];
+  for (let i = 0; i < limbCount; i++) {
+    const frac = limbCount === 1 ? 0.5 : i / (limbCount - 1);
+    const shoulderX = topX + (frac - 0.5) * topHW * 3.4;
+    const shoulderY = topY + Math.abs(frac - 0.5) * scale * 0.02;
+    const angle = lean + (frac - 0.5) * spread;
+    const limbLen = scale * (0.6 + rng() * 0.16);
+    const endX = shoulderX + Math.sin(angle) * limbLen;
+    const endY = shoulderY - Math.abs(Math.cos(angle)) * limbLen * 0.62 - limbLen * 0.2;
+    const midX = (shoulderX + endX) / 2 + Math.cos(angle) * limbLen * 0.1;
+    const midY = (shoulderY + endY) / 2 - limbLen * 0.05;
+    const baseHW = scale * 0.03, tipHW = scale * 0.009;
+    const perpX = Math.sin(angle + Math.PI / 2), perpY = -Math.cos(angle + Math.PI / 2);
+    const limbD = `M${(shoulderX - perpX * baseHW).toFixed(1)},${(shoulderY - perpY * baseHW).toFixed(1)} `
+      + `Q${(midX - perpX * baseHW * 0.5).toFixed(1)},${(midY - perpY * baseHW * 0.5).toFixed(1)} ${(endX - perpX * tipHW).toFixed(1)},${(endY - perpY * tipHW).toFixed(1)} `
+      + `L${(endX + perpX * tipHW).toFixed(1)},${(endY + perpY * tipHW).toFixed(1)} `
+      + `Q${(midX + perpX * baseHW * 0.5).toFixed(1)},${(midY + perpY * baseHW * 0.5).toFixed(1)} ${(shoulderX + perpX * baseHW).toFixed(1)},${(shoulderY + perpY * baseHW).toFixed(1)} Z`;
+    addFill(`<path d="${limbD}" fill="${OAK_TRUNK}"/>`);
+    addInk('path', { d: limbD }, 1.0);
+
+    for (const side of [-1, 1]) {
+      const forkAngle = angle + side * 0.34;
+      const forkLen = limbLen * 0.4;
+      const fx = endX + Math.sin(forkAngle) * forkLen;
+      const fy = endY - Math.abs(Math.cos(forkAngle)) * forkLen * 0.55 - forkLen * 0.12;
+      addInk('line', { x1: endX, y1: endY, x2: fx, y2: fy, fill: 'none' }, Math.max(0.6, tipHW));
+    }
+    limbEnds.push({ x: endX, y: endY });
+  }
+
+  // leaf clusters — one per done habit, at a limb end its own name picks
+  if (bareFactor > 0.08 && limbEnds.length) {
+    for (const hb of doneHabits) {
+      const limb = limbEnds[hashName(hb.name) % limbEnds.length];
+      const jrng = mulberry(hashName('jit:' + hb.name));
+      const jx = limb.x + (jrng() - 0.5) * scale * 0.05;
+      const jy = limb.y + (jrng() - 0.5) * scale * 0.05;
+      leafCluster(hb.name, addInk, addFill, jx, jy, scale * 0.3 * bareFactor, aridity);
     }
   }
 
-  if (windy) {
-    // a few leaves loosened into the air, drifting leeward
-    const driftN = 2 + Math.floor(rng() * 2);
+  // wind: only if there's foliage to lose — a bare crown has nothing for
+  // the wind to loosen. the marks drift downwind of the crown, not float
+  // symmetrically around the trunk.
+  if (windy && bareFactor > 0.08 && doneHabits.length) {
+    const leeSign = Math.sin(lean) >= 0 ? 1 : -1;
+    // start beyond whichever limb reaches furthest downwind — not the
+    // crown's centroid — so the marks land clear of the foliage itself,
+    // in the open sky past it, rather than on top of a leaf-cluster
+    const leeLimb = limbEnds.reduce((best, l) =>
+      (leeSign > 0 ? l.x > best.x : l.x < best.x) ? l : best, limbEnds[0]);
+    const crownY = limbEnds.reduce((a, l) => a + l.y, 0) / limbEnds.length;
+    const driftN = 2 + Math.floor(rng() * 3);
+    const pad = scale * 0.12;
+    const [loX, hiX] = boundsX || [-Infinity, Infinity];
     for (let i = 0; i < driftN; i++) {
-      const dx = topX + Math.sin(lean) * scale * (0.9 + rng() * 0.7);
-      const dy = topY - scale * 0.15 + rng() * scale * 0.5;
-      const d = petalPath(dx, dy, lean, scale * 0.13, scale * 0.06);
-      addInk('path', { d, fill: 'none' }, 0.6);
+      let dx = leeLimb.x + leeSign * scale * (0.22 + rng() * 0.4);
+      dx = Math.max(loX + pad, Math.min(hiX - pad, dx)); // stay inside the clipped scene
+      const dy = crownY - scale * 0.1 + rng() * scale * 0.45;
+      const d = petalPath(dx, dy, lean, scale * 0.14, scale * 0.06);
+      addInk('path', { d, fill: 'none' }, 0.9);
     }
   }
-  return fill;
 }
 
 // ------------------------------------------------------- clouds (weather)
@@ -269,17 +353,16 @@ function stepCloud(cx, cy, cw) {
 
 // a proper Moebius silhouette: cloak, hood, one fold line — reads as a
 // tiny lone walker at 10px, never a stick figure.
-function figureMark(addInk, x, baseY, h) {
+function figureMark(addInk, addFill, x, baseY, h) {
   const cloakTopY = baseY - h * 0.6, cloakW = h * 0.52;
   const bodyD = `M${(x - cloakW / 2).toFixed(1)},${baseY.toFixed(1)} L${(x - cloakW * 0.16).toFixed(1)},${cloakTopY.toFixed(1)} `
     + `L${(x + cloakW * 0.16).toFixed(1)},${cloakTopY.toFixed(1)} L${(x + cloakW / 2).toFixed(1)},${baseY.toFixed(1)} Z`;
   const headR = h * 0.17, headY = baseY - h * 0.78;
   const hatRx = headR * 1.7, hatRy = headR * 0.6, hatY = headY - headR * 0.35;
-  let s = `<path d="${bodyD}" fill="${INK}"/>`;
-  s += `<ellipse cx="${x.toFixed(1)}" cy="${hatY.toFixed(1)}" rx="${hatRx.toFixed(1)}" ry="${hatRy.toFixed(1)}" fill="${INK}"/>`;
-  s += `<circle cx="${x.toFixed(1)}" cy="${headY.toFixed(1)}" r="${headR.toFixed(1)}" fill="${INK}"/>`;
+  addFill(`<path d="${bodyD}" fill="${INK}"/>`);
+  addFill(`<ellipse cx="${x.toFixed(1)}" cy="${hatY.toFixed(1)}" rx="${hatRx.toFixed(1)}" ry="${hatRy.toFixed(1)}" fill="${INK}"/>`);
+  addFill(`<circle cx="${x.toFixed(1)}" cy="${headY.toFixed(1)}" r="${headR.toFixed(1)}" fill="${INK}"/>`);
   addInk('line', { x1: x, y1: cloakTopY, x2: x, y2: baseY, fill: 'none' }, Math.max(0.7, h * 0.045));
-  return s;
 }
 
 // ------------------------------------------------------------ the path
@@ -346,6 +429,16 @@ export function dayPrint(data = {}, w = 300, h = 380) {
       + `stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round">${shape}</g>`;
     fills += `<g fill="none" stroke="${INK}" stroke-linecap="round" stroke-linejoin="round">${shape}</g>`;
   };
+  // a fill, appended immediately (same reasoning as addInk): a helper that
+  // builds up its own shapes+ink and hands them back as one string (rather
+  // than calling addFill directly) would have every ink line it drew
+  // trapped *underneath* its own fills once that string gets appended —
+  // the fills arrive in one lump, after all of that ink already landed.
+  // drawFlora/leafCluster/drawOak/figureMark take this instead of
+  // returning a string, so a late fill (a leaf cluster) can still sit
+  // correctly on top of an earlier one (its own limb) without also
+  // burying something unrelated drawn between the two (a wind mark).
+  const addFill = (svg) => { fills += svg; };
 
   // 1. mount
   const mount = MOUNTS[Math.floor(rng() * MOUNTS.length)];
@@ -643,18 +736,12 @@ export function dayPrint(data = {}, w = 300, h = 380) {
   // 6. the oak — the centerpiece, midground, off the path (opposite side
   // from wherever the path's foreground anchor sits, so they never
   // collide); habits done shape its leaf mass and reach
-  const oakSide = preGeo.baseX > ix + iw / 2 ? 0.16 : 0.84;
-  const oakDepth = Math.min(0.68, Math.max(minDepth + 0.08, 0.4));
+  const oakSide = preGeo.baseX > ix + iw / 2 ? 0.22 : 0.78;
+  const oakDepth = Math.min(0.72, Math.max(minDepth + 0.14, 0.48));
   const oakX = ix + iw * oakSide;
   const oakY = horizonY + groundH * oakDepth;
-  const oakScale = Math.min(iw, ih) * 0.3;
-  // note: capture the return value in its own statement, then append it —
-  // `fills += drawOak(...)` would read the pre-call value of `fills` before
-  // evaluating the call, silently discarding every addInk() the call makes
-  // internally (they mutate `fills` via closure, but that write gets
-  // clobbered by the outer assignment's stale left-hand read).
-  const oakFill = drawOak(rng, addInk, oakX, oakY, oakScale, doneHabits, windy, aridity);
-  fills += oakFill;
+  const oakScale = Math.min(iw, ih) * 0.24;
+  drawOak(rng, addInk, addFill, oakX, oakY, oakScale, doneHabits, windy, aridity, [ix, ix + iw]);
 
   // flora demoted: at most 1-2 small ground-mark flowers, only on strong
   // days, never near water or the mountains (same land-only floor)
@@ -669,8 +756,7 @@ export function dayPrint(data = {}, w = 300, h = 380) {
       const fy = horizonY + groundH * depth;
       const depthNorm = (depth - minDepth) / span;
       const size = maxSize * (0.6 + 0.4 * depthNorm);
-      const floraFill = drawFlora(hb.name + i, addInk, fx, fy, size, depth); // see note above drawOak's call
-      fills += floraFill;
+      drawFlora(hb.name + i, addInk, addFill, fx, fy, size, depth);
     }
   }
 
@@ -691,8 +777,7 @@ export function dayPrint(data = {}, w = 300, h = 380) {
     const shadow = `M${figX.toFixed(1)},${figBaseY.toFixed(1)} L${shx.toFixed(1)},${shy.toFixed(1)} L${shx.toFixed(1)},${(shy + figH * 0.3).toFixed(1)} L${figX.toFixed(1)},${(figBaseY + figH * 0.28).toFixed(1)} Z`;
     fills += `<path d="${shadow}" fill="${SHADOW}"/>`;
   }
-  const figureFill = figureMark(addInk, figX, figBaseY, figH); // see note above drawOak's call
-  fills += figureFill;
+  figureMark(addInk, addFill, figX, figBaseY, figH);
 
   // 8. birds — a tick-mark per captured moment; some perch on wires
   const onWire = wires > 0 && wireY.length > 1 ? Math.min(moments, Math.floor(moments / 2) + 1) : 0;
