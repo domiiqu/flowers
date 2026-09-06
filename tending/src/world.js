@@ -173,6 +173,33 @@ function computeHabits(dateISO, data, isToday) {
     .map((t) => ({ name: t.f.Habit, done: true }));
 }
 
+// the same world, flattened to scalars for the Days row — the base's
+// plate generator (an AI image field reading a formula field) paints from
+// these numbers; a formula there turns them into prompt prose. Pure like
+// everything here: the caller decides when to write it back.
+export function dayStateFields(dateISO, data) {
+  const w = computeWorldState(dateISO, data);
+  const entryVal = (tracker) => {
+    const e = (data.Entries || []).find((x) => x.f.Tracker === tracker && x.f.Date === dateISO);
+    return e && e.f.Value != null ? e.f.Value : null;
+  };
+  return {
+    HabitsDone: w.habits.filter((h) => h.done).length,
+    HabitsTotal: w.habits.length,
+    Fog: w.fog,
+    Mood: entryVal('mood'),
+    Sleep: entryVal('sleep'),
+    HeldHour: w.heldHour,
+    ScheduleCount: w.wires,
+    Moments: w.moments,
+    NewTag: w.snake,
+    Aridity: Number(w.aridity.toFixed(2)),
+    Path: Number(w.path.toFixed(2)),
+    Sea: Number(w.sea.toFixed(2)),
+    TowerFloors: w.towerFloors,
+  };
+}
+
 export function computeWorldState(dateISO, data) {
   const isToday = dateISO === todayISO();
   const dayInfo = buildDayInfo(data);

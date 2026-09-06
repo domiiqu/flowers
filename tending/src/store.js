@@ -78,6 +78,22 @@ export const SCHEMA = [
     { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
     { name: 'Schedule', type: 'multilineText' },
     { name: 'Note', type: 'multilineText' },
+    // the day's world-state, flattened and written back — the base's
+    // plate generator (an AI image field over a formula field) paints
+    // from these; the slow math stays in the app (world.js)
+    { name: 'HabitsDone', type: 'number', options: { precision: 0 } },
+    { name: 'HabitsTotal', type: 'number', options: { precision: 0 } },
+    { name: 'Fog', type: 'number', options: { precision: 0 } },
+    { name: 'Mood', type: 'number', options: { precision: 0 } },
+    { name: 'Sleep', type: 'number', options: { precision: 2 } },
+    { name: 'HeldHour', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'ScheduleCount', type: 'number', options: { precision: 0 } },
+    { name: 'Moments', type: 'number', options: { precision: 0 } },
+    { name: 'NewTag', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Aridity', type: 'number', options: { precision: 2 } },
+    { name: 'Path', type: 'number', options: { precision: 2 } },
+    { name: 'Sea', type: 'number', options: { precision: 2 } },
+    { name: 'TowerFloors', type: 'number', options: { precision: 0 } },
   ]},
   { name: 'Moments', fields: [
     { name: 'Key', type: 'singleLineText' },
@@ -454,6 +470,13 @@ export async function saveDay(date, patch) {
   write({ kind: 'upsert', table: 'Days', mergeField: 'Key', fields });
 }
 
+// the day's flattened world-state, upserted onto its Days row (an alias
+// of saveDay in shape, named for its purpose: this is the plate
+// generator's feed, not a schedule/note edit)
+export async function saveDayState(date, state) {
+  return saveDay(date, state);
+}
+
 // moments — caught in passing. append-only but keyed, so the little
 // after-ribbon (adjusting time or sureness) is just an upsert, and a
 // mis-tap can be taken back.
@@ -546,22 +569,36 @@ export async function upsertRow(table, mergeField, fields) {
 
 // --------------------------------------------------------- planting base
 // creates any missing tables in the given base via the airtable meta api,
-// then sows default rows into tables it just created.
+// grows any missing fields on tables that already exist (so replanting
+// upgrades an old base in place), then sows default rows into tables it
+// just created.
 
 export async function plantBase(report = () => {}) {
   const s = getSettings();
   if (!s.pat || !s.baseId) throw new Error('a token and a base id first');
   const meta = await at(`/meta/bases/${s.baseId}/tables`);
-  const have = new Set(meta.tables.map(t => t.name));
   const grown = [];
   for (const spec of SCHEMA) {
-    if (have.has(spec.name)) { report(`${spec.name} — already growing`); continue; }
-    report(`planting ${spec.name}…`);
-    await at(`/meta/bases/${s.baseId}/tables`, {
-      method: 'POST',
-      body: JSON.stringify({ name: spec.name, fields: spec.fields }),
-    });
-    grown.push(spec.name);
+    const table = meta.tables.find(t => t.name === spec.name);
+    if (!table) {
+      report(`planting ${spec.name}…`);
+      await at(`/meta/bases/${s.baseId}/tables`, {
+        method: 'POST',
+        body: JSON.stringify({ name: spec.name, fields: spec.fields }),
+      });
+      grown.push(spec.name);
+      continue;
+    }
+    const haveFields = new Set(table.fields.map(f => f.name));
+    const missing = spec.fields.filter(f => !haveFields.has(f.name));
+    if (!missing.length) { report(`${spec.name} — already growing`); continue; }
+    report(`${spec.name} — growing ${missing.length} new field${missing.length === 1 ? '' : 's'}…`);
+    for (const f of missing) {
+      await at(`/meta/bases/${s.baseId}/tables/${table.id}/fields`, {
+        method: 'POST',
+        body: JSON.stringify(f),
+      });
+    }
   }
   for (const [table, rows] of Object.entries(DEFAULTS)) {
     if (!grown.includes(table)) continue;

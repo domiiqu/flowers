@@ -4,7 +4,7 @@
 
 import * as store from './store.js?v=2';
 import { dayPrint } from './print.js?v=2';
-import { computeWorldState } from './world.js?v=2';
+import { computeWorldState, dayStateFields } from './world.js?v=2';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -245,6 +245,7 @@ export function mountDay(app, date) {
         renderLedger();
         renderPlate(true);
         renderWallet();
+        scheduleDaySync();
       });
       ledger.appendChild(word);
       if (i < habits.length - 1) ledger.appendChild(h('span', { class: 'ledger-sep' }, '·'));
@@ -253,6 +254,22 @@ export function mountDay(app, date) {
 
   function onResize() { renderPlate(); }
   window.addEventListener('resize', onResize);
+
+  // after anything changes the day, its flattened world-state is written
+  // back onto the Days row (debounced, so a rapid tag dump becomes one
+  // write) — the base's plate generator paints from those numbers. also
+  // run once on opening today, which both births the day's row and
+  // catches changes made in other rooms (a held hour, say).
+  let syncTimer = null;
+  function scheduleDaySync() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(runDaySync, 2500);
+  }
+  function runDaySync() {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+    store.saveDayState(date, dayStateFields(date, store.S.data));
+  }
 
   // which moment (by Key) is being edited right now — its dot is singled
   // out and the rest recede while this holds.
@@ -354,6 +371,7 @@ export function mountDay(app, date) {
         selectedKey = m.f.Key;
         renderHoursLine();
         showDetail(m.f.Key);
+        scheduleDaySync();
       } else if (selectedKey === m.f.Key) {
         cycleSure(m.f.Key);
       } else {
@@ -384,6 +402,7 @@ export function mountDay(app, date) {
     await store.adjustMoment(key, { Sure: SURE_NEXT[sureOf(m)] });
     renderHoursLine();
     showDetail(key);
+    scheduleDaySync();
   }
 
   // -------------------------------------------------- moments, caught in passing
@@ -416,6 +435,7 @@ export function mountDay(app, date) {
       await store.removeMoment(key);
       deselect();
       renderHoursLine();
+      scheduleDaySync();
     });
     line.appendChild(word);
     line.appendChild(del);
@@ -510,6 +530,7 @@ export function mountDay(app, date) {
         await store.removeMoment(m.f.Key);
         renderHoursLine();
         renderStream();
+        scheduleDaySync();
       });
       return h('div', { class: 'stream-entry' }, [text, del]);
     }
@@ -526,6 +547,7 @@ export function mountDay(app, date) {
           renderHoursLine();
           clear(petalSlot);
           renderStream();
+          scheduleDaySync();
         });
         row.appendChild(p);
       }
@@ -539,6 +561,7 @@ export function mountDay(app, date) {
       const key = await store.captureMoment({ tag, date });
       renderHoursLine();
       renderStream();
+      scheduleDaySync();
       const tracker = store.activeTrackers().find((t) => t.f.Name === tag && t.f.Kind === 'scale');
       if (tracker) petalStepInline(tracker, key);
       else clear(petalSlot);
@@ -592,6 +615,12 @@ export function mountDay(app, date) {
   renderPlate();
   renderHoursLine();
 
+  // birth today's row on arrival — this also catches state set in other
+  // rooms (a held hour) and keeps the plate generator's feed current even
+  // on a day she only looks at. past days are already fixed, so leave
+  // them be rather than rewrite a settled row on every flip through history.
+  if (date === today) scheduleDaySync();
+
   const unbindSwipe = bindSwipe(root, {
     onLeft: () => (location.hash = `#/day/${store.addDays(date, 1)}`),
     onRight: () => (location.hash = `#/day/${store.addDays(date, -1)}`),
@@ -602,6 +631,7 @@ export function mountDay(app, date) {
     unbindWalletHold();
     window.removeEventListener('resize', onResize);
     document.removeEventListener('pointerdown', onDocDown);
+    if (syncTimer) runDaySync(); // flush a pending write before leaving
   };
 }
 
