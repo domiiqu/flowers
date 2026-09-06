@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=3';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -42,7 +42,6 @@ function buildDayInfo(data) {
     info.set(date, cur);
   };
   for (const t of data.Ticks || []) touch(t.f.Date, false);
-  for (const e of data.Entries || []) touch(e.f.Date, false);
   for (const m of data.Moments || []) touch(m.f.Date, isMealTag(m.f.Tag));
   return info;
 }
@@ -118,20 +117,22 @@ function computeHeldHour(dateISO, data) {
   return (data.Hours || []).some((h) => h.f.Date === dateISO && h.f.Outcome === 'held');
 }
 
+// scalar ratings live on tagged Moments now (Trackers/Entries retired):
+// the day's value for a tag whose name matches `re` and carries a Value.
+function momentValue(dateISO, data, re) {
+  const m = (data.Moments || []).find(
+    (x) => x.f.Date === dateISO && x.f.Value != null && re.test(x.f.Tag || '')
+  );
+  return m ? m.f.Value : null;
+}
+
 function computeTwoSuns(dateISO, data) {
-  const entry = (data.Entries || []).find((e) => e.f.Tracker === 'sleep' && e.f.Date === dateISO);
-  if (entry && entry.f.Value != null) return entry.f.Value < 5;
-  const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /sleep/i.test(m.f.Tag || ''));
-  if (moment) return moment.f.Value < 5;
-  return false;
+  const s = momentValue(dateISO, data, /sleep/i);
+  return s != null ? s < 5 : false;
 }
 
 function computeFog(dateISO, data) {
-  const entry = (data.Entries || []).find((e) => e.f.Tracker === 'brain fog' && e.f.Date === dateISO);
-  if (entry && entry.f.Value != null) return entry.f.Value;
-  const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /fog/i.test(m.f.Tag || ''));
-  if (moment) return moment.f.Value;
-  return null;
+  return momentValue(dateISO, data, /fog/i);
 }
 
 function computeSnake(dateISO, data) {
@@ -147,9 +148,9 @@ function computeSnake(dateISO, data) {
 }
 
 function computeLight(dateISO, data, isToday) {
-  const moodEntry = (data.Entries || []).find((e) => e.f.Tracker === 'mood' && e.f.Date === dateISO);
-  if (moodEntry && moodEntry.f.Value != null) {
-    const m = Math.max(0, Math.min(5, moodEntry.f.Value));
+  const mood = momentValue(dateISO, data, /mood/i);
+  if (mood != null) {
+    const m = Math.max(0, Math.min(5, mood));
     return { light: 0.12 + (m / 5) * 0.76, lightHour: 13.5 };
   }
   if (isToday) {
@@ -171,6 +172,55 @@ function computeHabits(dateISO, data, isToday) {
   return (data.Ticks || [])
     .filter((t) => t.f.Date === dateISO && t.f.Habit)
     .map((t) => ({ name: t.f.Habit, done: true }));
+}
+
+// the same world, flattened to scalars for the Days row — the base's
+// plate generator (an AI image field reading a formula field) paints from
+// these numbers; a formula there turns them into prompt prose. Pure like
+// everything here: the caller decides when to write it back.
+// the year clock — season from the date's month (northern hemisphere;
+// flip the pairs for southern). Kept to the four canonical words so the
+// base's formula can SWITCH on it cleanly; early/late nuance can layer on
+// later.
+function seasonOf(dateISO) {
+  const m = Number((dateISO || '').slice(5, 7)); // 1..12
+  if (m === 12 || m <= 2) return 'winter';
+  if (m <= 5) return 'spring';
+  if (m <= 8) return 'summer';
+  return 'autumn';
+}
+
+// the life clock — how many distinct days the practice has touched up to
+// and including this one. NOTE: only the loaded window feeds this (~DAYS_BACK
+// days), so it plateaus for a long practice; a true lifetime count would
+// need a stored running total. Good enough as a maturity proxy for now.
+function countTrackedDays(dateISO, data) {
+  const seen = new Set();
+  const add = (d) => { if (d && d <= dateISO) seen.add(d); };
+  for (const t of data.Ticks || []) add(t.f.Date);
+  for (const m of data.Moments || []) add(m.f.Date);
+  return seen.size;
+}
+
+export function dayStateFields(dateISO, data) {
+  const w = computeWorldState(dateISO, data);
+  return {
+    HabitsDone: w.habits.filter((h) => h.done).length,
+    HabitsTotal: w.habits.length,
+    Fog: w.fog,
+    Mood: momentValue(dateISO, data, /mood/i),
+    Sleep: momentValue(dateISO, data, /sleep/i),
+    HeldHour: w.heldHour,
+    ScheduleCount: w.wires,
+    Moments: w.moments,
+    NewTag: w.snake,
+    Aridity: Number(w.aridity.toFixed(2)),
+    Path: Number(w.path.toFixed(2)),
+    Sea: Number(w.sea.toFixed(2)),
+    TowerFloors: w.towerFloors,
+    Season: seasonOf(dateISO),
+    DaysTracked: countTrackedDays(dateISO, data),
+  };
 }
 
 export function computeWorldState(dateISO, data) {
