@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=4';
-import { dayStateFields } from './world.js?v=4';
-import * as gcal from './gcal.js?v=4';
+import * as store from './store.js?v=5';
+import { dayStateFields } from './world.js?v=5';
+import * as gcal from './gcal.js?v=5';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -154,8 +154,10 @@ export function mountDay(app, date) {
   root.appendChild(header);
 
   if (date !== today) {
+    // labeled as a return trip, not a claim about what day this is —
+    // "today" alone read as the app calling yesterday today.
     root.appendChild(h('div', { class: 'today-link' },
-      h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, 'today')));
+      h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, '‹ back to today')));
   }
 
   // the day's shape — schedule as soft blocks (Google Calendar when

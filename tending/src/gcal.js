@@ -4,7 +4,7 @@
 // sessionStorage only — same trust model as the Airtable PAT, and just as
 // easy to revoke (close the tab, or disconnect in tend).
 
-import { getSettings } from './store.js?v=4';
+import { getSettings } from './store.js?v=5';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
