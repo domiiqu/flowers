@@ -73,8 +73,8 @@ One screen. No scrolling on desktop; a single gentle column on phones.
   shop · the hour · unwind · tend`.
 
 ### moments — caught in passing (lives inside the day page)
-The second capture primitive, beside the nightly trackers: **moments** are
-timestamped (or deliberately un-timestamped) tags — `adderall 10mg` at
+The capture primitive (it absorbed the retired trackers too): **moments**
+are timestamped (or deliberately un-timestamped) tags — `adderall 10mg` at
 exactly 14:32, `mood 2` mid-afternoon, `cramps` sometime today. Built for
 running out the door with a poor memory: capture must cost two taps, and
 trusting the timestamp must cost zero.
@@ -250,12 +250,20 @@ flower — and *"goodnight."*
 
 ### tend — `#/tend`
 Plain and small: PAT + base id fields; **plant the base** (creates missing
-tables via the meta API, sows defaults — `store.plantBase`); **carry the
-sandbox over** (`store.transplantSandbox`); export everything as JSON;
-and tiny editors to add/rename habits, trackers, shop items (needed for
-sandbox mode; with Airtable connected the base itself is the admin UI —
-say so here in one line). Show connection state and queued-writes count
-plainly. A one-line warning that the token lives in this browser only.
+tables *and grows missing fields on tables that already exist* via the meta
+API, sows defaults — `store.plantBase`, so replanting upgrades an old base
+in place); **carry the sandbox over** (`store.transplantSandbox`); export
+everything as JSON; and tiny editors to add/rename habits, shop items
+(needed for sandbox mode; with Airtable connected the base itself is the
+admin UI — say so here in one line). Show connection state and queued-writes
+count plainly. A one-line warning that the token lives in this browser only.
+
+> **Trackers/Entries retired.** The nightly ritual that fed them is gone;
+> scalar ratings (mood, sleep, fog, energy) are captured as **tagged
+> Moments carrying a `Value`** — `store.VALUE_TAGS` defines their scales,
+> and `world.js` reads them back by name for the plate. The day's whole
+> world-state is flattened onto its `Days` row (`world.dayStateFields`,
+> written by the day page) so the base can paint the plate from a formula.
 
 ## first run
 No auth wall, no title screen. The sandbox seeds itself

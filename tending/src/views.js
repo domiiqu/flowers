@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=2';
-import { dayPrint } from './print.js?v=2';
-import { computeWorldState, dayStateFields } from './world.js?v=2';
+import * as store from './store.js?v=3';
+import { dayPrint } from './print.js?v=3';
+import { computeWorldState, dayStateFields } from './world.js?v=3';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -535,10 +535,10 @@ export function mountDay(app, date) {
       return h('div', { class: 'stream-entry' }, [text, del]);
     }
 
-    function petalStepInline(tracker, key) {
+    function petalStepInline(spec, key) {
       clear(petalSlot);
-      const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
-      petalSlot.appendChild(h('div', { class: 'dim italic petal-hint' }, `${tracker.f.Name} — optional`));
+      const min = spec.min ?? 0, max = spec.max ?? 5;
+      petalSlot.appendChild(h('div', { class: 'dim italic petal-hint' }, `${spec.name} — optional`));
       const row = h('div', { class: 'mini-petals' });
       for (let i = min; i <= max; i++) {
         const p = h('button', { class: 'mini-petal' }, String(i));
@@ -562,8 +562,8 @@ export function mountDay(app, date) {
       renderHoursLine();
       renderStream();
       scheduleDaySync();
-      const tracker = store.activeTrackers().find((t) => t.f.Name === tag && t.f.Kind === 'scale');
-      if (tracker) petalStepInline(tracker, key);
+      const spec = store.valueTagFor(tag);
+      if (spec) petalStepInline(spec, key);
       else clear(petalSlot);
     }
 
@@ -797,8 +797,6 @@ export function mountTend(app) {
     { key: 'Seeds', type: 'number', width: 70 },
   ], () => ({ Variety: 1 + Math.floor(Math.random() * 900), Order: nextOrder('Habits'), Active: true, Seeds: 3 })));
 
-  root.appendChild(trackerEditor());
-
   root.appendChild(shopEditor());
 
   const hints = h('div', { class: 'hints' }, [
@@ -914,49 +912,5 @@ function shopEditor() {
   });
   section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addSign, addCost]));
   section.appendChild(h('div', { class: 'row', style: 'margin-top:6px' }, [addLink, addBtn]));
-  return section;
-}
-
-function trackerEditor() {
-  const section = h('div', { class: 'tend-section' });
-  section.appendChild(h('h2', {}, 'trackers'));
-  const list = h('div', { class: 'tend-list' });
-  section.appendChild(list);
-
-  function renderList() {
-    clear(list);
-    const rows = [...store.S.data.Trackers].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-    for (const row of rows) {
-      const nameInput = h('input', { type: 'text', class: 'field' });
-      nameInput.value = row.f.Name || '';
-      nameInput.addEventListener('blur', () => renameRow('Trackers', row, nameInput.value).then(renderList));
-      const kind = h('span', { class: 'dim', style: 'font-size:.72rem' }, row.f.Kind || '');
-      const active = h('input', { type: 'checkbox' });
-      active.checked = !!row.f.Active;
-      active.addEventListener('change', () => {
-        store.upsertRow('Trackers', 'Name', { Name: row.f.Name, Active: active.checked });
-      });
-      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, kind, h('label', { class: 'checklabel' }, [active, 'on'])]));
-    }
-  }
-  renderList();
-
-  const addName = h('input', { type: 'text', placeholder: 'name…', class: 'field' });
-  const addAsk = h('input', { type: 'text', placeholder: 'ask… (how thick was the fog today?)', class: 'field' });
-  const kindSel = h('select', { class: 'field' }, ['scale', 'number', 'yesno', 'words'].map((k) => h('option', { value: k }, k)));
-  const addBtn = h('button', { class: 'btn' }, 'add');
-  addBtn.addEventListener('click', async () => {
-    const name = addName.value.trim();
-    if (!name) return;
-    await store.upsertRow('Trackers', 'Name', {
-      Name: name, Ask: addAsk.value.trim() || name, Kind: kindSel.value,
-      Min: 0, Max: kindSel.value === 'scale' ? 5 : kindSel.value === 'number' ? 14 : 1,
-      Order: nextOrder('Trackers'), Active: true,
-    });
-    addName.value = ''; addAsk.value = '';
-    renderList();
-  });
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px;flex-direction:column;align-items:stretch;gap:6px' },
-    [addName, addAsk, h('div', { class: 'row' }, [kindSel, addBtn])]));
   return section;
 }

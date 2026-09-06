@@ -40,24 +40,9 @@ export const SCHEMA = [
       { name: 'withered', color: 'grayLight1' } ] } },
     { name: 'GatheredOn', type: 'date', options: { dateFormat: { name: 'iso' } } },
   ]},
-  { name: 'Trackers', fields: [
-    { name: 'Name', type: 'singleLineText' },
-    { name: 'Ask', type: 'singleLineText' },
-    { name: 'Kind', type: 'singleSelect', options: { choices: [
-      { name: 'scale' }, { name: 'number' }, { name: 'yesno' }, { name: 'words' } ] } },
-    { name: 'Min', type: 'number', options: { precision: 0 } },
-    { name: 'Max', type: 'number', options: { precision: 0 } },
-    { name: 'Unit', type: 'singleLineText' },
-    { name: 'Order', type: 'number', options: { precision: 0 } },
-    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-  ]},
-  { name: 'Entries', fields: [
-    { name: 'Key', type: 'singleLineText' },
-    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
-    { name: 'Tracker', type: 'singleLineText' },
-    { name: 'Value', type: 'number', options: { precision: 2 } },
-    { name: 'Words', type: 'multilineText' },
-  ]},
+  // Trackers + Entries retired — the nightly ritual that fed them is gone.
+  // scalar ratings (mood, sleep, fog, energy) are captured as tagged
+  // Moments carrying a Value now; VALUE_TAGS below defines their scales.
   { name: 'Shop', fields: [
     { name: 'Name', type: 'singleLineText' },
     { name: 'Cost', type: 'number', options: { precision: 0 } },
@@ -128,12 +113,6 @@ const DEFAULTS = {
     { Name: 'made something',       Seeds: 5, Variety: 43, Order: 3, Active: true },
     { Name: 'read paper pages',     Seeds: 2, Variety: 58, Order: 4, Active: true },
     { Name: 'in bed before midnight', Seeds: 4, Variety: 71, Order: 5, Active: true },
-  ],
-  Trackers: [
-    { Name: 'brain fog',  Ask: 'how thick was the fog today?',            Kind: 'scale',  Min: 0, Max: 5, Order: 1, Active: true },
-    { Name: 'energy',     Ask: 'how much current was in the wires?',       Kind: 'scale',  Min: 0, Max: 5, Order: 3, Active: true },
-    { Name: 'sleep',      Ask: 'how long did you sleep last night?',       Kind: 'number', Min: 0, Max: 14, Unit: 'hours', Order: 4, Active: true },
-    { Name: 'mood',       Ask: 'what colour was the day?',                 Kind: 'scale',  Min: 0, Max: 5, Order: 5, Active: true },
   ],
   Shop: [
     { Name: 'a fancy coffee',            Cost: 15, Sign: '☕', Order: 1, Active: true },
@@ -340,7 +319,7 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Ticks: [], Trackers: [], Entries: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
+  data: { Habits: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
   loaded: false,
   problem: null,
 };
@@ -448,20 +427,6 @@ export async function redeem(item) {
   return true;
 }
 
-export function entryFor(date, trackerName) {
-  return S.data.Entries.find(e => e.f.Key === key(date, trackerName));
-}
-
-export async function saveEntry(date, tracker, value, words) {
-  const fields = { Key: key(date, tracker.f.Name), Date: date, Tracker: tracker.f.Name };
-  if (value !== undefined && value !== null && value !== '') fields.Value = Number(value);
-  if (words !== undefined) fields.Words = words;
-  const existing = entryFor(date, tracker.f.Name);
-  if (existing) Object.assign(existing.f, fields);
-  else S.data.Entries.push({ id: 'tmp' + Math.random(), f: fields });
-  write({ kind: 'upsert', table: 'Entries', mergeField: 'Key', fields });
-}
-
 export function dayFor(date) {
   return S.data.Days.find(d => d.f.Key === date);
 }
@@ -518,9 +483,23 @@ export function momentsFor(date) {
 // a starter vocabulary — shown only until her own tags take over. never
 // seeded as data; just fills whatever slots her real usage hasn't yet.
 export const STARTER_TAGS = [
-  'b', 'l', 'd', 'snack', 'dairy', 'coffee', 'adderall 10mg',
-  'fog rolls in', 'cramps', 'heavy', 'light',
+  'b', 'l', 'd', 'snack', 'coffee', 'mood', 'sleep', 'fog', 'energy',
+  'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
 ];
+
+// the scalar ratings that used to be Trackers — now just tags that carry a
+// Value. capturing one of these opens the little petal/stepper for the
+// number; world.js reads them back by name for the plate (mood → light,
+// sleep → two suns, fog → fog banks). keys are matched case-insensitively.
+export const VALUE_TAGS = {
+  mood:   { name: 'mood',   kind: 'scale',  min: 0, max: 5 },
+  energy: { name: 'energy', kind: 'scale',  min: 0, max: 5 },
+  fog:    { name: 'fog',    kind: 'scale',  min: 0, max: 5 },
+  sleep:  { name: 'sleep',  kind: 'number', min: 0, max: 14 },
+};
+export function valueTagFor(tag) {
+  return VALUE_TAGS[String(tag || '').trim().toLowerCase()] || null;
+}
 
 // the chips: her own vocabulary, surfacing by recency then frequency.
 // before any history exists, the starter words fill the rest — they
@@ -639,8 +618,6 @@ export function exportAll() {
 // actives, sorted — the two lists every view wants
 export const activeHabits = () =>
   S.data.Habits.filter(h => h.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-export const activeTrackers = () =>
-  S.data.Trackers.filter(t => t.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 export const activeShop = () =>
   S.data.Shop.filter(i => i.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 

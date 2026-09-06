@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=2';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=3';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -42,7 +42,6 @@ function buildDayInfo(data) {
     info.set(date, cur);
   };
   for (const t of data.Ticks || []) touch(t.f.Date, false);
-  for (const e of data.Entries || []) touch(e.f.Date, false);
   for (const m of data.Moments || []) touch(m.f.Date, isMealTag(m.f.Tag));
   return info;
 }
@@ -118,20 +117,22 @@ function computeHeldHour(dateISO, data) {
   return (data.Hours || []).some((h) => h.f.Date === dateISO && h.f.Outcome === 'held');
 }
 
+// scalar ratings live on tagged Moments now (Trackers/Entries retired):
+// the day's value for a tag whose name matches `re` and carries a Value.
+function momentValue(dateISO, data, re) {
+  const m = (data.Moments || []).find(
+    (x) => x.f.Date === dateISO && x.f.Value != null && re.test(x.f.Tag || '')
+  );
+  return m ? m.f.Value : null;
+}
+
 function computeTwoSuns(dateISO, data) {
-  const entry = (data.Entries || []).find((e) => e.f.Tracker === 'sleep' && e.f.Date === dateISO);
-  if (entry && entry.f.Value != null) return entry.f.Value < 5;
-  const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /sleep/i.test(m.f.Tag || ''));
-  if (moment) return moment.f.Value < 5;
-  return false;
+  const s = momentValue(dateISO, data, /sleep/i);
+  return s != null ? s < 5 : false;
 }
 
 function computeFog(dateISO, data) {
-  const entry = (data.Entries || []).find((e) => e.f.Tracker === 'brain fog' && e.f.Date === dateISO);
-  if (entry && entry.f.Value != null) return entry.f.Value;
-  const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /fog/i.test(m.f.Tag || ''));
-  if (moment) return moment.f.Value;
-  return null;
+  return momentValue(dateISO, data, /fog/i);
 }
 
 function computeSnake(dateISO, data) {
@@ -147,9 +148,9 @@ function computeSnake(dateISO, data) {
 }
 
 function computeLight(dateISO, data, isToday) {
-  const moodEntry = (data.Entries || []).find((e) => e.f.Tracker === 'mood' && e.f.Date === dateISO);
-  if (moodEntry && moodEntry.f.Value != null) {
-    const m = Math.max(0, Math.min(5, moodEntry.f.Value));
+  const mood = momentValue(dateISO, data, /mood/i);
+  if (mood != null) {
+    const m = Math.max(0, Math.min(5, mood));
     return { light: 0.12 + (m / 5) * 0.76, lightHour: 13.5 };
   }
   if (isToday) {
@@ -197,23 +198,18 @@ function countTrackedDays(dateISO, data) {
   const seen = new Set();
   const add = (d) => { if (d && d <= dateISO) seen.add(d); };
   for (const t of data.Ticks || []) add(t.f.Date);
-  for (const e of data.Entries || []) add(e.f.Date);
   for (const m of data.Moments || []) add(m.f.Date);
   return seen.size;
 }
 
 export function dayStateFields(dateISO, data) {
   const w = computeWorldState(dateISO, data);
-  const entryVal = (tracker) => {
-    const e = (data.Entries || []).find((x) => x.f.Tracker === tracker && x.f.Date === dateISO);
-    return e && e.f.Value != null ? e.f.Value : null;
-  };
   return {
     HabitsDone: w.habits.filter((h) => h.done).length,
     HabitsTotal: w.habits.length,
     Fog: w.fog,
-    Mood: entryVal('mood'),
-    Sleep: entryVal('sleep'),
+    Mood: momentValue(dateISO, data, /mood/i),
+    Sleep: momentValue(dateISO, data, /sleep/i),
     HeldHour: w.heldHour,
     ScheduleCount: w.wires,
     Moments: w.moments,
