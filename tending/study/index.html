@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="the print study — a Moebius-style renderer sample for tending, grown from data.">
+<meta name="description" content="the print study — a playable world-machine for tending's Moebius-style day prints.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='4' width='20' height='24' fill='%23f0ead6'/%3E%3Crect x='6' y='4' width='20' height='13' fill='%233a6bc4'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2326221c'/%3E%3C/svg%3E">
 <title>the print study</title>
 <style>
@@ -13,70 +13,126 @@
     --ink-strong: rgba(244, 240, 230, 0.92);
     --ink-dim: rgba(244, 240, 230, 0.4);
     --line: rgba(244, 240, 230, 0.14);
+    --gold: #d9b36a;
   }
   * { margin: 0; box-sizing: border-box; }
   html, body { background: var(--bg); }
   body {
     font-family: Georgia, 'Times New Roman', serif;
     color: var(--ink);
-    padding: 36px 20px 60px;
+    padding: 32px 18px 60px;
   }
   h1 {
     font-weight: normal; font-style: italic; letter-spacing: 0.14em;
     font-size: 1.3rem; text-align: center; color: var(--ink-strong);
   }
   .sub {
-    text-align: center; font-style: italic; font-size: 0.82rem; color: var(--ink-dim);
+    text-align: center; font-style: italic; font-size: 0.8rem; color: var(--ink-dim);
     margin: 10px auto 0; max-width: 640px; line-height: 1.7;
   }
-  .row {
-    margin: 44px auto 0; max-width: 1200px;
+
+  /* ---- top: plate + ledger + dials -------------------------------- */
+  .workshop {
+    display: flex; gap: 28px; flex-wrap: wrap; justify-content: center;
+    align-items: flex-start; margin: 40px auto 0; max-width: 1100px;
   }
-  .row h2 {
-    font-weight: normal; font-style: italic; letter-spacing: 0.08em; font-size: 0.86rem;
-    color: var(--ink-dim); margin-bottom: 14px; padding-left: 4px;
+  .plate-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #mainPlate { transition: opacity 0.22s ease; }
+  #mainPlate svg { display: block; }
+
+  .ledger { width: 100%; max-width: 300px; }
+  .ledger h3, .dials h3, .presets h3 {
+    font-weight: normal; font-style: italic; font-size: 0.8rem; letter-spacing: 0.08em;
+    color: var(--ink-dim); margin-bottom: 8px; text-align: center;
   }
-  .strip {
-    display: flex; gap: 18px; overflow-x: auto; padding: 6px 4px 14px;
+  .ledger-list { display: flex; flex-direction: column; gap: 2px; }
+  .ledger-item {
+    background: none; border: none; font-family: inherit; font-style: italic;
+    font-size: 0.86rem; text-align: left; padding: 8px 6px; cursor: pointer;
+    color: var(--ink-dim); min-height: 36px; border-radius: 6px;
+  }
+  .ledger-item:hover { background: rgba(244, 240, 230, 0.06); }
+  .ledger-item.done { color: var(--ink-strong); }
+  .seed-whisper {
+    text-align: center; font-style: italic; font-size: 0.76rem; color: var(--gold);
+    height: 1.4em; opacity: 0; transition: opacity 0.4s ease;
+  }
+  .seed-whisper.show { opacity: 1; }
+  .wallet-note { text-align: center; font-size: 0.72rem; color: var(--ink-dim); font-style: italic; }
+
+  .dials {
+    flex: 0 0 auto; width: 280px; border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .dials summary {
+    cursor: pointer; font-style: italic; letter-spacing: 0.08em; font-size: 0.86rem;
+    color: var(--ink-strong); list-style: none;
+  }
+  .dials summary::-webkit-details-marker { display: none; }
+  .dials summary::before { content: '▸ '; }
+  .dials[open] summary::before { content: '▾ '; }
+  .dial { margin-top: 14px; }
+  .dial label {
+    display: flex; justify-content: space-between; font-style: italic; font-size: 0.72rem;
+    color: var(--ink-dim); margin-bottom: 4px;
+  }
+  .dial .val { color: var(--gold); }
+  .dial input[type="range"] { width: 100%; accent-color: var(--gold); }
+  .dial.checkish { display: flex; align-items: center; gap: 8px; }
+  .dial.checkish label { flex: 1; margin-bottom: 0; }
+
+  /* ---- presets ------------------------------------------------------ */
+  .presets { margin: 48px auto 0; max-width: 1100px; }
+  .preset-strip {
+    display: flex; gap: 14px; overflow-x: auto; padding: 6px 4px 12px;
     -webkit-overflow-scrolling: touch;
   }
-  figure {
-    flex: 0 0 auto; width: 180px; margin: 0; text-align: center;
+  .preset-card {
+    flex: 0 0 auto; width: 130px; background: none; border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px; cursor: pointer; color: var(--ink);
+    font-family: inherit; text-align: center;
   }
-  figure .plate { width: 100%; }
-  figure .plate svg { display: block; width: 100%; height: auto; }
-  figcaption { margin-top: 10px; }
-  figcaption .name { display: block; font-style: italic; font-size: 0.78rem; color: var(--ink-strong); }
-  figcaption .data { display: block; font-style: italic; font-size: 0.68rem; color: var(--ink-dim); margin-top: 3px; line-height: 1.5; }
+  .preset-card:hover { border-color: var(--ink-dim); }
+  .preset-card svg { width: 100%; display: block; margin-bottom: 6px; }
+  .preset-card .cap { font-style: italic; font-size: 0.7rem; line-height: 1.4; }
+
   footer {
-    max-width: 700px; margin: 56px auto 0; padding-top: 28px; border-top: 1px solid var(--line);
-    font-style: italic; font-size: 0.76rem; color: var(--ink-dim); line-height: 1.9; text-align: center;
+    max-width: 720px; margin: 56px auto 0; padding-top: 24px; border-top: 1px solid var(--line);
+    font-style: italic; font-size: 0.74rem; color: var(--ink-dim); line-height: 1.85; text-align: center;
   }
   footer strong { color: var(--ink); font-weight: normal; }
 
-  @media (min-width: 720px) {
-    figure { width: 210px; }
-  }
-  @media (max-width: 380px) {
-    figure { width: 150px; }
-    .strip { gap: 12px; }
+  @media (max-width: 640px) {
+    .dials { width: 100%; max-width: 300px; }
   }
 </style>
 </head>
 <body>
   <h1>the print study</h1>
-  <p class="sub">a style sample for tending — the same procedural garden, redrawn as a
-    flat-ink risograph plate. nothing here is wired into the day-book yet; it is a
-    question about how a day could look, put to paper.</p>
+  <p class="sub">a world-machine, not a gallery — the same grammar the day-book would grow by.
+    tap a word in the ledger to live a habit; turn the dials to feel the slow variables move.
+    nothing here is wired into tending yet; it is a question, put to paper.</p>
 
-  <div class="row">
-    <h2>row 1 — consequence</h2>
-    <div class="strip" id="row1"></div>
+  <div class="workshop">
+    <div class="plate-col">
+      <div id="mainPlate"></div>
+      <div class="ledger">
+        <h3>the provenance ledger</h3>
+        <div class="ledger-list" id="ledgerList"></div>
+        <div class="seed-whisper" id="seedWhisper"></div>
+        <div class="wallet-note" id="walletNote"></div>
+      </div>
+    </div>
+
+    <details class="dials" open>
+      <summary>the time machine</summary>
+      <div id="dialHost"></div>
+    </details>
   </div>
 
-  <div class="row">
-    <h2>row 2 — the light variable, isolated</h2>
-    <div class="strip" id="row2"></div>
+  <div class="presets">
+    <h3>six lives</h3>
+    <div class="preset-strip" id="presetStrip"></div>
   </div>
 
   <footer id="footer"></footer>
@@ -84,74 +140,251 @@
   <script type="module">
     import { dayPrint } from './print.js';
 
-    const PW = 240, PH = 300;
+    const DEFAULT_HABITS = [
+      { name: 'moved my body', done: false },
+      { name: 'went outside', done: true },
+      { name: 'made something', done: false },
+      { name: 'read paper pages', done: false },
+      { name: 'in bed before midnight', done: true },
+    ];
 
-    function caption(d) {
-      const parts = [];
-      parts.push(d.sleep != null ? `slept ${d.sleep}` : 'sleep —');
-      parts.push(d.fog != null ? `fog ${d.fog}` : 'fog —');
-      parts.push(d.fed != null ? (d.fed ? 'fed yes' : 'fed no') : 'fed —');
-      parts.push(`${d.habitsDone} of ${d.habitsTotal}`);
-      if (d.heldHour) parts.push('held the hour');
-      if (d.moments) parts.push(`${d.moments} moment${d.moments === 1 ? '' : 's'}`);
-      return parts.join(' · ');
+    let world = {
+      seed: 2024, lightHour: 13.5, heldHour: false, moments: 1, fog: 0,
+      aridity: 0.15, range: 0.1, path: 0.6, sea: 0, towerFloors: 0,
+      snake: false, wires: 0, twoSuns: false,
+      habits: DEFAULT_HABITS.map((h) => ({ ...h })),
+    };
+    let wallet = 0;
+
+    // ---- mappings (the dials ARE the documentation of the grammar) ----
+    const map = {
+      daysUntrackedToAridity: (d) => Math.min(1, Math.pow(d / 10, 0.62)),
+      heldHoursToRange: (n) => Math.min(1, Math.log2(1 + n) / Math.log2(41)),
+      streakToPath: (s) => Math.min(1, s / 14),
+      streakToSea: (s) => Math.max(0, Math.min(1, (s - 7) / 14)),
+      notesToTower: (n) => Math.floor(n / 10),
+      scheduleToWires: (n) => Math.min(8, n),
+      moodToLightHour: (m) => 5 + 17 * (m / 5),
+    };
+
+    function fmt(n) { return Number.isInteger(n) ? n : n.toFixed(2); }
+
+    // ---- the main plate -------------------------------------------
+    const mainPlate = document.getElementById('mainPlate');
+    function plateSize() {
+      const vw = Math.min(window.innerWidth - 40, 520);
+      return [vw, Math.round(vw * 1.25)];
+    }
+    function renderPlate(crossfade = false) {
+      const [pw, ph] = plateSize();
+      if (crossfade) {
+        mainPlate.style.opacity = '0';
+        setTimeout(() => {
+          mainPlate.innerHTML = dayPrint(world, pw, ph);
+          mainPlate.style.opacity = '1';
+        }, 180);
+      } else {
+        mainPlate.innerHTML = dayPrint(world, pw, ph);
+      }
     }
 
-    function addPrint(container, data, name) {
-      const fig = document.createElement('figure');
-      const plate = document.createElement('div');
-      plate.className = 'plate';
-      plate.innerHTML = dayPrint(data, PW, PH);
-      fig.appendChild(plate);
-      const cap = document.createElement('figcaption');
-      const n = document.createElement('span'); n.className = 'name'; n.textContent = name;
-      const c = document.createElement('span'); c.className = 'data'; c.textContent = caption(data);
-      cap.appendChild(n); cap.appendChild(c);
-      fig.appendChild(cap);
-      container.appendChild(fig);
+    // ---- the provenance ledger --------------------------------------
+    const ledgerList = document.getElementById('ledgerList');
+    const seedWhisper = document.getElementById('seedWhisper');
+    const walletNote = document.getElementById('walletNote');
+    function renderLedger() {
+      ledgerList.innerHTML = '';
+      world.habits.forEach((hb, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'ledger-item' + (hb.done ? ' done' : '');
+        btn.textContent = hb.name;
+        btn.addEventListener('click', () => {
+          const wasDone = hb.done;
+          hb.done = !hb.done;
+          renderLedger();
+          renderPlate(true);
+          if (!wasDone) {
+            wallet += 1;
+            seedWhisper.textContent = `+1 seed — ${hb.name}`;
+            seedWhisper.classList.add('show');
+            clearTimeout(renderLedger._t);
+            renderLedger._t = setTimeout(() => seedWhisper.classList.remove('show'), 2200);
+          } else {
+            wallet = Math.max(0, wallet - 1);
+          }
+          walletNote.textContent = `◦ ${wallet} seeds gathered here`;
+        });
+        ledgerList.appendChild(btn);
+      });
+      walletNote.textContent = `◦ ${wallet} seeds gathered here`;
     }
 
-    // ---- row 1: hand-picked days spanning the space ----
-    const ROW1 = [
-      ['a full bright day', { seed: 101, lightHour: 13.5, habitsDone: 5, habitsTotal: 5, fog: 0, fed: 1, mood: 5, sleep: 8, heldHour: false, moments: 2 }],
-      ['a foggy, unfed day', { seed: 102, lightHour: 17.75, habitsDone: 1, habitsTotal: 5, fog: 4, fed: 0, mood: 1, sleep: 4, heldHour: false, moments: 0 }],
-      ['a held-hour night', { seed: 103, lightHour: 22, habitsDone: 3, habitsTotal: 5, fog: 0, fed: 1, mood: 3, sleep: 6, heldHour: true, moments: 1 }],
-      ['an empty, no-data day', { seed: 104, lightHour: 13.5, habitsDone: 0, habitsTotal: 5, fog: null, fed: null, mood: null, sleep: null, heldHour: false, moments: 0 }],
-      ['a dawn walk', { seed: 105, lightHour: 6, habitsDone: 2, habitsTotal: 5, fog: 1, fed: 1, mood: 4, sleep: 7, heldHour: false, moments: 0 }],
-      ['a red-rock, empty-stomach day', { seed: 106, lightHour: 13.5, habitsDone: 1, habitsTotal: 5, fog: 0, fed: 0, mood: 2, sleep: 5, heldHour: false, moments: 3 }],
-      ['a well-fed dusk', { seed: 107, lightHour: 17.75, habitsDone: 4, habitsTotal: 5, fog: 0, fed: 1, mood: 4, sleep: 8, heldHour: false, moments: 1 }],
-      ['deep fog, indigo night', { seed: 108, lightHour: 22, habitsDone: 2, habitsTotal: 5, fog: 5, fed: 0, mood: 1, sleep: 3, heldHour: false, moments: 4 }],
-    ];
-    const row1 = document.getElementById('row1');
-    for (const [name, data] of ROW1) addPrint(row1, data, name);
+    // ---- the time machine -------------------------------------------
+    const dialHost = document.getElementById('dialHost');
+    const state = {
+      daysUntracked: 1, heldHoursEver: 3, streak: 4, notesWritten: 0,
+      scheduleItems: 0, sleep: 7, fog: 0, mood: 3, moments: 1, newTag: false,
+    };
 
-    // ---- row 2: one day, five light scores ----
-    const BASE = { seed: 555, habitsDone: 3, habitsTotal: 5, fog: 1, fed: 1, mood: 3, sleep: 6, heldHour: false, moments: 1 };
-    const STOPS = [
-      ['dawn', 5], ['duck-egg morning', 9.25], ['cobalt noon', 13.5], ['apricot dusk', 17.75], ['indigo night', 22],
-    ];
-    const row2 = document.getElementById('row2');
-    for (const [name, lightHour] of STOPS) addPrint(row2, { ...BASE, lightHour }, name);
+    function applyDerived() {
+      world.aridity = map.daysUntrackedToAridity(state.daysUntracked);
+      world.range = map.heldHoursToRange(state.heldHoursEver);
+      world.path = map.streakToPath(state.streak);
+      world.sea = map.streakToSea(state.streak);
+      world.towerFloors = map.notesToTower(state.notesWritten);
+      world.wires = map.scheduleToWires(state.scheduleItems);
+      world.twoSuns = state.sleep < 5;
+      world.fog = state.fog;
+      world.lightHour = map.moodToLightHour(state.mood);
+      world.moments = state.moments;
+      world.snake = state.newTag;
+    }
 
-    // ---- footer: proposed mappings, open questions ----
+    const DIALS = [
+      { key: 'daysUntracked', label: 'days untracked', min: 0, max: 10, step: 1, note: '→ aridity (fast to break, slow to heal)' },
+      { key: 'heldHoursEver', label: 'held hours, ever', min: 0, max: 40, step: 1, note: '→ the range (cumulative, log-scaled)' },
+      { key: 'streak', label: 'tracking streak (days)', min: 0, max: 30, step: 1, note: '→ the path, and the sea after 7' },
+      { key: 'notesWritten', label: 'notes written', min: 0, max: 120, step: 5, note: '→ the tower — a floor per ~10' },
+      { key: 'scheduleItems', label: 'schedule items today', min: 0, max: 8, step: 1, note: '→ telephone poles + wires' },
+      { key: 'sleep', label: 'sleep (hours)', min: 0, max: 10, step: 0.5, note: '→ two suns, under 5' },
+      { key: 'fog', label: 'fog', min: 0, max: 5, step: 1, note: '→ the ground-hugging banks' },
+      { key: 'mood', label: 'mood', min: 0, max: 5, step: 1, note: '→ the light' },
+      { key: 'moments', label: 'moments caught', min: 0, max: 8, step: 1, note: '→ birds (on wires, if any)' },
+    ];
+
+    function renderDials() {
+      dialHost.innerHTML = '';
+      for (const d of DIALS) {
+        const wrap = document.createElement('div');
+        wrap.className = 'dial';
+        const label = document.createElement('label');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = `${d.label} `;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'val';
+        valSpan.textContent = fmt(state[d.key]);
+        label.appendChild(nameSpan);
+        label.appendChild(valSpan);
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = d.min; input.max = d.max; input.step = d.step;
+        input.value = state[d.key];
+        input.addEventListener('input', () => {
+          state[d.key] = Number(input.value);
+          valSpan.textContent = fmt(state[d.key]);
+          applyDerived();
+          renderPlate();
+        });
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        const note = document.createElement('div');
+        note.className = 'wallet-note';
+        note.style.textAlign = 'left';
+        note.style.marginTop = '2px';
+        note.textContent = d.note;
+        wrap.appendChild(note);
+        dialHost.appendChild(wrap);
+      }
+      // the snake — a bool, its own small toggle
+      const wrap = document.createElement('div');
+      wrap.className = 'dial checkish';
+      const label = document.createElement('label');
+      label.textContent = 'a new tag entered today';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = state.newTag;
+      cb.addEventListener('change', () => {
+        state.newTag = cb.checked;
+        applyDerived();
+        renderPlate();
+      });
+      wrap.appendChild(cb);
+      wrap.appendChild(label);
+      dialHost.appendChild(wrap);
+      const note = document.createElement('div');
+      note.className = 'wallet-note';
+      note.style.textAlign = 'left';
+      note.textContent = '→ the snake — novelty has a body';
+      dialHost.appendChild(note);
+    }
+
+    // ---- six lives (presets) -----------------------------------------
+    const PRESETS = [
+      {
+        name: 'a good week by the sea',
+        world: { seed: 401, lightHour: 12, aridity: 0.05, range: 0.2, path: 0.95, sea: 0.7, towerFloors: 1, wires: 2, moments: 2,
+          habits: [{ name: 'moved my body', done: true }, { name: 'went outside', done: true }, { name: 'made something', done: true }, { name: 'read paper pages', done: false }, { name: 'in bed before midnight', done: true }] },
+      },
+      {
+        name: 'a broken fortnight, arid, no path',
+        world: { seed: 402, lightHour: 15, aridity: 0.85, range: 0.05, path: 0, sea: 0, moments: 0,
+          habits: [{ name: 'moved my body', done: false }, { name: 'went outside', done: false }, { name: 'made something', done: false }, { name: 'read paper pages', done: false }, { name: 'in bed before midnight', done: true }] },
+      },
+      {
+        name: "a mountain-builder's month",
+        world: { seed: 403, lightHour: 17, aridity: 0.2, range: 0.9, path: 0.7, sea: 0.1, heldHour: true, moments: 1,
+          habits: [{ name: 'moved my body', done: true }, { name: 'went outside', done: true }, { name: 'made something', done: false }, { name: 'read paper pages', done: true }, { name: 'in bed before midnight', done: false }] },
+      },
+      {
+        name: 'the tower rises',
+        world: { seed: 404, lightHour: 13.5, aridity: 0.1, range: 0.15, path: 0.6, sea: 0.15, towerFloors: 9, wires: 1, moments: 1,
+          habits: [{ name: 'moved my body', done: false }, { name: 'went outside', done: true }, { name: 'made something', done: true }, { name: 'read paper pages', done: true }, { name: 'in bed before midnight', done: false }] },
+      },
+      {
+        name: 'two suns, no sleep',
+        world: { seed: 405, lightHour: 22, aridity: 0.3, range: 0.1, path: 0.4, sea: 0, twoSuns: true, fog: 2, moments: 3,
+          habits: [{ name: 'moved my body', done: false }, { name: 'went outside', done: false }, { name: 'made something', done: true }, { name: 'read paper pages', done: false }, { name: 'in bed before midnight', done: false }] },
+      },
+      {
+        name: 'the first stranger',
+        world: { seed: 406, lightHour: 14, aridity: 0.35, range: 0.1, path: 0.5, sea: 0, snake: true, moments: 1,
+          habits: [{ name: 'moved my body', done: true }, { name: 'went outside', done: false }, { name: 'made something', done: false }, { name: 'read paper pages', done: false }, { name: 'in bed before midnight', done: false }] },
+      },
+    ];
+
+    const presetStrip = document.getElementById('presetStrip');
+    for (const p of PRESETS) {
+      const card = document.createElement('button');
+      card.className = 'preset-card';
+      const preview = document.createElement('div');
+      preview.innerHTML = dayPrint(p.world, 110, 138);
+      const cap = document.createElement('div');
+      cap.className = 'cap';
+      cap.textContent = p.name;
+      card.appendChild(preview);
+      card.appendChild(cap);
+      card.addEventListener('click', () => {
+        world = { ...p.world, habits: p.world.habits.map((h) => ({ ...h })) };
+        renderLedger();
+        renderPlate(true);
+      });
+      presetStrip.appendChild(card);
+    }
+
+    // ---- footer: v2's open questions ----------------------------------
     const footer = document.getElementById('footer');
-    footer.innerHTML = '';
-    footer.appendChild(document.createTextNode(
-      'proposed, not decided: '));
+    footer.appendChild(document.createTextNode('proposed, not decided: '));
     const items = [
-      'light ← sleep, or the hour itself, or mood — which one is the sky?',
-      'terrain ← fed, always, or should a long streak dry the ground regardless of today?',
-      'the figure ← always present, or only some days — a self-portrait, or a stranger?',
-      'the rock outcrop ← pure geology, or seeded by something she keeps (a habit’s Variety)?',
+      'is aridity’s memory real (trailing days) or does the study’s single dial stand in for it fairly?',
+      'does the sea withdraw on any quiet day, or only once the streak truly breaks?',
+      'should the tower ever be climbed — an interior, not just a silhouette on the road?',
+      'the snake — once seen, does it recur for that tag, or is novelty always a stranger?',
     ];
-    const ul = document.createElement('span');
-    items.forEach((t, i) => {
+    const span = document.createElement('span');
+    items.forEach((txt, i) => {
       const s = document.createElement('strong');
-      s.textContent = t;
-      ul.appendChild(s);
-      if (i < items.length - 1) ul.appendChild(document.createTextNode('   ·   '));
+      s.textContent = txt;
+      span.appendChild(s);
+      if (i < items.length - 1) span.appendChild(document.createTextNode('   ·   '));
     });
-    footer.appendChild(ul);
+    footer.appendChild(span);
+
+    // ---- boot -----------------------------------------------------
+    applyDerived();
+    renderLedger();
+    renderDials();
+    renderPlate();
+    window.addEventListener('resize', () => renderPlate());
   </script>
 </body>
 </html>

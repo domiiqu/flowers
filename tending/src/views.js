@@ -146,6 +146,9 @@ export function mountDay(app, date) {
   const hoursLine = h('div', { class: 'hours-line' });
   root.appendChild(hoursLine);
 
+  const momentsText = h('div', { class: 'moments-text' });
+  root.appendChild(momentsText);
+
   const pollen = h('div', { class: 'pollen' });
   root.appendChild(pollen);
 
@@ -221,7 +224,6 @@ export function mountDay(app, date) {
     const moments = store.momentsFor(date);
     const track = h('div', { class: 'hours-track' });
     hoursLine.appendChild(track);
-    if (!moments.length) return;
     let dayIdx = 0;
     for (const m of moments) {
       let leftPct;
@@ -241,6 +243,23 @@ export function mountDay(app, date) {
       });
       track.appendChild(mote);
     }
+
+    // the visible tag stream — times, plainly, so capture is legible at
+    // a glance (not just tiny motes on a line)
+    clear(momentsText);
+    if (!moments.length) {
+      momentsText.appendChild(h('span', { class: 'dim italic' },
+        'the day’s moments will hang here — tap now to catch one.'));
+      return;
+    }
+    moments.forEach((m, i) => {
+      const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
+      const val = m.f.Value != null ? ` ${m.f.Value}` : '';
+      const btn = h('button', { class: 'plain moment-chip italic' }, `${label} ${m.f.Tag}${val}`);
+      btn.addEventListener('click', () => showRibbon(m.f.Key, momentDetail(m.f.Key)));
+      momentsText.appendChild(btn);
+      if (i < moments.length - 1) momentsText.appendChild(document.createTextNode(' · '));
+    });
   }
 
   function renderPollen() {
@@ -425,30 +444,6 @@ export function mountDay(app, date) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   }
 
-  function closeSheet() {
-    sheet.classList.remove('open');
-    backdrop.classList.remove('open');
-    nowMote.classList.remove('away');
-  }
-  function openSheet() {
-    hideRibbon();
-    nowMote.classList.add('away');
-    clear(sheet);
-    const chips = h('div', { class: 'chip-row' });
-    for (const tag of store.tagChips(8)) {
-      const chip = h('button', { class: 'chip' }, tag);
-      chip.addEventListener('click', () => captureFromChip(tag));
-      chips.appendChild(chip);
-    }
-    sheet.appendChild(chips);
-    const input = h('input', { class: 'field new-tag', placeholder: 'type a tag…' });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && input.value.trim()) captureFromChip(input.value.trim());
-    });
-    sheet.appendChild(input);
-    sheet.classList.add('open');
-    backdrop.classList.add('open');
-  }
   function momentDetail(key) {
     const m = store.S.data.Moments.find((x) => x.f.Key === key);
     if (!m) return '';
@@ -456,32 +451,182 @@ export function mountDay(app, date) {
     const val = m.f.Value != null ? ` ${m.f.Value}` : '';
     return `${label} · ${m.f.Tag}${val} — ${m.f.Sure}`;
   }
-  async function captureFromChip(tag) {
-    const key = await store.captureMoment({ tag, date });
-    renderHoursLine();
-    const tracker = store.activeTrackers().find((t) => t.f.Name === tag && t.f.Kind === 'scale');
-    if (tracker) petalStep(tracker, key);
-    else { closeSheet(); showRibbon(key, momentDetail(key)); }
-  }
-  function petalStep(tracker, key) {
-    clear(sheet);
-    const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
-    sheet.appendChild(h('div', { class: 'dim italic petal-hint' }, `${tracker.f.Name} — optional`));
-    const row = h('div', { class: 'mini-petals' });
-    for (let i = min; i <= max; i++) {
-      const p = h('button', { class: 'mini-petal' }, String(i));
-      p.addEventListener('click', async () => {
-        await store.adjustMoment(key, { Value: i });
-        renderHoursLine();
-        closeSheet();
-        showRibbon(key, momentDetail(key));
-      });
-      row.appendChild(p);
+
+  // the running stream's own inline ribbon — no timer here; it stays
+  // exactly as long as the sheet does, since the sheet itself is now the
+  // ceremony (a dump, not a single capture)
+  function buildInlineRibbon(container, momentKey, onChange) {
+    function main() {
+      clear(container);
+      const line = h('div', { class: 'ribbon-line' });
+      const mk = (label, fn) => { const b = h('button', { class: 'plain' }, label); b.addEventListener('click', fn); return b; };
+      line.appendChild(mk('about then', async () => { await store.adjustMoment(momentKey, { Sure: 'about' }); onChange(); }));
+      line.appendChild(mk('earlier…', () => offsets()));
+      line.appendChild(mk('all day', async () => { await store.adjustMoment(momentKey, { Sure: 'day' }); onChange(); }));
+      line.appendChild(mk('✕', async () => { await store.removeMoment(momentKey); onChange(); }));
+      container.appendChild(line);
     }
-    sheet.appendChild(row);
-    const skip = h('button', { class: 'plain italic petal-skip' }, 'skip');
-    skip.addEventListener('click', () => { closeSheet(); showRibbon(key, momentDetail(key)); });
-    sheet.appendChild(skip);
+    function offsets() {
+      clear(container);
+      const line = h('div', { class: 'ribbon-line' });
+      const OFFS = [
+        ['−15m', (t) => addMinutes(t, -15)],
+        ['−1h', (t) => addMinutes(t, -60)],
+        ['−3h', (t) => addMinutes(t, -180)],
+        ['this morning', () => '08:00'],
+      ];
+      const m = store.S.data.Moments.find((x) => x.f.Key === momentKey);
+      const baseTime = (m && m.f.Time) || '00:00';
+      for (const [label, fn] of OFFS) {
+        const b = h('button', { class: 'plain' }, label);
+        b.addEventListener('click', async () => {
+          await store.adjustMoment(momentKey, { Time: fn(baseTime), Sure: 'about' });
+          onChange();
+        });
+        line.appendChild(b);
+      }
+      container.appendChild(line);
+    }
+    main();
+  }
+
+  function closeSheet() {
+    sheet.classList.remove('open');
+    backdrop.classList.remove('open');
+    nowMote.classList.remove('away');
+    sheet.style.transform = '';
+  }
+
+  // iOS focusing an input the instant a fixed sheet slides up can jump
+  // the scroll/viewport; skip the autofocus there (a tap still opens the
+  // keyboard whenever she actually wants to type a tag).
+  const IOS_LIKE = /iP(ad|hone|od)/.test(navigator.platform || '')
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  function openSheet() {
+    hideRibbon();
+    nowMote.classList.add('away');
+    clear(sheet);
+
+    const top = h('div', { class: 'sheet-top' });
+    top.appendChild(h('div', { class: 'sheet-handle' }));
+    const closeBtn = h('button', { class: 'sheet-close plain', 'aria-label': 'close' }, '✕');
+    closeBtn.addEventListener('click', () => closeSheet());
+    top.appendChild(closeBtn);
+    sheet.appendChild(top);
+    bindHandleSwipeDown(top);
+
+    const chips = h('div', { class: 'chip-row' });
+    for (const tag of store.tagChips(8)) {
+      const chip = h('button', { class: 'chip' }, tag);
+      chip.addEventListener('click', () => captureFromChip(tag));
+      chips.appendChild(chip);
+    }
+    sheet.appendChild(chips);
+
+    const input = h('input', { class: 'field new-tag', placeholder: 'type a tag…' });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) {
+        captureFromChip(input.value.trim());
+        input.value = '';
+      }
+    });
+    sheet.appendChild(input);
+
+    const petalSlot = h('div', { class: 'petal-slot' });
+    sheet.appendChild(petalSlot);
+
+    const streamLabel = h('div', { class: 'stream-label dim italic' }, 'just now');
+    sheet.appendChild(streamLabel);
+    const stream = h('div', { class: 'stream' });
+    sheet.appendChild(stream);
+
+    function renderStream() {
+      clear(stream);
+      const list = store.momentsFor(date).slice().reverse();
+      streamLabel.hidden = !list.length;
+      for (const m of list) stream.appendChild(streamEntry(m));
+    }
+    function streamEntry(m) {
+      const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
+      const val = m.f.Value != null ? ` ${m.f.Value}` : '';
+      const row = h('button', { class: 'stream-row plain' }, `${label} · ${m.f.Tag}${val}`);
+      const detail = h('div', { class: 'stream-detail' });
+      detail.hidden = true;
+      row.addEventListener('click', () => {
+        const wasHidden = detail.hidden;
+        stream.querySelectorAll('.stream-detail').forEach((d) => { d.hidden = true; });
+        detail.hidden = !wasHidden;
+      });
+      buildInlineRibbon(detail, m.f.Key, () => { renderHoursLine(); renderStream(); });
+      return h('div', { class: 'stream-entry' }, [row, detail]);
+    }
+
+    function petalStepInline(tracker, key) {
+      clear(petalSlot);
+      const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
+      petalSlot.appendChild(h('div', { class: 'dim italic petal-hint' }, `${tracker.f.Name} — optional`));
+      const row = h('div', { class: 'mini-petals' });
+      for (let i = min; i <= max; i++) {
+        const p = h('button', { class: 'mini-petal' }, String(i));
+        p.addEventListener('click', async () => {
+          await store.adjustMoment(key, { Value: i });
+          renderHoursLine();
+          clear(petalSlot);
+          renderStream();
+        });
+        row.appendChild(p);
+      }
+      petalSlot.appendChild(row);
+      const skip = h('button', { class: 'plain italic petal-skip' }, 'skip');
+      skip.addEventListener('click', () => clear(petalSlot));
+      petalSlot.appendChild(skip);
+    }
+
+    async function captureFromChip(tag) {
+      const key = await store.captureMoment({ tag, date });
+      renderHoursLine();
+      renderStream();
+      const tracker = store.activeTrackers().find((t) => t.f.Name === tag && t.f.Kind === 'scale');
+      if (tracker) petalStepInline(tracker, key);
+      else clear(petalSlot);
+    }
+
+    sheet.classList.add('open');
+    backdrop.classList.add('open');
+    renderStream();
+    if (!IOS_LIKE) setTimeout(() => input.focus(), 260);
+  }
+
+  // swipe-down on the sheet's own handle closes it — scoped to the handle
+  // (not the whole sheet) so dragging inside the tag/stream list still
+  // scrolls normally; rebound on each open since `top` is a fresh element
+  function bindHandleSwipeDown(handle) {
+    let sy = 0, active = false, pid = null;
+    function down(e) {
+      // never on the close button: capturing the pointer here would
+      // swallow its click entirely (setPointerCapture reroutes all
+      // subsequent pointer/click resolution to the capturing element)
+      if (e.target.closest('button')) return;
+      active = true; sy = e.clientY; pid = e.pointerId;
+      try { handle.setPointerCapture(pid); } catch {}
+    }
+    function move(e) {
+      if (!active || e.pointerId !== pid) return;
+      const dy = e.clientY - sy;
+      if (dy > 4) sheet.style.transform = `translateY(${Math.min(dy, 220)}px)`;
+    }
+    function up(e) {
+      if (!active || e.pointerId !== pid) return;
+      active = false;
+      const dy = e.clientY - sy;
+      sheet.style.transform = '';
+      if (dy > 60) closeSheet();
+    }
+    handle.addEventListener('pointerdown', down);
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
   }
 
   nowMote.addEventListener('click', () => {
@@ -730,8 +875,11 @@ export function mountUnwind(app) {
   const esc = h('div', { class: 'unwind-esc italic' }, 'esc — leave');
   app.appendChild(esc);
 
+  // the harvest leads (payday first), then the scales — entirely
+  // optional, skippable one at a time or all at once — then the note,
+  // then the day made into a flower.
   const trackers = store.activeTrackers();
-  const cards = [...trackers.map((t) => ({ type: 'tracker', tracker: t })), { type: 'note' }, { type: 'harvest' }, { type: 'final' }];
+  const cards = [{ type: 'harvest' }, ...trackers.map((t) => ({ type: 'tracker', tracker: t })), { type: 'note' }, { type: 'final' }];
   let i = 0;
   let advanceTimer = null;
 
@@ -784,6 +932,19 @@ export function mountUnwind(app) {
     const existing = store.entryFor(today, tracker.f.Name);
     root.appendChild(h('div', { class: 'unwind-q' }, tracker.f.Ask || tracker.f.Name));
 
+    // an answer locks the card — without this, a second tap (a real
+    // finger's natural double-tap, or a mis-tap on a neighbouring petal)
+    // just calls advanceSoon() again, which clearTimeouts the pending
+    // advance and reschedules it; repeat that indefinitely and the card
+    // never moves — this is very likely what read as "the questions
+    // don't work" on a touchscreen.
+    let answered = false;
+    function lockedAdvance(ms) {
+      if (answered) return;
+      answered = true;
+      advanceSoon(ms);
+    }
+
     if (kind === 'scale') {
       const wrap = h('div', { class: 'petals' });
       const n = max - min + 1;
@@ -792,10 +953,11 @@ export function mountUnwind(app) {
         const petal = h('button', { class: 'petal' }, String(min + k));
         petal.style.transform = `rotate(${angle}deg) translate(0, -100px) rotate(${-angle}deg)`;
         petal.addEventListener('click', async () => {
+          if (answered) return;
           const val = min + k;
           [...wrap.children].forEach((c, ci) => c.classList.toggle('on', ci <= k));
           await store.saveEntry(today, tracker, val);
-          advanceSoon();
+          lockedAdvance();
         });
         wrap.appendChild(petal);
       }
@@ -807,8 +969,8 @@ export function mountUnwind(app) {
       const wrap = h('div', { class: 'unwind-yesno' });
       const yes = h('button', { class: 'plain italic' }, 'yes');
       const no = h('button', { class: 'plain italic' }, 'no');
-      yes.addEventListener('click', async () => { await store.saveEntry(today, tracker, 1); advanceSoon(); });
-      no.addEventListener('click', async () => { await store.saveEntry(today, tracker, 0); advanceSoon(); });
+      yes.addEventListener('click', async () => { if (answered) return; await store.saveEntry(today, tracker, 1); lockedAdvance(); });
+      no.addEventListener('click', async () => { if (answered) return; await store.saveEntry(today, tracker, 0); lockedAdvance(); });
       wrap.appendChild(yes); wrap.appendChild(no);
       root.appendChild(wrap);
     } else if (kind === 'number') {
@@ -819,8 +981,8 @@ export function mountUnwind(app) {
       const inc = h('button', {}, '+');
       let held = null;
       function step(d) { value = Math.max(min, Math.min(max, value + d)); valEl.textContent = String(value); }
-      function start(d) { step(d); held = setTimeout(function r() { step(d); held = setTimeout(r, 110); }, 420); }
-      function end() { clearTimeout(held); store.saveEntry(today, tracker, value); advanceSoon(700); }
+      function start(d) { if (answered) return; step(d); held = setTimeout(function r() { step(d); held = setTimeout(r, 110); }, 420); }
+      function end() { clearTimeout(held); if (answered) return; store.saveEntry(today, tracker, value); lockedAdvance(700); }
       dec.addEventListener('pointerdown', () => start(-1));
       inc.addEventListener('pointerdown', () => start(1));
       ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => { dec.addEventListener(ev, end); inc.addEventListener(ev, end); });
@@ -829,10 +991,27 @@ export function mountUnwind(app) {
     } else {
       const ta = h('textarea', { class: 'field unwind-note' });
       ta.value = (existing && existing.f.Words) || '';
-      ta.addEventListener('blur', () => { store.saveEntry(today, tracker, undefined, ta.value); advanceSoon(300); });
+      ta.addEventListener('blur', () => { if (answered) return; store.saveEntry(today, tracker, undefined, ta.value); lockedAdvance(300); });
       root.appendChild(ta);
       setTimeout(() => ta.focus(), 50);
     }
+
+    const skipRow = h('div', { class: 'unwind-skip-row' });
+    const skipOne = h('button', { class: 'plain italic' }, 'skip');
+    skipOne.addEventListener('click', () => { if (answered) return; answered = true; advanceSoon(0); });
+    skipRow.appendChild(skipOne);
+    const noteIdx = cards.findIndex((c) => c.type === 'note');
+    if (noteIdx > i) {
+      const skipRest = h('button', { class: 'plain italic' }, 'skip the rest');
+      skipRest.addEventListener('click', () => {
+        answered = true;
+        clearTimeout(advanceTimer);
+        i = noteIdx;
+        renderCard();
+      });
+      skipRow.appendChild(skipRest);
+    }
+    root.appendChild(skipRow);
   }
 
   function renderNoteCard() {

@@ -107,6 +107,80 @@ trusting the timestamp must cost zero.
   the meadow's day-plants grow fireflies hovering at heights matching
   their hour.
 
+### the world grammar (the print, v2 — approved direction)
+The day is a Moebius plate (see `study/`), and **every interaction is
+world-building, parametrically** — continuous math from data to geometry,
+never a lookup table of finished cards. Two clocks run:
+
+**Slow variables — the land remembers (computed from trailing history):**
+- **aridity** 0..1 — grows with *consecutive* untracked days (one missed
+  day barely shows; three crack the earth; a week brings dunes) and with
+  unfed days; heals slowly with tracking again — hysteresis: breaking the
+  land is fast, mending it is slow. Ramp: green field → sparse scrub →
+  cracked earth → pale dunes.
+- **the range** — every held hour (scary mode) raises distant mountains,
+  cumulatively, permanently, log-scaled. Months of hours become a horizon.
+- **the path** 0..1 — tracking continuity over ~14 days. A confident road
+  → a faint trace → gone. Returning after absence, it comes back first as
+  footprints.
+- **the sea** — a shoreline arrives at the horizon after a 7-day tracking
+  streak, and withdraws over quiet days. The reward for constancy is a
+  coast.
+- **the tower** — a retro-futurist building that gains a floor per ~10
+  written notes: the archive, visible from the road.
+
+**Fast variables — the day's weather:**
+- **clouds = undone habits.** The day starts overcast — one cloud per
+  active habit, its x/y set parametrically by the letter-lengths of the
+  habit's name (her rule, verbatim). Completing a habit converts its cloud
+  into its plant: the sky literally clears as the day is done.
+- light ← mood (proposed); fog ← fog, redesigned as reference-style solid
+  ground-hugging banks; birds ← moments; **the snake** appears on any day
+  a never-before-seen tag enters the vocabulary — novelty has a body;
+  **telephone poles** along the horizon = the day's schedule items, wires
+  sagging between; **two suns** when sleep < 5 — short sleep makes the
+  sky unreal.
+- habit identity is a **hash of the habit's name** → species, petal
+  count, lean — so habits added, renamed, or archived once live simply
+  re-enter the equations; no fixed Variety needed (renaming a habit
+  regrows its plant — provenance shifts, and that is acceptable).
+
+**The oak (decided):** the plate's centerpiece is a single tree, not a
+bed of flowers — many small ink flowers go line-messy; the references
+always hold one subject in a vast space. Habits done = leaf mass and
+branch reach; wind (a hard day) visibly bends it and strips leaves
+leeward; high aridity bares the branches. Undone habits remain clouds;
+completing one still clears the sky and fills the tree. Flowers become
+rare small ground-marks, spent sparingly. Past plates always render from
+that day's *recorded* ticks, never the current roster — roster edits
+never rewrite history.
+
+**The archive (replaces the meadow):** history is a wall of small plates —
+the postcards themselves, scrollable, tap one to visit the day. The
+meadow view and daySVG retire when the plate wiring lands.
+
+**Capture, reworked — the tag dump (urgent, before the plate wiring):**
+the now-sheet becomes a rapid-dump surface: it STAYS OPEN after each
+tag — tap tap tap, each entry logs with its timestamp and flashes into a
+small running stream inside the sheet; close is explicit (swipe down or ✕).
+The type-a-tag line autofocuses and Enter logs + clears for the next.
+Starter vocabulary (shown only until her own tags take over): b · l · d ·
+snack · dairy · coffee · adderall 10mg · fog rolls in · cramps · heavy ·
+light. The day page shows the day's tag stream with visible times
+(`13:05 b · 14:32 adderall 10mg`), and the hours line + now-mote get an
+empty-state hint so capture is discoverable. Nightly questions demote to
+optional: unwind leads with the harvest and the day-plate; scales (fog,
+mood, sleep, energy) remain but "ate enough" retires in favor of b/l/d
+tags. After a week of real tag data, the structure gets revisited.
+
+**The provenance ledger (new day-page concept, replacing click-the-flower):**
+under the plate, the habits stand as a column of small grey words, like a
+print's documentation — edition notes, a serial line. Tap a word → it inks
+to black, the plate redraws (its cloud becomes its plant), one seed is
+earned. The plate is the day; the words are its provenance. Economy
+simplifies with it: **every habit = 1 seed**, a held hour = 4; gather and
+wither rules unchanged; shop default prices rescale accordingly.
+
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated
 day-plants (horizontal scroll inside its own container), each grown from

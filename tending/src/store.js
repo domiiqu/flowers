@@ -111,7 +111,6 @@ const DEFAULTS = {
   ],
   Trackers: [
     { Name: 'brain fog',  Ask: 'how thick was the fog today?',            Kind: 'scale',  Min: 0, Max: 5, Order: 1, Active: true },
-    { Name: 'ate enough', Ask: 'did you feed yourself properly?',          Kind: 'yesno',  Min: 0, Max: 1, Order: 2, Active: true },
     { Name: 'energy',     Ask: 'how much current was in the wires?',       Kind: 'scale',  Min: 0, Max: 5, Order: 3, Active: true },
     { Name: 'sleep',      Ask: 'how long did you sleep last night?',       Kind: 'number', Min: 0, Max: 14, Unit: 'hours', Order: 4, Active: true },
     { Name: 'mood',       Ask: 'what colour was the day?',                 Kind: 'scale',  Min: 0, Max: 5, Order: 5, Active: true },
@@ -489,8 +488,16 @@ export function momentsFor(date) {
     .sort((a, b) => (a.f.Time || '').localeCompare(b.f.Time || ''));
 }
 
+// a starter vocabulary — shown only until her own tags take over. never
+// seeded as data; just fills whatever slots her real usage hasn't yet.
+export const STARTER_TAGS = [
+  'b', 'l', 'd', 'snack', 'dairy', 'coffee', 'adderall 10mg',
+  'fog rolls in', 'cramps', 'heavy', 'light',
+];
+
 // the chips: her own vocabulary, surfacing by recency then frequency.
-// before any history exists, the trackers lend their names.
+// before any history exists, the starter words fill the rest — they
+// recede on their own as real tags outrank them.
 export function tagChips(n = 8) {
   const seen = new Map(); // tag -> { count, last }
   for (const m of S.data.Moments) {
@@ -506,9 +513,9 @@ export function tagChips(n = 8) {
     .sort((a, b) => b[1].last.localeCompare(a[1].last) || b[1].count - a[1].count)
     .map(([tag]) => tag);
   if (ranked.length < n) {
-    for (const t of activeTrackers()) {
+    for (const t of STARTER_TAGS) {
       if (ranked.length >= n) break;
-      if ((t.f.Kind === 'scale' || t.f.Kind === 'yesno') && !ranked.includes(t.f.Name)) ranked.push(t.f.Name);
+      if (!ranked.includes(t)) ranked.push(t);
     }
   }
   return ranked.slice(0, n);
