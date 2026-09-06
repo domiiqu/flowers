@@ -302,6 +302,9 @@ export function mountDay(app, date) {
     const url = printImageUrl(row);
     if (url) {
       stopPollPrint();
+      // the print has landed — release the ritual flag so the press is
+      // idle again (and re-printable later); harmless if already clear.
+      if (row && row.f['Print?']) store.saveDay(date, { 'Print?': false });
       const a = h('a', { class: 'print-shown', href: url, target: '_blank', rel: 'noopener' },
         [h('img', { class: 'print-img', src: url, alt: 'the day, printed' })]);
       printBox.appendChild(a);
