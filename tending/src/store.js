@@ -341,6 +341,13 @@ export async function loadAll() {
   }
 }
 
+// re-list a single table into memory — used to poll for a print that the
+// base is still painting, without reloading the whole world.
+export async function reloadTable(name) {
+  try { S.data[name] = await backend().list(name); return true; }
+  catch (e) { return false; }
+}
+
 // first visit, empty sandbox: plant something to wake up to
 export async function seedSandboxIfBare() {
   if (connected()) return;

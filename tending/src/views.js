@@ -278,11 +278,28 @@ export function mountDay(app, date) {
     }
     return '';
   }
+  // while a print is being painted in the base, quietly poll for it so it
+  // swaps in on its own — no refresh. gives up after a couple of minutes;
+  // the gallery (which refreshes on entry) catches any it missed.
+  let printTimer = null;
+  function pollForPrint() {
+    if (printTimer || !store.connected()) return;
+    let tries = 0;
+    printTimer = setInterval(async () => {
+      tries++;
+      const ok = await store.reloadTable('Days');
+      if (ok && printImageUrl(store.dayFor(date))) { stopPollPrint(); renderPrint(); }
+      else if (tries >= 20) stopPollPrint(); // ~2 minutes
+    }, 6000);
+  }
+  function stopPollPrint() { clearInterval(printTimer); printTimer = null; }
+
   function renderPrint() {
     clear(printBox);
     const row = store.dayFor(date);
     const url = printImageUrl(row);
     if (url) {
+      stopPollPrint();
       const a = h('a', { class: 'print-shown', href: url, target: '_blank', rel: 'noopener' },
         [h('img', { class: 'print-img', src: url, alt: 'the day, printed' })]);
       printBox.appendChild(a);
@@ -290,11 +307,12 @@ export function mountDay(app, date) {
     }
     const requested = !!(row && row.f['Print?']);
     const btn = h('button', { class: 'plain print-btn italic' }, requested ? 'printing…' : 'print this day');
-    if (requested) btn.setAttribute('disabled', '');
+    if (requested) { btn.setAttribute('disabled', ''); pollForPrint(); }
     btn.addEventListener('click', async () => {
       await store.requestPrint(date);
       renderPrint();
-      whisper('the press is set — your print will arrive here soon.', 3600);
+      pollForPrint();
+      whisper('the press is set — your print will appear here, and in the gallery.', 3800);
     });
     printBox.appendChild(btn);
   }
@@ -703,6 +721,7 @@ export function mountDay(app, date) {
     unbindSwipe();
     unbindWalletHold();
     document.removeEventListener('pointerdown', onDocDown);
+    stopPollPrint();
     if (syncTimer) runDaySync(); // flush a pending write before leaving
   };
 }
@@ -716,6 +735,9 @@ export function mountGallery(app) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
   root.appendChild(h('div', { class: 'meadow-title italic' }, 'the gallery'));
+  const wall = h('div', { class: 'gallery-wall' });
+  root.appendChild(wall);
+  let alive = true;
 
   function printImageUrl(row) {
     for (const v of Object.values(row.f)) {
@@ -724,25 +746,30 @@ export function mountGallery(app) {
     return '';
   }
 
-  const prints = [...store.S.data.Days]
-    .map((d) => ({ date: d.f.Date || d.f.Key, url: printImageUrl(d) }))
-    .filter((p) => p.url && p.date)
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-
-  if (!prints.length) {
-    root.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
-      'no prints yet — press “print this day” on a day to begin the wall.'));
-  } else {
+  function render() {
+    clear(wall);
+    const prints = [...store.S.data.Days]
+      .map((d) => ({ date: d.f.Date || d.f.Key, url: printImageUrl(d) }))
+      .filter((p) => p.url && p.date)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (!prints.length) {
+      wall.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
+        'no prints yet — press “print this day” on a day to begin the wall.'));
+      return;
+    }
     const grid = h('div', { class: 'gallery-grid' });
     for (const p of prints) {
-      const cell = h('a', { class: 'gallery-cell', href: `#/day/${p.date}` }, [
+      grid.appendChild(h('a', { class: 'gallery-cell', href: `#/day/${p.date}` }, [
         h('img', { class: 'gallery-img', src: p.url, alt: p.date, loading: 'lazy' }),
         h('div', { class: 'gallery-date dim italic' }, store.fmtDate(p.date)),
-      ]);
-      grid.appendChild(cell);
+      ]));
     }
-    root.appendChild(grid);
+    wall.appendChild(grid);
   }
+
+  render();
+  // pull the freshest Days once on entry, so a just-printed day shows up
+  if (store.connected()) store.reloadTable('Days').then(() => { if (alive) render(); });
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
@@ -750,7 +777,7 @@ export function mountGallery(app) {
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
-  return () => {};
+  return () => { alive = false; };
 }
 
 
