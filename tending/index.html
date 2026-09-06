@@ -44,7 +44,10 @@
   body[data-room="day"] {
     --bg: #ece7d8; --ink: rgba(44, 39, 30, 0.74); --ink-strong: rgba(28, 24, 17, 0.95);
     --ink-dim: rgba(44, 39, 30, 0.44); --accent: #b0653f; --gold: #b8863a;
-    --line: rgba(44, 39, 30, 0.18); --panel: rgba(44, 39, 30, 0.045);
+    --line: rgba(44, 39, 30, 0.18); --panel: rgba(44, 39, 30, 0.05);
+    background:
+      radial-gradient(130% 90% at 50% -10%, #f5f0e3 0%, #ece6d6 48%, #ddd4bf 100%);
+    background-attachment: fixed;
   }
   body[data-room="tend"] { font-size: 0.94rem; }
 
@@ -125,14 +128,49 @@
     max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
-  /* ---- the plate: the day itself, painted — portrait, centered ------ */
-  .plate { width: 100%; margin: 4px 0 16px; display: flex; justify-content: center;
-    transition: opacity 0.22s ease; }
-  .plate svg { display: block; height: auto; max-width: 100%; border-radius: 2px; }
+  /* ---- the day, now: a prominent date over soft schedule blocks ----- */
+  .day-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
+  .day-arrow { font-size: 1.4rem; min-width: 44px; min-height: 44px; opacity: 0.6; }
+  .day-arrow:hover { opacity: 1; }
+  .day-date { text-align: center; }
+  .day-weekday { font-size: 0.9rem; letter-spacing: 0.14em; opacity: 0.65; }
+  .day-datum { font-size: 2.4rem; letter-spacing: 0.02em; line-height: 1.1; color: var(--ink-strong);
+    text-transform: lowercase; }
+
+  /* a shared centered column width for the quiet lists below */
+  .day-col { max-width: 460px; margin-left: auto; margin-right: auto; }
+
+  /* ---- the schedule: soft blocks ------------------------------------ */
+  .schedule { max-width: 460px; margin: 18px auto 6px; display: flex; flex-direction: column; gap: 8px; }
+  .sched-block { display: flex; align-items: baseline; gap: 14px; padding: 12px 16px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line); min-height: 46px; }
+  .sched-block.all-day { background: transparent; border-style: dashed; }
+  .sched-time { font-variant-numeric: tabular-nums; font-size: 0.82rem; color: var(--ink-dim);
+    min-width: 44px; }
+  .sched-title { font-style: italic; color: var(--ink-strong); }
+  .sched-empty { text-align: center; padding: 8px; }
+  .sched-add { display: block; margin: 2px auto 0; opacity: 0.6; font-size: 0.85rem; min-height: 40px; }
+  .sched-add:hover { opacity: 1; }
+  .sched-form { display: flex; gap: 8px; align-items: center; padding: 6px 0; flex-wrap: wrap; }
+  .sched-in { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+    color: var(--ink-strong); padding: 8px 12px; min-height: 40px; font-family: inherit; }
+  .sched-in[type="text"] { flex: 1; min-width: 120px; font-style: italic; }
+  .sched-save { border: 1px solid var(--line); border-radius: 12px; padding: 8px 16px; min-height: 40px; }
+  .sched-save:hover { color: var(--ink-strong); border-color: var(--ink-dim); }
+
+  /* ---- the print ritual --------------------------------------------- */
+  .print-ritual { text-align: center; margin: 10px auto 18px; max-width: 460px; }
+  .print-btn { border: 1px solid var(--line); border-radius: 20px; padding: 10px 22px; min-height: 44px;
+    background: var(--panel); letter-spacing: 0.06em; }
+  .print-btn:hover:not([disabled]) { border-color: var(--gold); color: var(--ink-strong); }
+  .print-btn[disabled] { opacity: 0.5; }
+  .print-shown { display: block; }
+  .print-img { display: block; margin: 0 auto; max-width: min(100%, 360px); border-radius: 4px;
+    box-shadow: 0 6px 24px rgba(40, 34, 22, 0.18); }
 
   /* ---- the provenance ledger: habits as a dot-separated line -------- */
   .ledger { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
-    gap: 0; margin: 0 auto 16px; }
+    gap: 0; margin: 6px auto 16px; }
   .ledger-word { font-size: 0.9rem; color: var(--ink-dim); padding: 4px 7px; line-height: 1.5; }
   .ledger-word.done { color: var(--ink-strong); }
   .ledger-sep { color: var(--ink-dim); opacity: 0.5; padding: 0 1px; user-select: none; }
@@ -229,6 +267,15 @@
   /* ---- shared room heading, used by the shop and tend --------------- */
   .meadow-title { text-align: center; font-style: italic; margin-bottom: 4px; }
 
+  /* ---- the gallery: a wall of prints, newest first ------------------ */
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px; margin-top: 20px; }
+  .gallery-cell { text-decoration: none; color: inherit; display: block; }
+  .gallery-img { display: block; width: 100%; border-radius: 4px; background: var(--panel);
+    box-shadow: 0 4px 16px rgba(20, 20, 28, 0.28); transition: transform 0.2s ease; }
+  .gallery-cell:hover .gallery-img { transform: translateY(-2px); }
+  .gallery-date { text-align: center; font-size: 0.72rem; margin-top: 6px; }
+
   /* ===================== the shop ===================== */
   .shelf { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
   .shop-item { display: flex; align-items: center; gap: 14px; padding: 14px 8px; border-bottom: 1px solid var(--line);
@@ -294,6 +341,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=3"></script>
+  <script type="module" src="src/main.js?v=4"></script>
 </body>
 </html>

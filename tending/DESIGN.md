@@ -44,6 +44,34 @@ toggles anything:
 
 ## the rooms
 
+> **v3 — the day pares back (current).** The in-app SVG plate has retired:
+> the day is no longer painted live in the browser. Instead the day page is
+> a calm, near-blank page — a soft warm gradient with the grain over it —
+> carrying, top to bottom: the **date, prominent**; the **schedule as soft
+> blocks** (Google Calendar when connected — see below — else editable
+> blocks stored in `Days.Schedule`), with a quiet `＋ a plan` that creates
+> an event; the **print ritual**; then, kept small and quiet, the habit
+> ledger and the tag mote (they still feed the world-state). The painted
+> plate lives on as **the print**, generated in Airtable from the day's
+> world-state, not drawn by the app.
+>
+> **The print ritual** replaces buying prints with seeds: a `print this day`
+> button checks `Days.Print?`; the base's automation paints the day into an
+> image field on that row; the button becomes the print itself once the
+> image lands. **The gallery** (`#/gallery`) is the wall of every printed
+> day — a plain grid of images, newest first, each a door back to its day.
+>
+> **Google Calendar** (`src/gcal.js`) connects straight from the browser via
+> Google Identity Services: a *public* OAuth client id set in tend (no
+> secret, no server), token in memory/sessionStorage like the PAT. Read the
+> day's events as blocks; create one-hour events; the block count is written
+> back so the print still gets its wires. Setup: a Google Cloud OAuth client
+> id with the github.io origin allow-listed, scope `calendar.events`.
+>
+> The world-grammar prose below still governs **the print's prompt** (via
+> `world.dayStateFields` → the `Days` row → the base's formula), so it stays
+> as the reference — just read "the plate" as "the print" from here down.
+
 ### the day — `#/day/YYYY-MM-DD` (default: today)
 One screen. No scrolling on desktop; a single gentle column on phones.
 - Header: `‹  friday · september 5  ›` (arrow keys work too). A small

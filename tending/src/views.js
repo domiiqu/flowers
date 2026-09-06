@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=3';
-import { dayPrint } from './print.js?v=3';
-import { computeWorldState, dayStateFields } from './world.js?v=3';
+import * as store from './store.js?v=4';
+import { dayStateFields } from './world.js?v=4';
+import * as gcal from './gcal.js?v=4';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -139,12 +139,17 @@ export function mountDay(app, date) {
     },
   });
 
-  const header = h('div', { class: 'day-header' });
-  const title = h('h1', {}, store.fmtDate(date));
-  header.appendChild(h('button', { class: 'plain', 'aria-label': 'previous day',
+  // the date itself is the page's face now — big and quiet, the arrows
+  // small beside it.
+  const header = h('div', { class: 'day-head' });
+  header.appendChild(h('button', { class: 'plain day-arrow', 'aria-label': 'previous day',
     onclick: () => (location.hash = `#/day/${store.addDays(date, -1)}`) }, '‹'));
-  header.appendChild(title);
-  header.appendChild(h('button', { class: 'plain', 'aria-label': 'next day',
+  const dparts = store.fmtDate(date).split(' · ');
+  header.appendChild(h('div', { class: 'day-date' }, [
+    h('div', { class: 'day-weekday italic' }, dparts[0] || ''),
+    h('div', { class: 'day-datum' }, dparts[1] || store.fmtDate(date)),
+  ]));
+  header.appendChild(h('button', { class: 'plain day-arrow', 'aria-label': 'next day',
     onclick: () => (location.hash = `#/day/${store.addDays(date, 1)}`) }, '›'));
   root.appendChild(header);
 
@@ -153,22 +158,28 @@ export function mountDay(app, date) {
       h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, 'today')));
   }
 
-  // the plate — the day itself, painted
-  const plate = h('div', { class: 'plate' });
-  root.appendChild(plate);
+  // the day's shape — schedule as soft blocks (Google Calendar when
+  // connected, otherwise editable blocks kept in Days.Schedule)
+  const schedule = h('div', { class: 'schedule' });
+  root.appendChild(schedule);
+
+  // the print ritual — ask the base to paint the day, then show it here
+  const printBox = h('div', { class: 'print-ritual' });
+  root.appendChild(printBox);
 
   // the provenance ledger — habits as words; tap to tick, tap again to
   // take it back while it's still unclaimed
-  const ledger = h('div', { class: 'ledger' });
+  const ledger = h('div', { class: 'ledger day-col' });
   root.appendChild(ledger);
 
-  const hoursLine = h('div', { class: 'hours-line' });
+  const hoursLine = h('div', { class: 'hours-line day-col' });
   root.appendChild(hoursLine);
 
-  const momentsText = h('div', { class: 'moments-text' });
+  const momentsText = h('div', { class: 'moments-text day-col' });
   root.appendChild(momentsText);
 
   const hints = h('div', { class: 'hints' }, [
+    h('a', { href: '#/gallery' }, 'the gallery'),
     h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/tend' }, 'tend'),
@@ -186,41 +197,106 @@ export function mountDay(app, date) {
     }
   }
 
-  // the plate is a portrait leaf now — taller than wide on every screen,
-  // never the square (iPad) or landscape (desktop) it used to be. height
-  // leads; width follows at a portrait ratio, then both shrink to fit the
-  // column and the viewport.
-  const PLATE_RATIO = 0.74; // width / height
-  function plateSize() {
-    const containerW = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
-    const availH = Math.round((window.innerHeight || 700) * 0.66);
-    let ph = availH;
-    let pw = Math.round(ph * PLATE_RATIO);
-    if (pw > containerW) { pw = containerW; ph = Math.round(pw / PLATE_RATIO); }
-    return [Math.max(200, pw), Math.max(260, ph)];
-  }
-
-  // the ledger, the hours line and the tag stream all sit exactly the
-  // plate's width, centered under it — so the day reads as one column.
-  function applyPlateWidth(pw) {
-    const px = `${pw}px`;
-    ledger.style.maxWidth = px;
-    hoursLine.style.width = px;
-    momentsText.style.maxWidth = px;
-  }
-
-  function renderPlate(crossfade = false) {
-    const [pw, ph] = plateSize();
-    applyPlateWidth(pw);
-    if (crossfade) {
-      plate.style.opacity = '0';
-      setTimeout(() => {
-        plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
-        plate.style.opacity = '1';
-      }, 180);
-    } else {
-      plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
+  // ---- the schedule ---------------------------------------------------
+  // soft blocks, not a poem. Google Calendar when it's connected;
+  // otherwise editable blocks stored as lines in Days.Schedule. Either
+  // way the day's block count is written back so the print gets its wires.
+  async function renderSchedule() {
+    clear(schedule);
+    let events = null; // [{time, title, allDay}]
+    let live = false;
+    if (gcal.connected()) {
+      try { events = await gcal.listEvents(date); live = true; }
+      catch (e) { events = null; }
     }
+    if (!live) {
+      const raw = (store.dayFor(date)?.f.Schedule || '').split('\n').map((l) => l.trim()).filter(Boolean);
+      events = raw.map((line) => {
+        const m = line.match(/^(\d{1,2}:\d{2})\s*[—-]\s*(.*)$/);
+        return m ? { time: m[1], title: m[2], allDay: false } : { time: '', title: line, allDay: true };
+      });
+    }
+
+    if (!events.length) {
+      schedule.appendChild(h('div', { class: 'sched-empty dim italic' }, 'no plans yet'));
+    }
+    for (const ev of events) {
+      const block = h('div', { class: 'sched-block' + (ev.allDay ? ' all-day' : '') }, [
+        h('span', { class: 'sched-time' }, ev.allDay ? '' : ev.time),
+        h('span', { class: 'sched-title' }, ev.title),
+      ]);
+      schedule.appendChild(block);
+    }
+
+    // the add affordance — a quiet ＋ that opens an inline block
+    const add = h('button', { class: 'plain sched-add italic' }, '＋ a plan');
+    add.addEventListener('click', () => openAddPlan(live));
+    schedule.appendChild(add);
+
+    // keep the print's schedule count fresh (blocks that carry a time feed
+    // the wires); persist a text summary too when live so it survives offline
+    if (live) {
+      const text = events.filter((e) => !e.allDay).map((e) => `${e.time} — ${e.title}`).join('\n');
+      const cur = store.dayFor(date)?.f.Schedule || '';
+      if (text !== cur) store.saveDay(date, { Schedule: text });
+    }
+  }
+
+  function openAddPlan(live) {
+    const form = h('div', { class: 'sched-form' });
+    const timeInput = h('input', { class: 'sched-in', type: 'time', value: '09:00' });
+    const titleInput = h('input', { class: 'sched-in', type: 'text', placeholder: 'what…' });
+    const save = h('button', { class: 'plain sched-save italic' }, 'add');
+    async function commit() {
+      const title = titleInput.value.trim();
+      if (!title) return;
+      const time = timeInput.value || '09:00';
+      if (live && gcal.connected()) {
+        try { await gcal.createEvent(date, { title, time }); }
+        catch (e) { whisper(`couldn't add to google — ${e.message}`, 3600); }
+      } else {
+        const lines = (store.dayFor(date)?.f.Schedule || '').split('\n').filter(Boolean);
+        lines.push(`${time} — ${title}`);
+        lines.sort();
+        await store.saveDay(date, { Schedule: lines.join('\n') });
+      }
+      await renderSchedule();
+      scheduleDaySync();
+    }
+    save.addEventListener('click', commit);
+    titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
+    form.appendChild(timeInput); form.appendChild(titleInput); form.appendChild(save);
+    schedule.replaceChild(form, schedule.lastChild); // swap the ＋ for the form
+    titleInput.focus();
+  }
+
+  // ---- the print ritual ----------------------------------------------
+  function printImageUrl(row) {
+    if (!row) return '';
+    for (const v of Object.values(row.f)) {
+      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
+    }
+    return '';
+  }
+  function renderPrint() {
+    clear(printBox);
+    const row = store.dayFor(date);
+    const url = printImageUrl(row);
+    if (url) {
+      const a = h('a', { class: 'print-shown', href: url, target: '_blank', rel: 'noopener' },
+        [h('img', { class: 'print-img', src: url, alt: 'the day, printed' })]);
+      printBox.appendChild(a);
+      return;
+    }
+    const requested = !!(row && row.f['Print?']);
+    const btn = h('button', { class: 'plain print-btn italic' }, requested ? 'printing…' : 'print this day');
+    if (requested) btn.setAttribute('disabled', '');
+    btn.addEventListener('click', async () => {
+      await store.requestPrint(date);
+      renderPrint();
+      whisper('the press is set — your print will arrive here soon.', 3600);
+    });
+    printBox.appendChild(btn);
   }
 
   function renderLedger() {
@@ -243,7 +319,6 @@ export function mountDay(app, date) {
           return; // already gathered or withered — the ledger doesn't undo that
         }
         renderLedger();
-        renderPlate(true);
         renderWallet();
         scheduleDaySync();
       });
@@ -251,9 +326,6 @@ export function mountDay(app, date) {
       if (i < habits.length - 1) ledger.appendChild(h('span', { class: 'ledger-sep' }, '·'));
     });
   }
-
-  function onResize() { renderPlate(); }
-  window.addEventListener('resize', onResize);
 
   // after anything changes the day, its flattened world-state is written
   // back onto the Days row (debounced, so a rapid tag dump becomes one
@@ -611,8 +683,9 @@ export function mountDay(app, date) {
   backdrop.addEventListener('click', () => closeSheet());
 
   renderWallet();
+  renderSchedule();
+  renderPrint();
   renderLedger();
-  renderPlate();
   renderHoursLine();
 
   // birth today's row on arrival — this also catches state set in other
@@ -629,10 +702,55 @@ export function mountDay(app, date) {
   return () => {
     unbindSwipe();
     unbindWalletHold();
-    window.removeEventListener('resize', onResize);
     document.removeEventListener('pointerdown', onDocDown);
     if (syncTimer) runDaySync(); // flush a pending write before leaving
   };
+}
+
+
+// ================================================================ gallery
+// the wall of prints — every day that's been painted, newest first. as
+// simple as the day is long: a grid of images, each a door back to its day.
+
+export function mountGallery(app) {
+  const root = h('div', { class: 'room' });
+  app.appendChild(root);
+  root.appendChild(h('div', { class: 'meadow-title italic' }, 'the gallery'));
+
+  function printImageUrl(row) {
+    for (const v of Object.values(row.f)) {
+      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
+    }
+    return '';
+  }
+
+  const prints = [...store.S.data.Days]
+    .map((d) => ({ date: d.f.Date || d.f.Key, url: printImageUrl(d) }))
+    .filter((p) => p.url && p.date)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  if (!prints.length) {
+    root.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
+      'no prints yet — press “print this day” on a day to begin the wall.'));
+  } else {
+    const grid = h('div', { class: 'gallery-grid' });
+    for (const p of prints) {
+      const cell = h('a', { class: 'gallery-cell', href: `#/day/${p.date}` }, [
+        h('img', { class: 'gallery-img', src: p.url, alt: p.date, loading: 'lazy' }),
+        h('div', { class: 'gallery-date dim italic' }, store.fmtDate(p.date)),
+      ]);
+      grid.appendChild(cell);
+    }
+    root.appendChild(grid);
+  }
+
+  const hints = h('div', { class: 'hints' }, [
+    h('a', { href: '#/day/' }, 'the day'),
+    h('a', { href: '#/shop' }, 'the shop'),
+    h('a', { href: '#/tend' }, 'tend'),
+  ]);
+  app.appendChild(hints);
+  return () => {};
 }
 
 
@@ -776,6 +894,43 @@ export function mountTend(app) {
     renderStatus();
   });
   root.appendChild(connSection);
+
+  // google calendar ----------------------------------------------------
+  const gcalSection = h('div', { class: 'tend-section' });
+  gcalSection.appendChild(h('h2', {}, 'google calendar'));
+  const gcalStatus = h('div', { class: 'tend-status' });
+  gcalSection.appendChild(gcalStatus);
+  const gcalIdInput = h('input', { class: 'field', type: 'text', placeholder: 'google oauth client id (…apps.googleusercontent.com)' });
+  gcalIdInput.value = store.getSettings().gcalClientId || '';
+  gcalSection.appendChild(h('div', { class: 'row' }, [gcalIdInput]));
+  const saveGcalId = h('button', { class: 'btn' }, 'save client id');
+  const connectBtn = h('button', { class: 'btn' }, 'connect google');
+  gcalSection.appendChild(h('div', { class: 'row', style: 'margin-top:10px' }, [saveGcalId, connectBtn]));
+  function renderGcalStatus() {
+    clear(gcalStatus);
+    if (!gcal.configured()) {
+      gcalStatus.appendChild(h('div', { class: 'dim' }, 'not set up — paste a client id, then connect.'));
+    } else if (gcal.connected()) {
+      gcalStatus.appendChild(h('div', {}, 'connected — the day reads your calendar.'));
+    } else {
+      gcalStatus.appendChild(h('div', { class: 'dim' }, 'client id saved — press connect to sign in.'));
+    }
+  }
+  renderGcalStatus();
+  saveGcalId.addEventListener('click', () => {
+    store.saveSettings({ ...store.getSettings(), gcalClientId: gcalIdInput.value.trim() });
+    renderGcalStatus();
+    whisper('client id saved.');
+  });
+  connectBtn.addEventListener('click', async () => {
+    store.saveSettings({ ...store.getSettings(), gcalClientId: gcalIdInput.value.trim() });
+    try { await gcal.connect(); whisper('google connected.'); }
+    catch (e) { whisper(`google — ${e.message}`, 4000); }
+    renderGcalStatus();
+  });
+  gcalSection.appendChild(h('div', { class: 'tend-warning italic' },
+    'the calendar token lives only in this browser tab.'));
+  root.appendChild(gcalSection);
 
   // export ---------------------------------------------------------
   const exportSection = h('div', { class: 'tend-section' });
