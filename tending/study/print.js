@@ -224,16 +224,28 @@ export function dayPrint(data = {}, w = 300, h = 380) {
 
   // the winding path — the Moebius signature: a pale flat road from the
   // foreground to a vanishing point at the horizon, ink on both edges
+  // both edges follow one wandering centerline (a shared S made of two
+  // opposing sine swings) and the width tapers to nothing at the horizon —
+  // this is what keeps it a path and not a triangle
   const vpX = ix + iw * (0.4 + rng() * 0.2);
   const baseW = iw * (0.2 + rng() * 0.08);
   const baseX = ix + iw * (0.32 + rng() * 0.36);
-  const bendL = (rng() - 0.5) * iw * 0.14;
-  const bendR = (rng() - 0.5) * iw * 0.14;
   const baseY2 = iy + ih;
-  const pathD = `M${(baseX - baseW / 2).toFixed(1)},${baseY2.toFixed(1)} `
-    + `C${(baseX - baseW / 2 + bendL).toFixed(1)},${(baseY2 - groundH * 0.55).toFixed(1)} ${(vpX - 3 + bendL * 0.3).toFixed(1)},${(horizonY + groundH * 0.12).toFixed(1)} ${(vpX - 2).toFixed(1)},${horizonY.toFixed(1)} `
-    + `L${(vpX + 2).toFixed(1)},${horizonY.toFixed(1)} `
-    + `C${(vpX + 3 + bendR * 0.3).toFixed(1)},${(horizonY + groundH * 0.12).toFixed(1)} ${(baseX + baseW / 2 + bendR).toFixed(1)},${(baseY2 - groundH * 0.55).toFixed(1)} ${(baseX + baseW / 2).toFixed(1)},${baseY2.toFixed(1)} Z`;
+  const swing = iw * (0.10 + rng() * 0.10);
+  const s1 = rng() < 0.5 ? -1 : 1;
+  const SEGS = 16;
+  const leftPts = [], rightPts = [];
+  for (let i = 0; i <= SEGS; i++) {
+    const t = i / SEGS; // 0 = foreground, 1 = horizon
+    const y = baseY2 + (horizonY - baseY2) * t;
+    const wander = Math.sin(t * Math.PI) * swing * s1 * (1 - t * 0.4)
+      + Math.sin(t * Math.PI * 2) * swing * 0.45 * -s1 * (1 - t);
+    const cx = baseX + (vpX - baseX) * t + wander;
+    const half = (baseW * Math.pow(1 - t, 1.35) + 3) / 2;
+    leftPts.push(`${(cx - half).toFixed(1)},${y.toFixed(1)}`);
+    rightPts.push(`${(cx + half).toFixed(1)},${y.toFixed(1)}`);
+  }
+  const pathD = 'M' + leftPts.concat(rightPts.reverse()).join(' L') + ' Z';
   fills += `<path d="${pathD}" fill="${PATH_COLOR}"/>`;
   addInk('path', { d: pathD }, 1.1);
 
@@ -284,7 +296,10 @@ export function dayPrint(data = {}, w = 300, h = 380) {
   // earns a monolith + long shadow
   const figFrac = 0.28 + rng() * 0.24; // how far up the path, 0=horizon..1=bottom
   const figH = ih * (0.022 + 0.02 * figFrac);
-  const pathCenterX = vpX + (baseX - vpX) * figFrac;
+  const figT = 1 - figFrac; // the centerline's own parameter (0=foreground)
+  const figWander = Math.sin(figT * Math.PI) * swing * s1 * (1 - figT * 0.4)
+    + Math.sin(figT * Math.PI * 2) * swing * 0.45 * -s1 * (1 - figT);
+  const pathCenterX = baseX + (vpX - baseX) * figT + figWander;
   const figX = pathCenterX + (rng() - 0.5) * baseW * figFrac * 0.3;
   let figBaseY = horizonY + groundH * figFrac;
   if (heldHour) {
