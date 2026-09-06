@@ -7,7 +7,8 @@ import * as scary from './scary.js';
 
 const app = document.getElementById('app');
 const queuedot = document.getElementById('queuedot');
-const VALID = ['day', 'meadow', 'shop', 'hour', 'unwind', 'tend'];
+const VALID = ['day', 'shop', 'hour', 'tend'];
+const REDIRECT_TO_DAY = ['meadow', 'unwind'];
 const WITHER_SEEN_KEY = 'tending.witherSeenUntil';
 
 let cleanup = null;
@@ -24,14 +25,17 @@ function parseHash() {
 }
 
 function route() {
+  const rawRoom = (location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean)[0];
+  if (rawRoom && REDIRECT_TO_DAY.includes(rawRoom)) {
+    location.hash = '#/day/';
+    return; // hashchange fires route() again against the new hash
+  }
   if (cleanup) { try { cleanup(); } catch (e) { console.warn(e); } cleanup = null; }
   const { room, date } = parseHash();
   document.body.dataset.room = room;
   app.innerHTML = '';
-  if (room === 'meadow') cleanup = views.mountMeadow(app);
-  else if (room === 'shop') cleanup = views.mountShop(app);
+  if (room === 'shop') cleanup = views.mountShop(app);
   else if (room === 'hour') cleanup = scary.mount(app);
-  else if (room === 'unwind') cleanup = views.mountUnwind(app);
   else if (room === 'tend') cleanup = views.mountTend(app);
   else cleanup = views.mountDay(app, date);
   updateQueueDot();
