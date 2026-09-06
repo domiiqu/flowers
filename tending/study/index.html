@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="the print study — a Moebius-style renderer sample for tending, grown from data.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='4' width='20' height='24' fill='%23f0ead6'/%3E%3Crect x='6' y='4' width='20' height='13' fill='%233a6bc4'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2326221c'/%3E%3C/svg%3E">
+<title>the print study</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --ink: rgba(244, 240, 230, 0.62);
+    --ink-strong: rgba(244, 240, 230, 0.92);
+    --ink-dim: rgba(244, 240, 230, 0.4);
+    --line: rgba(244, 240, 230, 0.14);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--ink);
+    padding: 36px 20px 60px;
+  }
+  h1 {
+    font-weight: normal; font-style: italic; letter-spacing: 0.14em;
+    font-size: 1.3rem; text-align: center; color: var(--ink-strong);
+  }
+  .sub {
+    text-align: center; font-style: italic; font-size: 0.82rem; color: var(--ink-dim);
+    margin: 10px auto 0; max-width: 640px; line-height: 1.7;
+  }
+  .row {
+    margin: 44px auto 0; max-width: 1200px;
+  }
+  .row h2 {
+    font-weight: normal; font-style: italic; letter-spacing: 0.08em; font-size: 0.86rem;
+    color: var(--ink-dim); margin-bottom: 14px; padding-left: 4px;
+  }
+  .strip {
+    display: flex; gap: 18px; overflow-x: auto; padding: 6px 4px 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  figure {
+    flex: 0 0 auto; width: 180px; margin: 0; text-align: center;
+  }
+  figure .plate { width: 100%; }
+  figure .plate svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 10px; }
+  figcaption .name { display: block; font-style: italic; font-size: 0.78rem; color: var(--ink-strong); }
+  figcaption .data { display: block; font-style: italic; font-size: 0.68rem; color: var(--ink-dim); margin-top: 3px; line-height: 1.5; }
+  footer {
+    max-width: 700px; margin: 56px auto 0; padding-top: 28px; border-top: 1px solid var(--line);
+    font-style: italic; font-size: 0.76rem; color: var(--ink-dim); line-height: 1.9; text-align: center;
+  }
+  footer strong { color: var(--ink); font-weight: normal; }
+
+  @media (min-width: 720px) {
+    figure { width: 210px; }
+  }
+  @media (max-width: 380px) {
+    figure { width: 150px; }
+    .strip { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+  <h1>the print study</h1>
+  <p class="sub">a style sample for tending — the same procedural garden, redrawn as a
+    flat-ink risograph plate. nothing here is wired into the day-book yet; it is a
+    question about how a day could look, put to paper.</p>
+
+  <div class="row">
+    <h2>row 1 — consequence</h2>
+    <div class="strip" id="row1"></div>
+  </div>
+
+  <div class="row">
+    <h2>row 2 — the light variable, isolated</h2>
+    <div class="strip" id="row2"></div>
+  </div>
+
+  <footer id="footer"></footer>
+
+  <script type="module">
+    import { dayPrint } from './print.js';
+
+    const PW = 240, PH = 300;
+
+    function caption(d) {
+      const parts = [];
+      parts.push(d.sleep != null ? `slept ${d.sleep}` : 'sleep —');
+      parts.push(d.fog != null ? `fog ${d.fog}` : 'fog —');
+      parts.push(d.fed != null ? (d.fed ? 'fed yes' : 'fed no') : 'fed —');
+      parts.push(`${d.habitsDone} of ${d.habitsTotal}`);
+      if (d.heldHour) parts.push('held the hour');
+      if (d.moments) parts.push(`${d.moments} moment${d.moments === 1 ? '' : 's'}`);
+      return parts.join(' · ');
+    }
+
+    function addPrint(container, data, name) {
+      const fig = document.createElement('figure');
+      const plate = document.createElement('div');
+      plate.className = 'plate';
+      plate.innerHTML = dayPrint(data, PW, PH);
+      fig.appendChild(plate);
+      const cap = document.createElement('figcaption');
+      const n = document.createElement('span'); n.className = 'name'; n.textContent = name;
+      const c = document.createElement('span'); c.className = 'data'; c.textContent = caption(data);
+      cap.appendChild(n); cap.appendChild(c);
+      fig.appendChild(cap);
+      container.appendChild(fig);
+    }
+
+    // ---- row 1: hand-picked days spanning the space ----
+    const ROW1 = [
+      ['a full bright day', { seed: 101, lightHour: 13.5, habitsDone: 5, habitsTotal: 5, fog: 0, fed: 1, mood: 5, sleep: 8, heldHour: false, moments: 2 }],
+      ['a foggy, unfed day', { seed: 102, lightHour: 17.75, habitsDone: 1, habitsTotal: 5, fog: 4, fed: 0, mood: 1, sleep: 4, heldHour: false, moments: 0 }],
+      ['a held-hour night', { seed: 103, lightHour: 22, habitsDone: 3, habitsTotal: 5, fog: 0, fed: 1, mood: 3, sleep: 6, heldHour: true, moments: 1 }],
+      ['an empty, no-data day', { seed: 104, lightHour: 13.5, habitsDone: 0, habitsTotal: 5, fog: null, fed: null, mood: null, sleep: null, heldHour: false, moments: 0 }],
+      ['a dawn walk', { seed: 105, lightHour: 6, habitsDone: 2, habitsTotal: 5, fog: 1, fed: 1, mood: 4, sleep: 7, heldHour: false, moments: 0 }],
+      ['a red-rock, empty-stomach day', { seed: 106, lightHour: 13.5, habitsDone: 1, habitsTotal: 5, fog: 0, fed: 0, mood: 2, sleep: 5, heldHour: false, moments: 3 }],
+      ['a well-fed dusk', { seed: 107, lightHour: 17.75, habitsDone: 4, habitsTotal: 5, fog: 0, fed: 1, mood: 4, sleep: 8, heldHour: false, moments: 1 }],
+      ['deep fog, indigo night', { seed: 108, lightHour: 22, habitsDone: 2, habitsTotal: 5, fog: 5, fed: 0, mood: 1, sleep: 3, heldHour: false, moments: 4 }],
+    ];
+    const row1 = document.getElementById('row1');
+    for (const [name, data] of ROW1) addPrint(row1, data, name);
+
+    // ---- row 2: one day, five light scores ----
+    const BASE = { seed: 555, habitsDone: 3, habitsTotal: 5, fog: 1, fed: 1, mood: 3, sleep: 6, heldHour: false, moments: 1 };
+    const STOPS = [
+      ['dawn', 5], ['duck-egg morning', 9.25], ['cobalt noon', 13.5], ['apricot dusk', 17.75], ['indigo night', 22],
+    ];
+    const row2 = document.getElementById('row2');
+    for (const [name, lightHour] of STOPS) addPrint(row2, { ...BASE, lightHour }, name);
+
+    // ---- footer: proposed mappings, open questions ----
+    const footer = document.getElementById('footer');
+    footer.innerHTML = '';
+    footer.appendChild(document.createTextNode(
+      'proposed, not decided: '));
+    const items = [
+      'light ← sleep, or the hour itself, or mood — which one is the sky?',
+      'terrain ← fed, always, or should a long streak dry the ground regardless of today?',
+      'the figure ← always present, or only some days — a self-portrait, or a stranger?',
+      'the rock outcrop ← pure geology, or seeded by something she keeps (a habit’s Variety)?',
+    ];
+    const ul = document.createElement('span');
+    items.forEach((t, i) => {
+      const s = document.createElement('strong');
+      s.textContent = t;
+      ul.appendChild(s);
+      if (i < items.length - 1) ul.appendChild(document.createTextNode('   ·   '));
+    });
+    footer.appendChild(ul);
+  </script>
+</body>
+</html>
