@@ -475,17 +475,39 @@ export function dayPrint(data = {}, w = 300, h = 380) {
   }
 
   // the shoreline — arrives at the horizon after a tracking streak,
-  // claims more ground as `sea` grows
+  // claims more ground as `sea` grows, but never reads as a second sky:
+  // capped well short of the whole ground plane, in two flat depth bands,
+  // with an irregular (never ruler-straight) foam edge and a few waves.
+  let seaH = 0;
   if (sea > 0.02) {
-    const seaH = groundH * (0.12 + 0.72 * sea);
-    fills += `<rect x="${ix.toFixed(1)}" y="${horizonY.toFixed(1)}" width="${iw.toFixed(1)}" height="${seaH.toFixed(1)}" fill="${SEA}"/>`;
-    const foamY = horizonY + seaH;
-    const seg = 8, segW = iw / seg;
-    let foamD = `M${ix.toFixed(1)},${foamY.toFixed(1)} `;
-    for (let i = 1; i <= seg; i++) {
-      const fx = ix + i * segW, fy = foamY + (rng() - 0.5) * groundH * 0.02;
-      foamD += `L${fx.toFixed(1)},${fy.toFixed(1)} `;
+    seaH = groundH * (0.08 + 0.32 * sea); // caps near 40% of the ground
+    const farH = seaH * 0.42;
+    fills += `<rect x="${ix.toFixed(1)}" y="${horizonY.toFixed(1)}" width="${iw.toFixed(1)}" height="${farH.toFixed(1)}" fill="${SEA}"/>`;
+    fills += `<rect x="${ix.toFixed(1)}" y="${(horizonY + farH).toFixed(1)}" width="${iw.toFixed(1)}" height="${(seaH - farH).toFixed(1)}" fill="${lerpColor(SEA, '#5f9c93', 0.4)}"/>`;
+
+    // 2-3 short wave dashes in the sea body, ink only
+    const waves = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < waves; i++) {
+      const wy = horizonY + seaH * (0.25 + rng() * 0.6);
+      const wx = ix + iw * (0.1 + rng() * 0.7), wl = iw * (0.05 + rng() * 0.06);
+      addInk('line', { x1: wx, y1: wy, x2: wx + wl, y2: wy, fill: 'none' }, 0.7);
     }
+
+    // the foam line — a smooth, gently irregular curve, never straight
+    const foamY = horizonY + seaH;
+    const segN = 6, segW = iw / segN;
+    const pts = [[ix, foamY + (rng() - 0.5) * groundH * 0.025]];
+    for (let i = 1; i <= segN; i++) {
+      pts.push([ix + i * segW, foamY + (rng() - 0.5) * groundH * 0.035]);
+    }
+    let foamD = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)} `;
+    for (let i = 1; i < pts.length; i++) {
+      const [px0, py0] = pts[i - 1], [px1, py1] = pts[i];
+      const mx = (px0 + px1) / 2, my = (py0 + py1) / 2;
+      foamD += `Q${px0.toFixed(1)},${py0.toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)} `;
+    }
+    const [lastX, lastY] = pts[pts.length - 1];
+    foamD += `T${lastX.toFixed(1)},${lastY.toFixed(1)}`;
     addInk('path', { d: foamD, fill: 'none' }, 1.0);
   }
 
@@ -566,26 +588,40 @@ export function dayPrint(data = {}, w = 300, h = 380) {
     }
   }
 
+  // land begins strictly below the mountain band and any shoreline — no
+  // plant, and no figure, may stand on water or on the mountains
+  const mountainMargin = 0.24; // mountains sit ≤6% of groundH; leave enough
+  // clearance that even a short-statured horizon plant's stem-and-head
+  // doesn't reach back up into the mountain band
+  const seaMargin = sea > 0.02 ? seaH / groundH + 0.05 : 0;
+  const minDepth = Math.min(0.85, Math.max(mountainMargin, seaMargin));
+
   // 6. flora — done habits, clumped in 1-2 groups, depth sets size (one
-  // foreground specimen at most); identity from the habit's name
+  // foreground specimen at most, near-horizon ones ≤35% of it); identity
+  // from the habit's name
   if (doneHabits.length > 0) {
     const nH = doneHabits.length;
     const groups = nH <= 2 || rng() < 0.55 ? 1 : 2;
     const centers = Array.from({ length: groups }, () => ix + iw * (0.22 + rng() * 0.56));
     const foregroundIdx = rng() < 0.6 ? 0 : -1;
+    const span = 1 - minDepth;
+    const maxSize = Math.min(iw, ih) * 0.135;
     doneHabits.forEach((hb, i) => {
       const g = i % groups;
-      const depth = i === foregroundIdx ? 0.72 + rng() * 0.24 : 0.12 + rng() * 0.4;
+      const depth = i === foregroundIdx
+        ? minDepth + span * (0.68 + rng() * 0.28)   // foreground: near the bottom
+        : minDepth + span * (rng() * 0.4);           // background: still on land
       const fy = horizonY + groundH * depth;
       const fx = centers[g] + (rng() - 0.5) * iw * (0.05 + depth * 0.06);
-      const size = Math.min(iw, ih) * (0.038 + 0.1 * depth);
+      const depthNorm = (depth - minDepth) / span; // 0 at the land's first strip, 1 at the foreground
+      const size = maxSize * (0.25 + 0.75 * depthNorm); // a horizon plant is ≤35% of a foreground one, plus a floor so it never vanishes
       fills += drawFlora(hb.name, addInk, fx, fy, size, depth);
     });
   }
 
-  // 7. the figure — mid-distance on the path; a held hour earns a
-  // monolith + long shadow
-  const figFrac = 0.28 + rng() * 0.24;
+  // 7. the figure — mid-distance on the path (never on water or the
+  // mountain band); a held hour earns a monolith + long shadow
+  const figFrac = Math.max(minDepth + 0.04, 0.28 + rng() * 0.24);
   const figH = ih * (0.024 + 0.022 * figFrac);
   const figT = 1 - figFrac;
   const pathCenterX = geo.centerAt(figT);
