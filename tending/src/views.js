@@ -3,7 +3,8 @@
 // moves on.
 
 import * as store from './store.js';
-import { plantSVG, daySVG } from './bloom.js';
+import { dayPrint } from './print.js';
+import { computeWorldState } from './world.js';
 
 // ------------------------------------------------------------------ dom
 
@@ -12,7 +13,7 @@ function h(tag, attrs = {}, children = []) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v; // only ever fed markup we generated (bloom.js svg)
+    else if (k === 'html') e.innerHTML = v; // only ever fed markup we generated ourselves
     else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
     else if (k === 'value') e.value = v;
     else e.setAttribute(k, v === true ? '' : v);
@@ -87,7 +88,7 @@ export function holdToAct(el, { ms = 900, onComplete, onStart, onCancel } = {}) 
 export function bindSwipe(root, { onLeft, onRight, threshold = 56 }) {
   let active = false, sx = 0, sy = 0, pid = null;
   function interactive(t) {
-    return t.closest && t.closest('button, a, input, textarea, select, .plant-slot, .gather, .schedule, .instrument, .instrument-panel');
+    return t.closest && t.closest('button, a, input, textarea, select');
   }
   function down(e) {
     if (interactive(e.target)) { active = false; return; }
@@ -112,10 +113,6 @@ export function bindSwipe(root, { onLeft, onRight, threshold = 56 }) {
   };
 }
 
-const COHORT_WORD = ['today', 'yesterday', 'two days ago', 'three days ago', 'four days ago'];
-function cohortLabel(age) { return COHORT_WORD[age] || `${age} days ago`; }
-function daysLeftWord(n) { return n === 1 ? 'one day left' : `${n} days left`; }
-
 // ==================================================================== day
 
 export function mountDay(app, date) {
@@ -123,8 +120,16 @@ export function mountDay(app, date) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
 
-  const wallet = h('button', { class: 'wallet', onclick: () => (location.hash = '#/shop') });
+  const wallet = h('button', { class: 'wallet' });
   app.appendChild(wallet);
+  const unbindWalletHold = holdToAct(wallet, {
+    ms: 900,
+    onComplete: async () => {
+      const got = await store.gather();
+      renderWallet();
+      if (got) whisper(`${got} seed${got === 1 ? '' : 's'} gathered.`, 2200);
+    },
+  });
 
   const header = h('div', { class: 'day-header' });
   const title = h('h1', {}, store.fmtDate(date));
@@ -140,8 +145,14 @@ export function mountDay(app, date) {
       h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, 'today')));
   }
 
-  const bed = h('div', { class: 'bed' });
-  root.appendChild(bed);
+  // the plate — the day itself, painted
+  const plate = h('div', { class: 'plate' });
+  root.appendChild(plate);
+
+  // the provenance ledger — habits as words; tap to tick, tap again to
+  // take it back while it's still unclaimed
+  const ledger = h('div', { class: 'ledger' });
+  root.appendChild(ledger);
 
   const hoursLine = h('div', { class: 'hours-line' });
   root.appendChild(hoursLine);
@@ -149,23 +160,9 @@ export function mountDay(app, date) {
   const momentsText = h('div', { class: 'moments-text' });
   root.appendChild(momentsText);
 
-  const pollen = h('div', { class: 'pollen' });
-  root.appendChild(pollen);
-
-  const schedule = h('div', { class: 'schedule' });
-  root.appendChild(schedule);
-
-  const instruments = h('div', { class: 'instruments' });
-  root.appendChild(instruments);
-
-  const noteLine = h('div', { class: 'note-line' });
-  root.appendChild(noteLine);
-
   const hints = h('div', { class: 'hints' }, [
-    h('a', { href: '#/meadow' }, 'the meadow'),
     h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
-    h('a', { href: '#/unwind' }, 'unwind'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
@@ -173,51 +170,62 @@ export function mountDay(app, date) {
   function renderWallet() {
     clear(wallet);
     wallet.appendChild(h('span', { class: 'dot' }, '◦ '));
-    wallet.appendChild(document.createTextNode(`${store.wallet()} seeds`));
+    wallet.appendChild(document.createTextNode(String(store.wallet())));
+    const pending = store.pendingTicks();
+    if (pending.length) {
+      const waiting = pending.reduce((a, t) => a + (t.f.Seeds || 0), 0);
+      wallet.appendChild(document.createTextNode(` · ${waiting} waiting — hold to gather`));
+    }
   }
 
-  function renderBed() {
-    clear(bed);
+  function plateSize() {
+    const w = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
+    const hh = Math.round((window.innerHeight || 700) * 0.6);
+    return [Math.max(200, w), Math.max(240, hh)];
+  }
+
+  function renderPlate(crossfade = false) {
+    const [pw, ph] = plateSize();
+    if (crossfade) {
+      plate.style.opacity = '0';
+      setTimeout(() => {
+        plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
+        plate.style.opacity = '1';
+      }, 180);
+    } else {
+      plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
+    }
+  }
+
+  function renderLedger() {
+    clear(ledger);
     const habits = store.activeHabits();
     if (!habits.length) {
-      bed.appendChild(h('div', { class: 'dim italic' }, 'no habits planted yet — tend the garden.'));
+      ledger.appendChild(h('div', { class: 'dim italic' }, 'no habits planted yet — tend the garden.'));
       return;
     }
     for (const habit of habits) {
-      const slot = h('div', { class: 'plant-slot' });
-      const svgWrap = h('div');
-      const label = h('div', { class: 'label' }, habit.f.Name || '');
-      const float = h('div', { class: 'float' });
-      slot.appendChild(svgWrap);
-      slot.appendChild(label);
-      slot.appendChild(float);
-      bed.appendChild(slot);
-
-      function paint() {
-        const tick = store.tickFor(date, habit.f.Name);
-        const state = tick ? 'bloom' : 'bud';
-        slot.classList.toggle('bloom', !!tick);
-        svgWrap.innerHTML = plantSVG({ seed: habit.f.Variety || 1, state, w: 62, h: 108 });
-        slot.style.animationDelay = `${((habit.f.Variety || 1) % 40) / 10}s`;
-      }
-      paint();
-
-      slot.addEventListener('click', async () => {
-        const tick = store.tickFor(date, habit.f.Name);
-        if (!tick) {
+      const tick = store.tickFor(date, habit.f.Name);
+      const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') }, habit.f.Name || '');
+      word.addEventListener('click', async () => {
+        const cur = store.tickFor(date, habit.f.Name);
+        if (!cur) {
           await store.tick(date, habit);
-          paint();
-          float.textContent = `+${habit.f.Seeds || 0} seeds`;
-          float.classList.remove('go'); void float.offsetWidth; float.classList.add('go');
-          renderPollen();
-        } else if (tick.f.Status === 'unclaimed') {
+        } else if (cur.f.Status === 'unclaimed') {
           await store.untick(date, habit.f.Name);
-          paint();
-          renderPollen();
+        } else {
+          return; // already gathered or withered — the ledger doesn't undo that
         }
+        renderLedger();
+        renderPlate(true);
+        renderWallet();
       });
+      ledger.appendChild(word);
     }
   }
+
+  function onResize() { renderPlate(); }
+  window.addEventListener('resize', onResize);
 
   function renderHoursLine() {
     clear(hoursLine);
@@ -260,125 +268,6 @@ export function mountDay(app, date) {
       momentsText.appendChild(btn);
       if (i < moments.length - 1) momentsText.appendChild(document.createTextNode(' · '));
     });
-  }
-
-  function renderPollen() {
-    clear(pollen);
-    const groups = {};
-    for (const t of store.pendingTicks()) {
-      (groups[t.f.Date] = groups[t.f.Date] || []).push(t);
-    }
-    const dates = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1));
-    const cohorts = h('div', { class: 'cohorts' });
-    if (!dates.length) {
-      cohorts.appendChild(h('span', { class: 'dim' }, 'no pollen waiting.'));
-    } else {
-      dates.forEach((d, i) => {
-        const age = store.daysBetween(d, today);
-        const seeds = groups[d].reduce((a, t) => a + (t.f.Seeds || 0), 0);
-        const left = store.GATHER_DAYS - age;
-        let text = `${cohortLabel(age)} · ${seeds}`;
-        if (age >= 1) text += ` — ${daysLeftWord(left)}`;
-        cohorts.appendChild(h('span', { class: 'n' }, text));
-        if (i < dates.length - 1) cohorts.appendChild(document.createTextNode('   '));
-      });
-    }
-    pollen.appendChild(cohorts);
-    const gatherBtn = h('div', { class: 'gather italic dim' }, 'gather — press & hold');
-    pollen.appendChild(gatherBtn);
-    if (dates.length) {
-      holdToAct(gatherBtn, {
-        ms: 900,
-        onComplete: async () => {
-          const got = await store.gather();
-          renderPollen();
-          renderWallet();
-          if (got) whisper(`${got} seeds gathered.`, 2200);
-        },
-      });
-    }
-  }
-
-  function renderSchedule() {
-    clear(schedule);
-    const day = store.dayFor(date);
-    const text = (day && day.f.Schedule) || '';
-    const view = h('div');
-    function showText() {
-      clear(view);
-      if (!text.trim()) {
-        view.appendChild(h('div', { class: 'line empty italic' }, 'the day, gently — click to add a line.'));
-      } else {
-        for (const line of text.split('\n').filter((l) => l.trim())) {
-          view.appendChild(h('div', { class: 'line italic' }, line));
-        }
-      }
-    }
-    showText();
-    view.addEventListener('click', () => {
-      const ta = h('textarea', { class: 'field', placeholder: '14:00 — dentist' });
-      ta.value = text;
-      clear(schedule);
-      schedule.appendChild(ta);
-      ta.focus();
-      ta.addEventListener('blur', async () => {
-        await store.saveDay(date, { Schedule: ta.value });
-        renderSchedule();
-      });
-    });
-    clear(schedule);
-    schedule.appendChild(view);
-  }
-
-  let openTracker = null;
-  function renderInstruments() {
-    clear(instruments);
-    const trackers = store.activeTrackers();
-    if (!trackers.length) {
-      instruments.appendChild(h('div', { class: 'dim italic' }, 'no instruments set — tend to add some.'));
-      return;
-    }
-    for (const tracker of trackers) {
-      const entry = store.entryFor(date, tracker.f.Name);
-      const row = h('div', { class: 'instrument' });
-      const disp = displayFor(tracker, entry);
-      row.appendChild(h('span', { class: 'k' }, `${tracker.f.Name} `));
-      row.appendChild(h('span', { class: 'v' }, disp));
-      row.addEventListener('click', () => {
-        openTracker = openTracker === tracker.f.Name ? null : tracker.f.Name;
-        renderInstruments();
-        renderPanel();
-      });
-      instruments.appendChild(row);
-    }
-  }
-
-  function renderPanel() {
-    let panel = instruments.nextSibling && instruments.nextSibling.classList && instruments.nextSibling.classList.contains('instrument-panel')
-      ? instruments.nextSibling : null;
-    if (panel) panel.remove();
-    if (!openTracker) return;
-    const tracker = store.activeTrackers().find((t) => t.f.Name === openTracker);
-    if (!tracker) return;
-    const entry = store.entryFor(date, tracker.f.Name);
-    panel = h('div', { class: 'instrument-panel' });
-    buildControl(panel, tracker, entry, async (value, words) => {
-      await store.saveEntry(date, tracker, value, words);
-      renderInstruments();
-      renderPanel();
-    });
-    instruments.insertAdjacentElement('afterend', panel);
-  }
-
-  function renderNote() {
-    clear(noteLine);
-    const day = store.dayFor(date);
-    const input = h('input', { class: 'field', placeholder: 'a line for the day…' });
-    input.value = (day && day.f.Note) || '';
-    input.addEventListener('blur', async () => {
-      await store.saveDay(date, { Note: input.value });
-    });
-    noteLine.appendChild(input);
   }
 
   // -------------------------------------------------- moments, caught in passing
@@ -636,152 +525,23 @@ export function mountDay(app, date) {
   backdrop.addEventListener('click', () => closeSheet());
 
   renderWallet();
-  renderBed();
+  renderLedger();
+  renderPlate();
   renderHoursLine();
-  renderPollen();
-  renderSchedule();
-  renderInstruments();
-  renderNote();
 
   const unbindSwipe = bindSwipe(root, {
     onLeft: () => (location.hash = `#/day/${store.addDays(date, 1)}`),
     onRight: () => (location.hash = `#/day/${store.addDays(date, -1)}`),
   });
 
-  return () => { unbindSwipe(); clearTimeout(ribbonTimer); };
+  return () => {
+    unbindSwipe();
+    unbindWalletHold();
+    window.removeEventListener('resize', onResize);
+    clearTimeout(ribbonTimer);
+  };
 }
 
-function displayFor(tracker, entry) {
-  const kind = tracker.f.Kind;
-  const f = entry && entry.f;
-  if (!f || (f.Value == null && !f.Words)) return '–';
-  if (kind === 'yesno') return f.Value ? 'yes' : 'no';
-  if (kind === 'words') return f.Words ? (f.Words.length > 24 ? f.Words.slice(0, 24) + '…' : f.Words) : '–';
-  if (f.Value == null) return '–';
-  return Number.isInteger(f.Value) ? String(f.Value) : f.Value.toFixed(1);
-}
-
-function buildControl(panel, tracker, entry, onSave) {
-  const kind = tracker.f.Kind;
-  const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
-  const cur = entry && entry.f;
-  if (kind === 'scale') {
-    const value = cur && cur.Value != null ? cur.Value : null;
-    const dots = h('div', { class: 'dots' });
-    for (let i = min; i <= max; i++) {
-      const dot = h('button', { class: value != null && i <= value ? 'on' : '' });
-      dot.addEventListener('click', () => onSave(i));
-      dots.appendChild(dot);
-    }
-    panel.appendChild(dots);
-  } else if (kind === 'yesno') {
-    const value = cur && cur.Value != null ? cur.Value : null;
-    const row = h('div', { class: 'yesno-row' });
-    const yes = h('button', { class: 'plain' + (value === 1 ? ' on' : '') }, 'yes');
-    const no = h('button', { class: 'plain' + (value === 0 ? ' on' : '') }, 'no');
-    yes.addEventListener('click', () => onSave(1));
-    no.addEventListener('click', () => onSave(0));
-    row.appendChild(yes); row.appendChild(no);
-    panel.appendChild(row);
-  } else if (kind === 'number') {
-    let value = cur && cur.Value != null ? cur.Value : min;
-    const wrap = h('div', { class: 'stepper' });
-    const valEl = h('span', { class: 'val' }, String(value));
-    const dec = h('button', {}, '–');
-    const inc = h('button', {}, '+');
-    let timer = null, held = null;
-    function step(delta) {
-      value = Math.max(min, Math.min(max, value + delta));
-      valEl.textContent = String(value);
-    }
-    function commit() { onSave(value); }
-    function pressStart(delta) {
-      step(delta);
-      held = setTimeout(function repeat() { step(delta); held = setTimeout(repeat, 110); }, 420);
-    }
-    function pressEnd() { clearTimeout(held); held = null; clearTimeout(timer); timer = setTimeout(commit, 400); }
-    dec.addEventListener('pointerdown', () => pressStart(-1));
-    inc.addEventListener('pointerdown', () => pressStart(1));
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => {
-      dec.addEventListener(ev, pressEnd); inc.addEventListener(ev, pressEnd);
-    });
-    wrap.appendChild(dec); wrap.appendChild(valEl); wrap.appendChild(inc);
-    panel.appendChild(wrap);
-  } else if (kind === 'words') {
-    const ta = h('textarea', { class: 'field' });
-    ta.value = (cur && cur.Words) || '';
-    ta.addEventListener('blur', () => onSave(undefined, ta.value));
-    panel.appendChild(ta);
-  }
-}
-
-// ================================================================= meadow
-
-export function mountMeadow(app) {
-  const root = h('div', { class: 'room' });
-  root.appendChild(h('div', { class: 'meadow-title italic' }, 'the meadow'));
-  const strip = h('div', { class: 'meadow-strip' });
-  root.appendChild(strip);
-  root.appendChild(h('div', { class: 'legend' },
-    'stem height — habits done · blooms — ticks · colour — mood · veil — fog · a star — a held hour'));
-  app.appendChild(root);
-
-  const habitsCount = Math.max(1, store.activeHabits().length);
-  const today = store.todayISO();
-  const N = 90;
-  const days = [];
-  for (let i = N - 1; i >= 0; i--) days.push(store.addDays(today, -i));
-
-  // a full-habit day stands tall — roughly 40-45% of the viewport; even a
-  // bare day still stands (the field is continuous, never gappy).
-  const vh = window.innerHeight || 700;
-  const PH = Math.round(vh * 0.525) + 12;
-  const PW = Math.round(PH * 0.3);
-
-  for (const d of days) {
-    const ticksForDay = store.S.data.Ticks.filter((t) => t.f.Date === d);
-    const ticks = ticksForDay.length;
-    const doneRatio = Math.min(1, ticks / habitsCount);
-    const mood = store.entryFor(d, 'mood');
-    const fog = store.entryFor(d, 'brain fog');
-    const fed = store.entryFor(d, 'ate enough');
-    const heldHour = store.S.data.Hours.some((hh) => hh.f.Date === d && hh.f.Outcome === 'held');
-    const daySeed = d.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-
-    const moodVal = mood && mood.f.Value != null ? mood.f.Value : null;
-    const fogVal = fog && fog.f.Value != null ? fog.f.Value : null;
-    const fedVal = fed && fed.f.Value != null ? fed.f.Value : null;
-    const noData = ticks === 0 && moodVal == null && fogVal == null && fedVal == null && !heldHour;
-
-    const summary = { doneRatio, ticks, mood: moodVal, fog: fogVal, fed: fedVal, heldHour, noData, daySeed };
-
-    const cell = h('div', { class: 'meadow-day' });
-    cell.innerHTML = daySVG(summary, PW, PH);
-    const parts = [store.fmtDate(d)];
-    if (noData) parts.push('nothing kept');
-    else {
-      parts.push(`${ticks} of ${habitsCount}`);
-      if (fogVal != null) parts.push(`fog ${fogVal}`);
-      if (fedVal != null) parts.push(fedVal ? 'fed yes' : 'fed no');
-    }
-    const tag = h('div', { class: 'tag' }, parts.join(' — '));
-    cell.insertBefore(tag, cell.firstChild);
-    cell.addEventListener('click', () => (location.hash = `#/day/${d}`));
-    strip.appendChild(cell);
-  }
-  // land on "today" — after the browser has actually laid the strip out
-  requestAnimationFrame(() => requestAnimationFrame(() => { strip.scrollLeft = strip.scrollWidth; }));
-
-  const hints = h('div', { class: 'hints' }, [
-    h('a', { href: '#/day/' }, 'the day'),
-    h('a', { href: '#/shop' }, 'the shop'),
-    h('a', { href: '#/hour' }, 'the hour'),
-    h('a', { href: '#/unwind' }, 'unwind'),
-    h('a', { href: '#/tend' }, 'tend'),
-  ]);
-  app.appendChild(hints);
-  return () => {};
-}
 
 // =================================================================== shop
 
@@ -857,206 +617,11 @@ export function mountShop(app) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
-    h('a', { href: '#/meadow' }, 'the meadow'),
     h('a', { href: '#/hour' }, 'the hour'),
-    h('a', { href: '#/unwind' }, 'unwind'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
   return () => {};
-}
-
-// ================================================================= unwind
-
-export function mountUnwind(app) {
-  const today = store.todayISO();
-  const root = h('div', { class: 'unwind-room' });
-  app.appendChild(root);
-  const esc = h('div', { class: 'unwind-esc italic' }, 'esc — leave');
-  app.appendChild(esc);
-
-  // the harvest leads (payday first), then the scales — entirely
-  // optional, skippable one at a time or all at once — then the note,
-  // then the day made into a flower.
-  const trackers = store.activeTrackers();
-  const cards = [{ type: 'harvest' }, ...trackers.map((t) => ({ type: 'tracker', tracker: t })), { type: 'note' }, { type: 'final' }];
-  let i = 0;
-  let advanceTimer = null;
-
-  function onKey(e) {
-    if (e.key === 'Escape') { location.hash = '#/day/'; }
-  }
-  window.addEventListener('keydown', onKey);
-
-  function advanceSoon(ms = 500) {
-    clearTimeout(advanceTimer);
-    advanceTimer = setTimeout(() => { i++; renderCard(); }, ms);
-  }
-
-  function renderCard() {
-    clearTimeout(advanceTimer);
-    clear(root);
-    if (i >= cards.length) { renderFinal(); return; }
-    const card = cards[i];
-    if (card.type === 'tracker') renderTrackerCard(card.tracker);
-    else if (card.type === 'note') renderNoteCard();
-    else if (card.type === 'harvest') renderHarvestCard();
-    else renderFinal();
-  }
-
-  function renderHarvestCard() {
-    if (!store.pendingTicks().length) { i++; renderCard(); return; }
-    root.appendChild(h('div', { class: 'unwind-q' }, 'the harvest.'));
-    const groups = {};
-    for (const t of store.pendingTicks()) (groups[t.f.Date] = groups[t.f.Date] || []).push(t);
-    const dates = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1));
-    const cohorts = h('div', { class: 'cohorts' });
-    dates.forEach((d, idx) => {
-      const age = store.daysBetween(d, today);
-      const seeds = groups[d].reduce((a, t) => a + (t.f.Seeds || 0), 0);
-      cohorts.appendChild(h('span', { class: 'n' }, `${cohortLabel(age)} · ${seeds}`));
-      if (idx < dates.length - 1) cohorts.appendChild(document.createTextNode('   '));
-    });
-    root.appendChild(cohorts);
-    const holdEl = h('div', { class: 'gather italic' }, 'gather — press & hold');
-    root.appendChild(holdEl);
-    holdToAct(holdEl, {
-      ms: 900,
-      onComplete: async () => { await store.gather(); i++; renderCard(); },
-    });
-  }
-
-  function renderTrackerCard(tracker) {
-    const kind = tracker.f.Kind;
-    const min = tracker.f.Min ?? 0, max = tracker.f.Max ?? 5;
-    const existing = store.entryFor(today, tracker.f.Name);
-    root.appendChild(h('div', { class: 'unwind-q' }, tracker.f.Ask || tracker.f.Name));
-
-    // an answer locks the card — without this, a second tap (a real
-    // finger's natural double-tap, or a mis-tap on a neighbouring petal)
-    // just calls advanceSoon() again, which clearTimeouts the pending
-    // advance and reschedules it; repeat that indefinitely and the card
-    // never moves — this is very likely what read as "the questions
-    // don't work" on a touchscreen.
-    let answered = false;
-    function lockedAdvance(ms) {
-      if (answered) return;
-      answered = true;
-      advanceSoon(ms);
-    }
-
-    if (kind === 'scale') {
-      const wrap = h('div', { class: 'petals' });
-      const n = max - min + 1;
-      for (let k = 0; k < n; k++) {
-        const angle = -100 + (200 / (n - 1)) * k;
-        const petal = h('button', { class: 'petal' }, String(min + k));
-        petal.style.transform = `rotate(${angle}deg) translate(0, -100px) rotate(${-angle}deg)`;
-        petal.addEventListener('click', async () => {
-          if (answered) return;
-          const val = min + k;
-          [...wrap.children].forEach((c, ci) => c.classList.toggle('on', ci <= k));
-          await store.saveEntry(today, tracker, val);
-          lockedAdvance();
-        });
-        wrap.appendChild(petal);
-      }
-      if (existing && existing.f.Value != null) {
-        [...wrap.children].forEach((c, ci) => c.classList.toggle('on', ci <= existing.f.Value - min));
-      }
-      root.appendChild(wrap);
-    } else if (kind === 'yesno') {
-      const wrap = h('div', { class: 'unwind-yesno' });
-      const yes = h('button', { class: 'plain italic' }, 'yes');
-      const no = h('button', { class: 'plain italic' }, 'no');
-      yes.addEventListener('click', async () => { if (answered) return; await store.saveEntry(today, tracker, 1); lockedAdvance(); });
-      no.addEventListener('click', async () => { if (answered) return; await store.saveEntry(today, tracker, 0); lockedAdvance(); });
-      wrap.appendChild(yes); wrap.appendChild(no);
-      root.appendChild(wrap);
-    } else if (kind === 'number') {
-      let value = existing && existing.f.Value != null ? existing.f.Value : min;
-      const wrap = h('div', { class: 'stepper' });
-      const valEl = h('span', { class: 'val' }, String(value));
-      const dec = h('button', {}, '–');
-      const inc = h('button', {}, '+');
-      let held = null;
-      function step(d) { value = Math.max(min, Math.min(max, value + d)); valEl.textContent = String(value); }
-      function start(d) { if (answered) return; step(d); held = setTimeout(function r() { step(d); held = setTimeout(r, 110); }, 420); }
-      function end() { clearTimeout(held); if (answered) return; store.saveEntry(today, tracker, value); lockedAdvance(700); }
-      dec.addEventListener('pointerdown', () => start(-1));
-      inc.addEventListener('pointerdown', () => start(1));
-      ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => { dec.addEventListener(ev, end); inc.addEventListener(ev, end); });
-      wrap.appendChild(dec); wrap.appendChild(valEl); wrap.appendChild(inc);
-      root.appendChild(wrap);
-    } else {
-      const ta = h('textarea', { class: 'field unwind-note' });
-      ta.value = (existing && existing.f.Words) || '';
-      ta.addEventListener('blur', () => { if (answered) return; store.saveEntry(today, tracker, undefined, ta.value); lockedAdvance(300); });
-      root.appendChild(ta);
-      setTimeout(() => ta.focus(), 50);
-    }
-
-    const skipRow = h('div', { class: 'unwind-skip-row' });
-    const skipOne = h('button', { class: 'plain italic' }, 'skip');
-    skipOne.addEventListener('click', () => { if (answered) return; answered = true; advanceSoon(0); });
-    skipRow.appendChild(skipOne);
-    const noteIdx = cards.findIndex((c) => c.type === 'note');
-    if (noteIdx > i) {
-      const skipRest = h('button', { class: 'plain italic' }, 'skip the rest');
-      skipRest.addEventListener('click', () => {
-        answered = true;
-        clearTimeout(advanceTimer);
-        i = noteIdx;
-        renderCard();
-      });
-      skipRow.appendChild(skipRest);
-    }
-    root.appendChild(skipRow);
-  }
-
-  function renderNoteCard() {
-    root.appendChild(h('div', { class: 'unwind-q' }, 'a line for the day.'));
-    const day = store.dayFor(today);
-    const ta = h('textarea', { class: 'field unwind-note' });
-    ta.value = (day && day.f.Note) || '';
-    ta.addEventListener('blur', () => { store.saveDay(today, { Note: ta.value }); advanceSoon(300); });
-    root.appendChild(ta);
-    setTimeout(() => ta.focus(), 50);
-  }
-
-  function renderFinal() {
-    const habitsCount = Math.max(1, store.activeHabits().length);
-    const ticks = store.S.data.Ticks.filter((t) => t.f.Date === today).length;
-    const mood = store.entryFor(today, 'mood');
-    const fog = store.entryFor(today, 'brain fog');
-    const fed = store.entryFor(today, 'ate enough');
-    const heldHour = store.S.data.Hours.some((hh) => hh.f.Date === today && hh.f.Outcome === 'held');
-    const summary = {
-      doneRatio: Math.min(1, ticks / habitsCount), ticks,
-      mood: mood && mood.f.Value != null ? mood.f.Value : null,
-      fog: fog && fog.f.Value != null ? fog.f.Value : null,
-      fed: fed && fed.f.Value != null ? fed.f.Value : null,
-      heldHour,
-    };
-    // the moment of the night — grown large, centered, before "goodnight."
-    const vh = window.innerHeight || 700;
-    const fh = Math.round(vh * 0.5);
-    const fw = Math.round(fh * 0.44);
-    const plant = h('div', { class: 'unwind-plant' });
-    plant.innerHTML = daySVG(summary, fw, fh);
-    plant.style.opacity = '0';
-    plant.style.transform = 'scale(0.7)';
-    plant.style.transition = 'opacity 1.5s ease, transform 1.5s ease';
-    root.appendChild(plant);
-    root.appendChild(h('div', { class: 'unwind-goodnight' }, 'goodnight.'));
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      plant.style.opacity = '1'; plant.style.transform = 'scale(1)';
-    }));
-  }
-
-  renderCard();
-
-  return () => { window.removeEventListener('keydown', onKey); clearTimeout(advanceTimer); };
 }
 
 // ==================================================================== tend
@@ -1145,10 +710,8 @@ export function mountTend(app) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
-    h('a', { href: '#/meadow' }, 'the meadow'),
     h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
-    h('a', { href: '#/unwind' }, 'unwind'),
   ]);
   app.appendChild(hints);
   return () => {};

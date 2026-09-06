@@ -39,10 +39,6 @@
     --bg: #0d0507; --ink: rgba(240, 220, 216, 0.7); --ink-strong: rgba(250, 235, 230, 0.96);
     --ink-dim: rgba(240, 220, 216, 0.3); --accent: #b23a3a; --line: rgba(200, 90, 90, 0.22);
   }
-  body[data-room="unwind"] {
-    --bg: #12101a; --ink: rgba(226, 224, 240, 0.68); --ink-strong: rgba(236, 234, 248, 0.95);
-    --ink-dim: rgba(226, 224, 240, 0.34); --accent: #7d8ab0; --line: rgba(160, 170, 210, 0.16);
-  }
   body[data-room="tend"] { font-size: 0.94rem; }
 
   /* ---- grain + vignette, copied from the field, always on, quiet ---- */
@@ -115,55 +111,19 @@
   .day-header h1 { font-weight: normal; font-style: italic; font-size: 1.05rem; letter-spacing: 0.08em; text-align: center; }
   .today-link { text-align: center; margin-top: -12px; margin-bottom: 14px; font-size: 0.74rem; }
 
-  .bed { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; align-items: flex-end;
-    padding: 6px 0 10px; position: relative; min-height: 130px; }
-  .plant-slot { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;
-    padding: 4px; min-width: 60px; min-height: 118px; justify-content: flex-end; user-select: none; }
-  .plant-slot svg { animation: sway 6s ease-in-out infinite; transform-origin: 50% 95%; }
-  @keyframes sway { 0%, 100% { transform: rotate(-1.1deg); } 50% { transform: rotate(1.1deg); } }
-  .plant-slot .label { font-size: 0.66rem; font-style: italic; letter-spacing: 0.03em; text-align: center;
-    margin-top: 4px; max-width: 76px; line-height: 1.25; color: var(--ink-dim); }
-  .plant-slot.bloom .label { color: var(--ink); }
-  .plant-slot .float { position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
-    font-style: italic; font-size: 0.78rem; color: var(--gold); opacity: 0; pointer-events: none; }
-  .plant-slot .float.go { animation: floatup 1.1s ease-out forwards; }
-  @keyframes floatup { 0% { opacity: 0; transform: translate(-50%, 6px); } 20% { opacity: 1; }
-    100% { opacity: 0; transform: translate(-50%, -34px); } }
-
-  .pollen { margin: 6px 0 22px; text-align: center; }
-  .pollen .cohorts { font-size: 0.78rem; font-style: italic; line-height: 1.9; color: var(--ink); }
-  .pollen .cohorts .n { color: var(--gold); }
-  .pollen .gather { margin-top: 8px; font-size: 0.82rem; }
-
   .wallet { position: fixed; top: 16px; right: 18px; z-index: 6; font-size: 0.8rem; font-style: italic;
-    background: none; border: none; color: var(--ink); cursor: pointer; padding: 8px; min-height: 44px; }
+    background: none; border: none; color: var(--ink); cursor: pointer; padding: 8px; min-height: 44px;
+    max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
-  .schedule { margin: 6px 0 20px; text-align: center; min-height: 40px; cursor: text; }
-  .schedule .line { font-size: 0.86rem; font-style: italic; line-height: 1.9; }
-  .schedule textarea { width: 100%; min-height: 90px; text-align: left; background: transparent; }
-  .schedule .empty { color: var(--ink-dim); }
+  /* ---- the plate: the day itself, painted --------------------------- */
+  .plate { width: 100%; margin: 4px 0 20px; min-height: 60vh; transition: opacity 0.22s ease; }
+  .plate svg { display: block; width: 100%; height: auto; border-radius: 2px; }
 
-  .instruments { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin: 8px 0 18px;
-    font-size: 0.78rem; font-style: italic; }
-  .instrument { cursor: pointer; padding: 6px 4px; min-height: 44px; display: flex; align-items: center; }
-  .instrument .k { color: var(--ink-dim); margin-right: 4px; }
-  .instrument .v { color: var(--ink-strong); }
-  .instrument-panel { width: 100%; text-align: center; margin: -6px 0 16px; font-size: 0.8rem; }
-  .dots { display: inline-flex; gap: 6px; }
-  .dots button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line);
-    background: transparent; cursor: pointer; min-width: 32px; min-height: 32px; }
-  .dots button.on { background: var(--accent); border-color: var(--accent); }
-  .yesno-row { display: flex; justify-content: center; gap: 40px; }
-  .yesno-row button { min-height: 44px; padding: 8px 16px; }
-  .yesno-row button.on { color: var(--gold); }
-  .stepper { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .stepper button { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
-    background: transparent; color: var(--ink); cursor: pointer; font-size: 1rem; }
-  .stepper .val { min-width: 3.5em; text-align: center; font-style: italic; }
-
-  .note-line { margin-top: auto; padding-top: 10px; }
-  .note-line input { text-align: center; }
+  /* ---- the provenance ledger: habits as words ----------------------- */
+  .ledger { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0 0 20px; }
+  .ledger-word { font-size: 0.88rem; color: var(--ink-dim); padding: 9px 10px; min-height: 40px; }
+  .ledger-word.done { color: var(--ink-strong); }
 
   /* ---- the hours line: moments strung on a thread through the day --- */
   .hours-line { position: relative; height: 26px; margin: 2px 0 4px; }
@@ -233,20 +193,7 @@
   .stream-detail[hidden] { display: none; }
   .stream-detail .ribbon-line { background: none; border: none; padding: 0; }
 
-  /* ===================== the meadow ===================== */
-  .meadow-strip { position: relative; flex: 1 1 auto; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden;
-    padding: 12px 18px 30px; align-items: flex-end; min-height: 220px;
-    -webkit-overflow-scrolling: touch; }
-  .meadow-strip::before { content: ''; position: absolute; left: 0; right: 0; bottom: 30px; height: 1px;
-    background: rgba(244, 240, 230, 0.16); }
-  .meadow-day { flex: 0 0 auto; text-align: center; cursor: pointer; padding: 0 3px; position: relative; z-index: 1; }
-  .meadow-day .tag { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px);
-    font-size: 0.62rem; opacity: 0; transition: opacity 0.2s ease; white-space: nowrap;
-    font-style: italic; color: var(--ink-strong); background: rgba(10,10,14,0.85); padding: 3px 8px;
-    border-radius: 10px; pointer-events: none; z-index: 3; }
-  .meadow-day.open .tag, .meadow-day:hover .tag { opacity: 0.85; }
-  .legend { text-align: center; font-size: 0.7rem; font-style: italic; color: var(--ink-dim);
-    letter-spacing: 0.04em; margin-top: 10px; }
+  /* ---- shared room heading, used by the shop and tend --------------- */
   .meadow-title { text-align: center; font-style: italic; margin-bottom: 4px; }
 
   /* ===================== the shop ===================== */
@@ -288,26 +235,6 @@
   .mute-btn { position: fixed; top: 6px; right: 6px; font-size: 0.72rem; opacity: 0.5; z-index: 6;
     min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
 
-  /* ===================== unwind ===================== */
-  .unwind-room { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; text-align: center; padding: 24px; gap: 30px; z-index: 2; }
-  .unwind-q { font-style: italic; font-size: 1.3rem; letter-spacing: 0.02em; max-width: 560px; line-height: 1.5; }
-  .petals { position: relative; width: 260px; height: 260px; }
-  .petal { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%;
-    background: var(--panel); border: 1px solid var(--line); color: var(--ink); display: flex;
-    align-items: center; justify-content: center; font-style: italic; cursor: pointer;
-    transform-origin: center; transition: background 0.2s ease, color 0.2s ease; }
-  .petal.on { background: var(--accent); color: #14161c; border-color: var(--accent); }
-  .unwind-yesno { display: flex; gap: 60px; }
-  .unwind-yesno button { min-height: 54px; padding: 10px 22px; font-size: 1.1rem; }
-  .unwind-note { width: min(560px, 88vw); min-height: 120px; text-align: center; font-size: 1.05rem; }
-  .unwind-esc { position: fixed; top: 18px; right: 20px; font-size: 0.72rem; opacity: 0.5; }
-  .unwind-skip-row { display: flex; gap: 22px; margin-top: 8px; }
-  .unwind-skip-row button { font-size: 0.72rem; opacity: 0.55; min-height: 44px; }
-  .unwind-skip-row button:hover { opacity: 0.9; }
-  .unwind-goodnight { font-style: italic; font-size: 1.4rem; letter-spacing: 0.1em; }
-  .unwind-plant { display: flex; justify-content: center; }
-
   /* ===================== tend ===================== */
   .tend-section { margin: 26px 0; }
   .tend-section h2 { font-style: italic; font-weight: normal; font-size: 0.95rem; letter-spacing: 0.06em;
@@ -322,8 +249,6 @@
 
   @media (max-width: 520px) {
     .hour-clock { font-size: 3.4rem; }
-    .petals { width: 240px; height: 240px; }
-    .petal { width: 44px; height: 44px; font-size: 0.85rem; }
     .tend-row { grid-template-columns: 1fr 56px 46px; }
   }
 </style>

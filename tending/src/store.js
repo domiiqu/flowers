@@ -14,7 +14,7 @@ const LS = {
 
 export const DAYS_BACK = 180;      // how much past is loaded
 export const GATHER_DAYS = 3;      // seeds wither after this many days
-export const HOUR_SEEDS = 12;      // a held hour is worth this
+export const HOUR_SEEDS = 4;       // a held hour is worth this
 
 // ---------------------------------------------------------------- schema
 // this single spec plants the airtable base, seeds the sandbox, and
@@ -359,7 +359,7 @@ export function tickFor(date, habitName) {
 export async function tick(date, habit) {
   const fields = {
     Key: key(date, habit.f.Name), Date: date, Habit: habit.f.Name,
-    Seeds: habit.f.Seeds || 0, Status: 'unclaimed',
+    Seeds: 1, Status: 'unclaimed',
   };
   const existing = tickFor(date, habit.f.Name);
   if (existing) Object.assign(existing.f, fields);
