@@ -83,6 +83,9 @@ export const SCHEMA = [
     // life (days tracked so far — the hand maturing across the practice)
     { name: 'Season', type: 'singleLineText' },
     { name: 'DaysTracked', type: 'number', options: { precision: 0 } },
+    // the print ritual: the app checks this; the base's automation paints
+    // into an image field on the row when it turns true.
+    { name: 'Print?', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
   ]},
   { name: 'Moments', fields: [
     { name: 'Key', type: 'singleLineText' },
@@ -444,6 +447,11 @@ export async function saveDay(date, patch) {
 // generator's feed, not a schedule/note edit)
 export async function saveDayState(date, state) {
   return saveDay(date, state);
+}
+
+// the print ritual — check the day's Print? box; the base paints from there
+export async function requestPrint(date) {
+  return saveDay(date, { 'Print?': true });
 }
 
 // moments — caught in passing. append-only but keyed, so the little
