@@ -177,6 +177,31 @@ function computeHabits(dateISO, data, isToday) {
 // plate generator (an AI image field reading a formula field) paints from
 // these numbers; a formula there turns them into prompt prose. Pure like
 // everything here: the caller decides when to write it back.
+// the year clock — season from the date's month (northern hemisphere;
+// flip the pairs for southern). Kept to the four canonical words so the
+// base's formula can SWITCH on it cleanly; early/late nuance can layer on
+// later.
+function seasonOf(dateISO) {
+  const m = Number((dateISO || '').slice(5, 7)); // 1..12
+  if (m === 12 || m <= 2) return 'winter';
+  if (m <= 5) return 'spring';
+  if (m <= 8) return 'summer';
+  return 'autumn';
+}
+
+// the life clock — how many distinct days the practice has touched up to
+// and including this one. NOTE: only the loaded window feeds this (~DAYS_BACK
+// days), so it plateaus for a long practice; a true lifetime count would
+// need a stored running total. Good enough as a maturity proxy for now.
+function countTrackedDays(dateISO, data) {
+  const seen = new Set();
+  const add = (d) => { if (d && d <= dateISO) seen.add(d); };
+  for (const t of data.Ticks || []) add(t.f.Date);
+  for (const e of data.Entries || []) add(e.f.Date);
+  for (const m of data.Moments || []) add(m.f.Date);
+  return seen.size;
+}
+
 export function dayStateFields(dateISO, data) {
   const w = computeWorldState(dateISO, data);
   const entryVal = (tracker) => {
@@ -197,6 +222,8 @@ export function dayStateFields(dateISO, data) {
     Path: Number(w.path.toFixed(2)),
     Sea: Number(w.sea.toFixed(2)),
     TowerFloors: w.towerFloors,
+    Season: seasonOf(dateISO),
+    DaysTracked: countTrackedDays(dateISO, data),
   };
 }
 

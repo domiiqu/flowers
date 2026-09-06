@@ -94,6 +94,10 @@ export const SCHEMA = [
     { name: 'Path', type: 'number', options: { precision: 2 } },
     { name: 'Sea', type: 'number', options: { precision: 2 } },
     { name: 'TowerFloors', type: 'number', options: { precision: 0 } },
+    // the two slower clocks: the year (season, from the date) and the
+    // life (days tracked so far — the hand maturing across the practice)
+    { name: 'Season', type: 'singleLineText' },
+    { name: 'DaysTracked', type: 'number', options: { precision: 0 } },
   ]},
   { name: 'Moments', fields: [
     { name: 'Key', type: 'singleLineText' },
