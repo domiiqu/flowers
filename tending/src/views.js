@@ -6,6 +6,14 @@ import * as store from './store.js';
 import { dayPrint } from './print.js';
 import { computeWorldState } from './world.js';
 
+// a moment's sureness, made visible on the hours line: exact is red (the
+// timestamp is trusted), roughly a warm rose, all-day a calm blue that
+// rests at the end of the day. tapping a dot walks this ring.
+const SURE_COLOR = { exact: '#c94a3f', about: '#c98d84', day: '#5b82c4' };
+const SURE_WORD = { exact: 'exact', about: 'roughly', day: 'all day' };
+const SURE_NEXT = { exact: 'about', about: 'day', day: 'exact' };
+const sureOf = (m) => SURE_COLOR[m.f.Sure] ? m.f.Sure : 'exact';
+
 // ------------------------------------------------------------------ dom
 
 function h(tag, attrs = {}, children = []) {
@@ -178,14 +186,32 @@ export function mountDay(app, date) {
     }
   }
 
+  // the plate is a portrait leaf now — taller than wide on every screen,
+  // never the square (iPad) or landscape (desktop) it used to be. height
+  // leads; width follows at a portrait ratio, then both shrink to fit the
+  // column and the viewport.
+  const PLATE_RATIO = 0.74; // width / height
   function plateSize() {
-    const w = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
-    const hh = Math.round((window.innerHeight || 700) * 0.6);
-    return [Math.max(200, w), Math.max(240, hh)];
+    const containerW = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
+    const availH = Math.round((window.innerHeight || 700) * 0.66);
+    let ph = availH;
+    let pw = Math.round(ph * PLATE_RATIO);
+    if (pw > containerW) { pw = containerW; ph = Math.round(pw / PLATE_RATIO); }
+    return [Math.max(200, pw), Math.max(260, ph)];
+  }
+
+  // the ledger, the hours line and the tag stream all sit exactly the
+  // plate's width, centered under it — so the day reads as one column.
+  function applyPlateWidth(pw) {
+    const px = `${pw}px`;
+    ledger.style.maxWidth = px;
+    hoursLine.style.width = px;
+    momentsText.style.maxWidth = px;
   }
 
   function renderPlate(crossfade = false) {
     const [pw, ph] = plateSize();
+    applyPlateWidth(pw);
     if (crossfade) {
       plate.style.opacity = '0';
       setTimeout(() => {
@@ -204,7 +230,7 @@ export function mountDay(app, date) {
       ledger.appendChild(h('div', { class: 'dim italic' }, 'no habits planted yet — tend the garden.'));
       return;
     }
-    for (const habit of habits) {
+    habits.forEach((habit, i) => {
       const tick = store.tickFor(date, habit.f.Name);
       const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') }, habit.f.Name || '');
       word.addEventListener('click', async () => {
@@ -221,116 +247,180 @@ export function mountDay(app, date) {
         renderWallet();
       });
       ledger.appendChild(word);
-    }
+      if (i < habits.length - 1) ledger.appendChild(h('span', { class: 'ledger-sep' }, '·'));
+    });
   }
 
   function onResize() { renderPlate(); }
   window.addEventListener('resize', onResize);
 
+  // which moment (by Key) is being edited right now — its dot is singled
+  // out and the rest recede while this holds.
+  let selectedKey = null;
+
+  function timeToPct(time) {
+    const parts = (time || '00:00').split(':').map(Number);
+    const minutes = (parts[0] || 0) * 60 + (parts[1] || 0);
+    return Math.min(98, (minutes / 1440) * 100);
+  }
+  // where along the track a pointer sits, 0..98% — the same scale the dots
+  // are placed on, so a dot doesn't jump when you first grab it.
+  function pctFromClientX(clientX, track) {
+    const r = track.getBoundingClientRect();
+    if (!r.width) return 0;
+    return Math.max(0, Math.min(98, ((clientX - r.left) / r.width) * 100));
+  }
+  function fmtMinutes(mins) {
+    mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  }
+
   function renderHoursLine() {
     clear(hoursLine);
     const moments = store.momentsFor(date);
+    hoursLine.classList.toggle('focus', !!selectedKey);
     const track = h('div', { class: 'hours-track' });
     hoursLine.appendChild(track);
+    // all-day moments have no hour, so they gather at the day's end and
+    // stack back from it; timed ones fall where their clock says.
+    const dayMoments = moments.filter((m) => m.f.Sure === 'day');
     let dayIdx = 0;
     for (const m of moments) {
       let leftPct;
       if (m.f.Sure === 'day') {
-        leftPct = 1.5 + dayIdx * 2.6;
+        leftPct = Math.max(40, 97 - (dayMoments.length - 1 - dayIdx) * 3.2);
         dayIdx++;
       } else {
-        const parts = (m.f.Time || '00:00').split(':').map(Number);
-        const minutes = (parts[0] || 0) * 60 + (parts[1] || 0);
-        leftPct = Math.min(98, (minutes / 1440) * 100);
+        leftPct = timeToPct(m.f.Time);
       }
-      const mote = h('button', { class: 'hour-mote plain', style: `left:${leftPct.toFixed(2)}%` });
-      mote.appendChild(h('span', { class: 'dot' }));
-      mote.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showRibbon(m.f.Key, momentDetail(m.f.Key));
-      });
+      const sel = m.f.Key === selectedKey;
+      const mote = h('button', { class: 'hour-mote plain' + (sel ? ' sel' : ''),
+        style: `left:${leftPct.toFixed(2)}%`, 'aria-label': `${m.f.Tag} — ${SURE_WORD[sureOf(m)]}` });
+      const dot = h('span', { class: 'dot' });
+      dot.style.setProperty('--dot', SURE_COLOR[sureOf(m)]);
+      mote.appendChild(dot);
+      bindDot(mote, m, track);
       track.appendChild(mote);
     }
 
     // the visible tag stream — times, plainly, so capture is legible at
-    // a glance (not just tiny motes on a line)
+    // a glance (not just tiny motes on a line). fades while a dot is
+    // being edited so it can't be mis-tapped.
     clear(momentsText);
+    momentsText.classList.toggle('faded', !!selectedKey);
     if (!moments.length) {
       momentsText.appendChild(h('span', { class: 'dim italic' },
-        'the day’s moments will hang here — tap now to catch one.'));
+        'the day’s moments will hang here — tap tag to catch one.'));
       return;
     }
     moments.forEach((m, i) => {
       const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
       const val = m.f.Value != null ? ` ${m.f.Value}` : '';
       const btn = h('button', { class: 'plain moment-chip italic' }, `${label} ${m.f.Tag}${val}`);
-      btn.addEventListener('click', () => showRibbon(m.f.Key, momentDetail(m.f.Key)));
+      btn.addEventListener('click', () => selectMoment(m.f.Key));
       momentsText.appendChild(btn);
       if (i < moments.length - 1) momentsText.appendChild(document.createTextNode(' · '));
     });
+  }
+
+  // one dot's whole hand-feel: a plain tap selects it (or, if already
+  // selected, walks its colour through exact → roughly → all-day); a
+  // press-and-drag slides it through the hours and commits the new time
+  // on release. an all-day dot that gets dragged rejoins the clock.
+  function bindDot(mote, m, track) {
+    let sx = 0, pid = null, dragging = false;
+    function down(e) {
+      e.preventDefault(); e.stopPropagation();
+      sx = e.clientX; pid = e.pointerId; dragging = false;
+      try { mote.setPointerCapture(pid); } catch {}
+    }
+    function move(e) {
+      if (pid == null || e.pointerId !== pid) return;
+      if (!dragging && Math.abs(e.clientX - sx) > 6) dragging = true;
+      if (dragging) {
+        mote.classList.add('sel');
+        mote.style.left = `${pctFromClientX(e.clientX, track).toFixed(2)}%`;
+      }
+    }
+    async function up(e) {
+      if (pid == null || e.pointerId !== pid) return;
+      try { mote.releasePointerCapture(pid); } catch {}
+      pid = null;
+      if (dragging) {
+        const minutes = (pctFromClientX(e.clientX, track) / 100) * 1440;
+        const patch = { Time: fmtMinutes(minutes) };
+        if (m.f.Sure === 'day') patch.Sure = 'about'; // it has a place in time now
+        await store.adjustMoment(m.f.Key, patch);
+        selectedKey = m.f.Key;
+        renderHoursLine();
+        showDetail(m.f.Key);
+      } else if (selectedKey === m.f.Key) {
+        cycleSure(m.f.Key);
+      } else {
+        selectMoment(m.f.Key);
+      }
+    }
+    function cancel() { pid = null; dragging = false; }
+    mote.addEventListener('pointerdown', down);
+    mote.addEventListener('pointermove', move);
+    mote.addEventListener('pointerup', up);
+    mote.addEventListener('pointercancel', cancel);
+  }
+
+  function selectMoment(key) {
+    selectedKey = key;
+    renderHoursLine();
+    showDetail(key);
+  }
+  function deselect() {
+    if (!selectedKey) return;
+    selectedKey = null;
+    hideRibbon();
+    renderHoursLine();
+  }
+  async function cycleSure(key) {
+    const m = store.S.data.Moments.find((x) => x.f.Key === key);
+    if (!m) return;
+    await store.adjustMoment(key, { Sure: SURE_NEXT[sureOf(m)] });
+    renderHoursLine();
+    showDetail(key);
   }
 
   // -------------------------------------------------- moments, caught in passing
   const backdrop = h('div', { class: 'moment-backdrop' });
   const sheet = h('div', { class: 'moment-sheet' });
   const ribbon = h('div', { class: 'moment-ribbon' });
-  const nowMote = h('button', { class: 'now-mote', 'aria-label': 'catch a moment' }, [h('span', { class: 'now-label italic' }, 'now')]);
+  const nowMote = h('button', { class: 'now-mote', 'aria-label': 'catch a moment' }, [h('span', { class: 'now-label italic' }, 'tag')]);
   app.appendChild(backdrop);
   app.appendChild(sheet);
   app.appendChild(ribbon);
   app.appendChild(nowMote);
 
-  let ribbonTimer = null;
   function hideRibbon() {
-    clearTimeout(ribbonTimer);
     ribbon.classList.remove('open');
   }
-  function showRibbon(momentKey, detailText) {
-    clearTimeout(ribbonTimer);
+  // the detail card for the dot being edited: what it is and when, the
+  // sureness word (tap to walk the ring, same as tapping the dot), and a
+  // ✕ to take the moment back. it stays open until you tap away.
+  function showDetail(key) {
+    const m = store.S.data.Moments.find((x) => x.f.Key === key);
+    if (!m) { hideRibbon(); return; }
     clear(ribbon);
-    if (detailText) ribbon.appendChild(h('div', { class: 'ribbon-detail italic' }, detailText));
+    ribbon.appendChild(h('div', { class: 'ribbon-detail italic' }, momentDetail(key)));
     const line = h('div', { class: 'ribbon-line' });
+    const word = h('button', { class: 'plain sure-word' }, SURE_WORD[sureOf(m)]);
+    word.style.color = SURE_COLOR[sureOf(m)];
+    word.addEventListener('click', () => cycleSure(key));
+    const del = h('button', { class: 'plain ribbon-x', 'aria-label': 'delete' }, '✕');
+    del.addEventListener('click', async () => {
+      await store.removeMoment(key);
+      deselect();
+      renderHoursLine();
+    });
+    line.appendChild(word);
+    line.appendChild(del);
     ribbon.appendChild(line);
-    function main() {
-      clear(line);
-      const mk = (label, fn) => { const b = h('button', { class: 'plain' }, label); b.addEventListener('click', fn); return b; };
-      line.appendChild(mk('just now', () => hideRibbon()));
-      line.appendChild(mk('about then', async () => { await store.adjustMoment(momentKey, { Sure: 'about' }); renderHoursLine(); hideRibbon(); }));
-      line.appendChild(mk('earlier…', () => offsets()));
-      line.appendChild(mk('all day', async () => { await store.adjustMoment(momentKey, { Sure: 'day' }); renderHoursLine(); hideRibbon(); }));
-      line.appendChild(mk('✕', async () => { await store.removeMoment(momentKey); renderHoursLine(); hideRibbon(); }));
-    }
-    function offsets() {
-      clearTimeout(ribbonTimer);
-      clear(line);
-      const OFFS = [
-        ['−15m', (t) => addMinutes(t, -15)],
-        ['−1h', (t) => addMinutes(t, -60)],
-        ['−3h', (t) => addMinutes(t, -180)],
-        ['this morning', () => '08:00'],
-      ];
-      const m = store.S.data.Moments.find((x) => x.f.Key === momentKey);
-      const baseTime = (m && m.f.Time) || '00:00';
-      for (const [label, fn] of OFFS) {
-        const b = h('button', { class: 'plain' }, label);
-        b.addEventListener('click', async () => {
-          await store.adjustMoment(momentKey, { Time: fn(baseTime), Sure: 'about' });
-          renderHoursLine();
-          hideRibbon();
-        });
-        line.appendChild(b);
-      }
-      ribbonTimer = setTimeout(hideRibbon, 4000);
-    }
-    main();
     ribbon.classList.add('open');
-    ribbonTimer = setTimeout(hideRibbon, 4000);
-  }
-  function addMinutes(hhmm, delta) {
-    const [hh, mm] = hhmm.split(':').map(Number);
-    let total = ((hh || 0) * 60 + (mm || 0) + delta) % 1440;
-    if (total < 0) total += 1440;
-    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   }
 
   function momentDetail(key) {
@@ -338,46 +428,17 @@ export function mountDay(app, date) {
     if (!m) return '';
     const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
     const val = m.f.Value != null ? ` ${m.f.Value}` : '';
-    return `${label} · ${m.f.Tag}${val} — ${m.f.Sure}`;
+    return `${label} · ${m.f.Tag}${val} — ${SURE_WORD[sureOf(m)]}`;
   }
 
-  // the running stream's own inline ribbon — no timer here; it stays
-  // exactly as long as the sheet does, since the sheet itself is now the
-  // ceremony (a dump, not a single capture)
-  function buildInlineRibbon(container, momentKey, onChange) {
-    function main() {
-      clear(container);
-      const line = h('div', { class: 'ribbon-line' });
-      const mk = (label, fn) => { const b = h('button', { class: 'plain' }, label); b.addEventListener('click', fn); return b; };
-      line.appendChild(mk('about then', async () => { await store.adjustMoment(momentKey, { Sure: 'about' }); onChange(); }));
-      line.appendChild(mk('earlier…', () => offsets()));
-      line.appendChild(mk('all day', async () => { await store.adjustMoment(momentKey, { Sure: 'day' }); onChange(); }));
-      line.appendChild(mk('✕', async () => { await store.removeMoment(momentKey); onChange(); }));
-      container.appendChild(line);
-    }
-    function offsets() {
-      clear(container);
-      const line = h('div', { class: 'ribbon-line' });
-      const OFFS = [
-        ['−15m', (t) => addMinutes(t, -15)],
-        ['−1h', (t) => addMinutes(t, -60)],
-        ['−3h', (t) => addMinutes(t, -180)],
-        ['this morning', () => '08:00'],
-      ];
-      const m = store.S.data.Moments.find((x) => x.f.Key === momentKey);
-      const baseTime = (m && m.f.Time) || '00:00';
-      for (const [label, fn] of OFFS) {
-        const b = h('button', { class: 'plain' }, label);
-        b.addEventListener('click', async () => {
-          await store.adjustMoment(momentKey, { Time: fn(baseTime), Sure: 'about' });
-          onChange();
-        });
-        line.appendChild(b);
-      }
-      container.appendChild(line);
-    }
-    main();
+  // a tap anywhere off the hours line and off the detail card lets go of
+  // the moment being edited (so the fade lifts and the dots come back).
+  function onDocDown(e) {
+    if (!selectedKey) return;
+    if (hoursLine.contains(e.target) || ribbon.contains(e.target)) return;
+    deselect();
   }
+  document.addEventListener('pointerdown', onDocDown);
 
   function closeSheet() {
     sheet.classList.remove('open');
@@ -411,16 +472,17 @@ export function mountDay(app, date) {
       chip.addEventListener('click', () => captureFromChip(tag));
       chips.appendChild(chip);
     }
-    sheet.appendChild(chips);
-
-    const input = h('input', { class: 'field new-tag', placeholder: 'type a tag…' });
+    // the "create a tag" line rides at the end of the chips, not below —
+    // one more chip-shaped thing, but the one you can type into.
+    const input = h('input', { class: 'new-tag-inline', placeholder: 'create a tag…' });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && input.value.trim()) {
         captureFromChip(input.value.trim());
         input.value = '';
       }
     });
-    sheet.appendChild(input);
+    chips.appendChild(input);
+    sheet.appendChild(chips);
 
     const petalSlot = h('div', { class: 'petal-slot' });
     sheet.appendChild(petalSlot);
@@ -436,19 +498,20 @@ export function mountDay(app, date) {
       streamLabel.hidden = !list.length;
       for (const m of list) stream.appendChild(streamEntry(m));
     }
+    // the running log of what's been caught this session — each line is
+    // its time and tag with a ✕ to take it straight back. re-timing and
+    // re-colouring happen on the hours line's dots, not here.
     function streamEntry(m) {
       const label = m.f.Sure === 'day' ? 'all day' : (m.f.Time || '');
       const val = m.f.Value != null ? ` ${m.f.Value}` : '';
-      const row = h('button', { class: 'stream-row plain' }, `${label} · ${m.f.Tag}${val}`);
-      const detail = h('div', { class: 'stream-detail' });
-      detail.hidden = true;
-      row.addEventListener('click', () => {
-        const wasHidden = detail.hidden;
-        stream.querySelectorAll('.stream-detail').forEach((d) => { d.hidden = true; });
-        detail.hidden = !wasHidden;
+      const text = h('span', { class: 'stream-text' }, `${label} · ${m.f.Tag}${val}`);
+      const del = h('button', { class: 'plain stream-x', 'aria-label': 'delete' }, '✕');
+      del.addEventListener('click', async () => {
+        await store.removeMoment(m.f.Key);
+        renderHoursLine();
+        renderStream();
       });
-      buildInlineRibbon(detail, m.f.Key, () => { renderHoursLine(); renderStream(); });
-      return h('div', { class: 'stream-entry' }, [row, detail]);
+      return h('div', { class: 'stream-entry' }, [text, del]);
     }
 
     function petalStepInline(tracker, key) {
@@ -538,7 +601,7 @@ export function mountDay(app, date) {
     unbindSwipe();
     unbindWalletHold();
     window.removeEventListener('resize', onResize);
-    clearTimeout(ribbonTimer);
+    document.removeEventListener('pointerdown', onDocDown);
   };
 }
 
