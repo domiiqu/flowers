@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=8';
-import { dayStateFields } from './world.js?v=8';
-import * as gcal from './gcal.js?v=8';
+import * as store from './store.js?v=9';
+import { dayStateFields } from './world.js?v=9';
+import * as gcal from './gcal.js?v=9';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -13,6 +13,18 @@ const SURE_COLOR = { exact: '#c94a3f', about: '#c98d84', day: '#5b82c4' };
 const SURE_WORD = { exact: 'exact', about: 'roughly', day: 'all day' };
 const SURE_NEXT = { exact: 'about', about: 'day', day: 'exact' };
 const sureOf = (m) => SURE_COLOR[m.f.Sure] ? m.f.Sure : 'exact';
+
+// the day's finished print lives in ONE field — the base's AI image field,
+// "Plate generator". Read only that (never scan every field), so a stray
+// image in some other column can't be mistaken for the plate.
+const PLATE_FIELD = 'Plate generator';
+function plateImageUrl(row) {
+  if (!row) return '';
+  const v = row.f[PLATE_FIELD];
+  if (Array.isArray(v) && v[0] && v[0].url) return v[0].url; // attachment shape
+  if (typeof v === 'string' && /^https?:\/\//.test(v)) return v; // url/text shape
+  return '';
+}
 
 // ------------------------------------------------------------------ dom
 
@@ -149,12 +161,7 @@ export function mountDay(app, date) {
     onclick: () => (location.hash = `#/day/${store.addDays(date, 1)}`) }, '›'));
   root.appendChild(header);
 
-  if (date !== today) {
-    // labeled as a return trip, not a claim about what day this is —
-    // "today" alone read as the app calling yesterday today.
-    root.appendChild(h('div', { class: 'today-link' },
-      h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, '‹ back to today')));
-  }
+  // (no "today" link — the arrows and swipe carry you back; the word is gone.)
 
   // the day's shape — schedule as soft blocks (Google Calendar when
   // connected, otherwise editable blocks kept in Days.Schedule)
@@ -276,13 +283,6 @@ export function mountDay(app, date) {
   }
 
   // ---- the print ritual ----------------------------------------------
-  function printImageUrl(row) {
-    if (!row) return '';
-    for (const v of Object.values(row.f)) {
-      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
-    }
-    return '';
-  }
   // while a print is being painted in the base, quietly poll for it so it
   // swaps in on its own — no refresh. gives up after a couple of minutes;
   // the gallery (which refreshes on entry) catches any it missed.
@@ -293,7 +293,7 @@ export function mountDay(app, date) {
     printTimer = setInterval(async () => {
       tries++;
       const ok = await store.reloadTable('Days');
-      if (ok && printImageUrl(store.dayFor(date))) { stopPollPrint(); renderPrint(); }
+      if (ok && plateImageUrl(store.dayFor(date))) { stopPollPrint(); renderPrint(); }
       else if (tries >= 20) stopPollPrint(); // ~2 minutes
     }, 6000);
   }
@@ -302,7 +302,7 @@ export function mountDay(app, date) {
   function renderPrint() {
     clear(printBox);
     const row = store.dayFor(date);
-    const url = printImageUrl(row);
+    const url = plateImageUrl(row);
     if (url) {
       stopPollPrint();
       // the print has landed — release the ritual flag so the press is
@@ -787,17 +787,10 @@ export function mountGallery(app) {
   root.appendChild(wall);
   let alive = true;
 
-  function printImageUrl(row) {
-    for (const v of Object.values(row.f)) {
-      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
-    }
-    return '';
-  }
-
   function render() {
     clear(wall);
     const prints = [...store.S.data.Days]
-      .map((d) => ({ date: d.f.Date || d.f.Key, url: printImageUrl(d) }))
+      .map((d) => ({ date: d.f.Date || d.f.Key, url: plateImageUrl(d) }))
       .filter((p) => p.url && p.date)
       .sort((a, b) => (a.date < b.date ? 1 : -1));
     if (!prints.length) {
