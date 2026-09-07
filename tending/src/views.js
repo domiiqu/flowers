@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=9';
-import { dayStateFields } from './world.js?v=9';
-import * as gcal from './gcal.js?v=9';
+import * as store from './store.js?v=10';
+import { dayStateFields } from './world.js?v=10';
+import * as gcal from './gcal.js?v=10';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -317,10 +317,18 @@ export function mountDay(app, date) {
     const btn = h('button', { class: 'plain print-btn italic' }, requested ? 'printing…' : 'print this day');
     if (requested) { btn.setAttribute('disabled', ''); pollForPrint(); }
     btn.addEventListener('click', async () => {
-      await store.requestPrint(date);
-      renderPrint();
-      pollForPrint();
-      whisper('the press is set — your print will appear here, and in the gallery.', 3800);
+      const res = await store.requestPrint(date);
+      if (res && res.ok) {
+        renderPrint();
+        pollForPrint();
+        whisper('the press is set — your print will appear here, and in the gallery.', 3800);
+      } else if (res && res.sandbox) {
+        renderPrint();
+        whisper('not connected to airtable — add your token in tend, then print.', 5000);
+      } else {
+        // the write didn't reach airtable; say why (e.g. an unknown field name)
+        whisper(`the press jammed — ${(res && res.error) || 'the write didn’t reach airtable'}`, 7000);
+      }
     });
     printBox.appendChild(btn);
   }

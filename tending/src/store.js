@@ -520,9 +520,31 @@ export async function saveDayState(date, state) {
   return saveDay(date, state);
 }
 
-// the print ritual — check the day's Print? box; the base paints from there
+// the print ritual — check the day's Print? box; the base paints from there.
+// unlike a normal write, this REPORTS its outcome instead of silently
+// queueing, so the day page can say what went wrong (not connected, a
+// field-name mismatch, an airtable error) rather than just spinning.
+// returns { ok, sandbox?, error? }.
 export async function requestPrint(date) {
-  return saveDay(date, { 'Print?': true });
+  const fields = { Key: date, Date: date, 'Print?': true };
+  const existing = dayFor(date);
+  if (existing) Object.assign(existing.f, fields);
+  else S.data.Days.push({ id: 'tmp' + Math.random(), f: fields });
+  if (!connected()) {
+    // sandbox: it "works" locally, but there's no airtable to paint from
+    write({ kind: 'upsert', table: 'Days', mergeField: 'Key', fields });
+    return { ok: false, sandbox: true };
+  }
+  const op = { kind: 'upsert', table: 'Days', mergeField: 'Key', fields };
+  try {
+    await flushQueue();
+    if (qRead().length) throw new Error('an earlier write is still waiting to sync');
+    await runOp(op);
+    return { ok: true };
+  } catch (e) {
+    qWrite([...qRead(), op]); // keep it, so it isn't lost — but say what happened
+    return { ok: false, error: e.message };
+  }
 }
 
 // moments — caught in passing. append-only but keyed, so the little
