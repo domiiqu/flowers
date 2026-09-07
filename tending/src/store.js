@@ -27,7 +27,17 @@ export const SCHEMA = [
     { name: 'Variety', type: 'number', options: { precision: 0 } },
     { name: 'Order', type: 'number', options: { precision: 0 } },
     { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Bonus', type: 'checkbox', options: { icon: 'star', color: 'yellowBright' },
+      description: 'A bonus habit: left out of the day’s total, so skipping it never lowers the score — but doing it adds its points on top (the day can pass 100%).' },
     { name: 'Notes', type: 'multilineText' },
+  ]},
+  // the tag vocabulary — the words offered as chips. a typed tag joins it;
+  // deleting one drops it from the chips but never touches the Moments that
+  // already used it (those live on their own, keyed by text).
+  { name: 'Tags', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
   ]},
   { name: 'Ticks', fields: [
     { name: 'Key', type: 'singleLineText' },
@@ -66,23 +76,44 @@ export const SCHEMA = [
     // the day's world-state, flattened and written back — the base's
     // plate generator (an AI image field over a formula field) paints
     // from these; the slow math stays in the app (world.js)
-    { name: 'HabitsDone', type: 'number', options: { precision: 0 } },
-    { name: 'HabitsTotal', type: 'number', options: { precision: 0 } },
-    { name: 'Fog', type: 'number', options: { precision: 0 } },
-    { name: 'Mood', type: 'number', options: { precision: 0 } },
-    { name: 'Sleep', type: 'number', options: { precision: 2 } },
-    { name: 'HeldHour', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-    { name: 'ScheduleCount', type: 'number', options: { precision: 0 } },
-    { name: 'Moments', type: 'number', options: { precision: 0 } },
-    { name: 'NewTag', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-    { name: 'Aridity', type: 'number', options: { precision: 2 } },
-    { name: 'Path', type: 'number', options: { precision: 2 } },
-    { name: 'Sea', type: 'number', options: { precision: 2 } },
-    { name: 'TowerFloors', type: 'number', options: { precision: 0 } },
+    { name: 'HabitsDone', type: 'number', options: { precision: 0 },
+      description: 'Habits ticked this day (count).' },
+    { name: 'HabitsTotal', type: 'number', options: { precision: 0 },
+      description: 'Active habits in the roster this day (the denominator).' },
+    { name: 'Fog', type: 'number', options: { precision: 0 },
+      description: 'Brain fog 0–5, from a “fog” tag with a value that day (blank if none).' },
+    { name: 'Mood', type: 'number', options: { precision: 0 },
+      description: 'Overall mood 0–5: the average of the day’s morning/afternoon/late moods, else a plain “mood” tag. Drives the sky’s light.' },
+    { name: 'MoodMorning', type: 'number', options: { precision: 0 },
+      description: 'Morning mood 0–5, from the “mood (morning)” tag.' },
+    { name: 'MoodAfternoon', type: 'number', options: { precision: 0 },
+      description: 'Afternoon mood 0–5, from the “mood (afternoon)” tag.' },
+    { name: 'MoodLate', type: 'number', options: { precision: 0 },
+      description: 'Late/evening mood 0–5, from the “mood (late)” tag.' },
+    { name: 'Sleep', type: 'number', options: { precision: 2 },
+      description: 'Hours slept, from a “sleep” tag with a value. Under 5 makes two suns.' },
+    { name: 'HeldHour', type: 'checkbox', options: { icon: 'check', color: 'greenBright' },
+      description: 'An hour was held (scary mode) this day → the monolith + long shadow.' },
+    { name: 'ScheduleCount', type: 'number', options: { precision: 0 },
+      description: 'Number of timed schedule items → telephone poles with sagging wires.' },
+    { name: 'Moments', type: 'number', options: { precision: 0 },
+      description: 'Tags caught this day → birds.' },
+    { name: 'NewTag', type: 'checkbox', options: { icon: 'check', color: 'greenBright' },
+      description: 'A never-before-seen tag entered the day → the snake (novelty has a body).' },
+    { name: 'Aridity', type: 'number', options: { precision: 2 },
+      description: 'Drought 0–1 over the last 180 days. Grows fast with CONSECUTIVE untracked days (+0.15/day after the first) and with tracked-but-unfed days (+0.05); heals slowly with tracking (−0.04/day). Hysteresis: breaks fast, mends slow. Ramp: green field → scrub → cracked earth → pale dunes.' },
+    { name: 'Path', type: 'number', options: { precision: 2 },
+      description: 'Tracking continuity 0–1 over the last 14 days; the most recent 3 days count double. Confident road → faint trace → footprints → gone.' },
+    { name: 'Sea', type: 'number', options: { precision: 2 },
+      description: 'Reward for constancy 0–1: needs a 7-day tracking streak to appear, maxes near a 21-day streak ((streak−7)/14). Withdraws as quiet days pass (gone after 3 untracked).' },
+    { name: 'TowerFloors', type: 'number', options: { precision: 0 },
+      description: 'The archive: one floor per 10 day-notes written (Days.Note). Note: the current app has no note field, so this stays 0 until notes exist.' },
     // the two slower clocks: the year (season, from the date) and the
     // life (days tracked so far — the hand maturing across the practice)
-    { name: 'Season', type: 'singleLineText' },
-    { name: 'DaysTracked', type: 'number', options: { precision: 0 } },
+    { name: 'Season', type: 'singleLineText',
+      description: 'winter / spring / summer / autumn, from the date’s month (northern hemisphere). Drives the base palette.' },
+    { name: 'DaysTracked', type: 'number', options: { precision: 0 },
+      description: 'Distinct days the practice has touched so far (within the loaded ~180-day window). Drives the illustrator’s maturing hand.' },
     // the print ritual: the app checks this; the base's automation paints
     // into an image field on the row when it turns true.
     { name: 'Print?', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
@@ -124,6 +155,11 @@ const DEFAULTS = {
     { Name: 'the thing in the cart',     Cost: 80, Sign: '🎁', Order: 4, Active: true,
       Link: 'https://example.com/replace-me-with-the-cart' },
   ],
+  Tags: [
+    'b', 'l', 'd', 'snack', 'coffee',
+    'mood (morning)', 'mood (afternoon)', 'mood (late)', 'sleep', 'fog', 'energy',
+    'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
+  ].map((Name, i) => ({ Name, Order: i + 1, Active: true })),
 };
 
 // ------------------------------------------------------------------ time
@@ -222,6 +258,13 @@ const airtable = {
     });
     return { id: page.records[0].id, f: page.records[0].fields };
   },
+  async update(table, id, fields) {
+    const s = getSettings();
+    const rec = await at(`/${s.baseId}/${encodeURIComponent(table)}/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ fields, typecast: true }),
+    });
+    return { id: rec.id, f: rec.fields };
+  },
   async destroy(table, id) {
     const s = getSettings();
     await at(`/${s.baseId}/${encodeURIComponent(table)}?records[]=${id}`, { method: 'DELETE' });
@@ -259,6 +302,12 @@ const sandbox = {
     recs.push(r); sbWrite(table, recs);
     return r;
   },
+  async update(table, id, fields) {
+    const recs = sbRead(table);
+    const hit = recs.find(r => r.id === id);
+    if (hit) { Object.assign(hit.f, fields); sbWrite(table, recs); }
+    return hit;
+  },
   async destroy(table, id) {
     sbWrite(table, sbRead(table).filter(r => r.id !== id));
   },
@@ -283,6 +332,21 @@ async function runOp(op) {
     const recs = await b.list(op.table);
     const hit = recs.find(r => r.f.Key === op.key);
     if (hit) await b.destroy(op.table, hit.id);
+    return;
+  }
+  // find a row by one of its field values (the backend's real id may
+  // differ from the in-memory temp id, so we always look it up fresh),
+  // then delete or update it — how rename-in-place and delete replay.
+  if (op.kind === 'destroyByField') {
+    const recs = await b.list(op.table);
+    const hit = recs.find(r => r.f[op.field] === op.value);
+    if (hit) await b.destroy(op.table, hit.id);
+    return;
+  }
+  if (op.kind === 'updateByField') {
+    const recs = await b.list(op.table);
+    const hit = recs.find(r => r.f[op.field] === op.value);
+    if (hit) await b.update(op.table, hit.id, op.fields);
     return;
   }
 }
@@ -322,7 +386,7 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
+  data: { Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
   loaded: false,
   problem: null,
 };
@@ -339,6 +403,13 @@ export async function loadAll() {
     S.problem = e.message;
     S.loaded = true;
   }
+}
+
+// re-list a single table into memory — used to poll for a print that the
+// base is still painting, without reloading the whole world.
+export async function reloadTable(name) {
+  try { S.data[name] = await backend().list(name); return true; }
+  catch (e) { return false; }
 }
 
 // first visit, empty sandbox: plant something to wake up to
@@ -361,7 +432,7 @@ export function tickFor(date, habitName) {
 export async function tick(date, habit) {
   const fields = {
     Key: key(date, habit.f.Name), Date: date, Habit: habit.f.Name,
-    Seeds: 1, Status: 'unclaimed',
+    Seeds: habit.f.Seeds ?? 1, Status: 'unclaimed', // the habit's own point value
   };
   const existing = tickFor(date, habit.f.Name);
   if (existing) Object.assign(existing.f, fields);
@@ -467,6 +538,7 @@ export async function captureMoment({ tag, value, words, time, sure = 'exact', d
   if (words) fields.Words = words;
   S.data.Moments.push({ id: 'tmp' + Math.random(), f: fields });
   write({ kind: 'upsert', table: 'Moments', mergeField: 'Key', fields });
+  ensureTag(tag); // a new word joins the vocabulary the first time it's caught
   return fields.Key;
 }
 
@@ -491,7 +563,8 @@ export function momentsFor(date) {
 // a starter vocabulary — shown only until her own tags take over. never
 // seeded as data; just fills whatever slots her real usage hasn't yet.
 export const STARTER_TAGS = [
-  'b', 'l', 'd', 'snack', 'coffee', 'mood', 'sleep', 'fog', 'energy',
+  'b', 'l', 'd', 'snack', 'coffee',
+  'mood (morning)', 'mood (afternoon)', 'mood (late)', 'sleep', 'fog', 'energy',
   'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
 ];
 
@@ -500,6 +573,9 @@ export const STARTER_TAGS = [
 // number; world.js reads them back by name for the plate (mood → light,
 // sleep → two suns, fog → fog banks). keys are matched case-insensitively.
 export const VALUE_TAGS = {
+  'mood (morning)':   { name: 'mood (morning)',   kind: 'scale', min: 0, max: 5 },
+  'mood (afternoon)': { name: 'mood (afternoon)', kind: 'scale', min: 0, max: 5 },
+  'mood (late)':      { name: 'mood (late)',      kind: 'scale', min: 0, max: 5 },
   mood:   { name: 'mood',   kind: 'scale',  min: 0, max: 5 },
   energy: { name: 'energy', kind: 'scale',  min: 0, max: 5 },
   fog:    { name: 'fog',    kind: 'scale',  min: 0, max: 5 },
@@ -509,30 +585,28 @@ export function valueTagFor(tag) {
   return VALUE_TAGS[String(tag || '').trim().toLowerCase()] || null;
 }
 
-// the chips: her own vocabulary, surfacing by recency then frequency.
-// before any history exists, the starter words fill the rest — they
-// recede on their own as real tags outrank them.
+// the chips: the active tag vocabulary, most-recently-used first. Deleted
+// tags never appear (even if history used them). Before the Tags table
+// exists (an un-replanted base, a bare sandbox) it falls back to moment
+// history plus the starter words, so capture still works.
 export function tagChips(n = 8) {
-  const seen = new Map(); // tag -> { count, last }
+  const lastUse = new Map(); // tag -> latest stamp
   for (const m of S.data.Moments) {
-    const tag = m.f.Tag;
-    if (!tag) continue;
-    const cur = seen.get(tag) || { count: 0, last: '' };
-    cur.count++;
+    if (!m.f.Tag) continue;
     const stamp = `${m.f.Date} ${m.f.Time || ''}`;
-    if (stamp > cur.last) cur.last = stamp;
-    seen.set(tag, cur);
+    if (stamp > (lastUse.get(m.f.Tag) || '')) lastUse.set(m.f.Tag, stamp);
   }
-  const ranked = [...seen.entries()]
-    .sort((a, b) => b[1].last.localeCompare(a[1].last) || b[1].count - a[1].count)
-    .map(([tag]) => tag);
-  if (ranked.length < n) {
-    for (const t of STARTER_TAGS) {
-      if (ranked.length >= n) break;
-      if (!ranked.includes(t)) ranked.push(t);
-    }
+  const active = activeTags();
+  let pool;
+  if (active.length) {
+    const order = new Map(active.map((t) => [t.f.Name, t.f.Order || 0]));
+    pool = active.map((t) => t.f.Name).sort((a, b) =>
+      (lastUse.get(b) || '').localeCompare(lastUse.get(a) || '') || (order.get(a) || 0) - (order.get(b) || 0));
+  } else {
+    pool = [...lastUse.keys()].sort((a, b) => (lastUse.get(b) || '').localeCompare(lastUse.get(a) || ''));
+    for (const t of STARTER_TAGS) if (!pool.includes(t)) pool.push(t);
   }
-  return ranked.slice(0, n);
+  return pool.slice(0, n);
 }
 
 export async function logHour(minutes, outcome) {
@@ -557,6 +631,43 @@ export async function upsertRow(table, mergeField, fields) {
   else S.data[table].push({ id: 'tmp' + Math.random(), f: fields });
   write({ kind: 'upsert', table, mergeField, fields });
 }
+
+// rename a row IN PLACE (by its old Name) — not a create-a-new-one, which
+// is what upserting a fresh Name would do. history that referenced the old
+// name (ticks, moments) keeps it; the roster carries the new one forward.
+export async function renameNamed(table, oldName, newName) {
+  const nm = String(newName || '').trim();
+  if (!nm || nm === oldName) return;
+  const row = S.data[table].find(r => r.f.Name === oldName);
+  if (row) row.f.Name = nm;
+  write({ kind: 'updateByField', table, field: 'Name', value: oldName, fields: { Name: nm } });
+}
+
+// delete a row by Name — gone from the roster/vocabulary, but anything that
+// already used the name stays untouched (ticks and moments are keyed on
+// their own text, not on this row).
+export async function deleteNamed(table, name) {
+  S.data[table] = S.data[table].filter(r => r.f.Name !== name);
+  write({ kind: 'destroyByField', table, field: 'Name', value: name });
+}
+
+// a typed tag joins the vocabulary the first time it's used (or wakes back
+// up if it was deleted and typed again).
+export async function ensureTag(name) {
+  const nm = String(name || '').trim();
+  if (!nm) return;
+  const row = (S.data.Tags || []).find(t => t.f.Name === nm);
+  if (row) {
+    if (!row.f.Active) { row.f.Active = true; write({ kind: 'upsert', table: 'Tags', mergeField: 'Name', fields: { Name: nm, Active: true } }); }
+    return;
+  }
+  const order = 1 + (S.data.Tags || []).reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  const fields = { Name: nm, Active: true, Order: order };
+  (S.data.Tags = S.data.Tags || []).push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Tags', mergeField: 'Name', fields });
+}
+export const activeTags = () =>
+  (S.data.Tags || []).filter(t => t.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 
 // --------------------------------------------------------- planting base
 // creates any missing tables in the given base via the airtable meta api,

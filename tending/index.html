@@ -9,6 +9,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Life Emergent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- fraunces: a hand-set, ink-pressed serif with a real italic and an
+     optical-size axis — the big date leans into its display cut, small
+     italic text stays calm at text size, all from one family. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&display=swap">
 <style>
   :root {
     --bg: #14161c;
@@ -24,7 +30,8 @@
   * { margin: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { min-height: 100%; background: var(--bg); }
   body {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+    font-optical-sizing: auto;
     color: var(--ink);
     overflow-x: hidden;
     transition: background 0.6s ease, color 0.6s ease;
@@ -128,6 +135,15 @@
     max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
+  /* the day's points, top-right — the number, and a filling-dot beneath:
+     light blue past 75%, ultramarine at 100% (same dot as the timeline) */
+  .day-tally { position: fixed; top: 14px; right: 20px; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .tally-num { font-size: 1.35rem; color: var(--ink-strong); font-variant-numeric: tabular-nums; line-height: 1; }
+  .tally-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tally-dot.near { background: #8fbce6; box-shadow: 0 0 5px #8fbce6; }
+  .tally-dot.full { background: #2f43c9; box-shadow: 0 0 7px #2f43c9; }
+
   /* ---- the day, now: a prominent date over soft schedule blocks ----- */
   .day-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
   .day-arrow { font-size: 1.4rem; min-width: 44px; min-height: 44px; opacity: 0.6; }
@@ -173,30 +189,37 @@
     gap: 0; margin: 6px auto 16px; }
   .ledger-word { font-size: 0.9rem; color: var(--ink-dim); padding: 4px 7px; line-height: 1.5; }
   .ledger-word.done { color: var(--ink-strong); }
+  /* a bonus habit wears a small star — outside the day's total, points on top */
+  .ledger-word.bonus::after { content: '✦'; font-size: 0.62em; vertical-align: super;
+    margin-left: 2px; color: var(--gold); opacity: 0.8; }
   .ledger-sep { color: var(--ink-dim); opacity: 0.5; padding: 0 1px; user-select: none; }
 
   /* ---- the hours line: the day, midnight to midnight; moments are
        dots you can recolour, drag through time, or take back ---------- */
-  .hours-line { position: relative; height: 30px; margin: 2px auto 4px; touch-action: pan-y; }
+  /* width:100% is load-bearing — the line's children are all absolutely
+     positioned, so without it this flex item collapses to zero width and
+     every dot stacks at the far left (the timeline vanishes). */
+  .hours-line { position: relative; width: 100%; height: 30px; margin: 2px auto 4px; touch-action: pan-y; }
   .moments-text { text-align: center; font-size: 0.72rem; line-height: 1.7; margin: 0 auto 12px;
     color: var(--ink); word-break: break-word; transition: opacity 0.25s ease; }
   .moment-chip { color: var(--ink); }
   .moment-chip:hover { color: var(--ink-strong); }
   .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line);
     transition: opacity 0.25s ease; }
-  .hour-mote { position: absolute; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  .hour-mote { position: absolute; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
     padding: 0; border: none; background: none; cursor: grab; touch-action: none;
     -webkit-touch-callout: none; user-select: none; transition: opacity 0.25s ease; }
-  .hour-mote .dot { display: block; width: 8px; height: 8px; margin: 11px auto 0; border-radius: 50%;
+  .hour-mote .dot { display: block; width: 8px; height: 8px; margin: 16px auto 0; border-radius: 50%;
     background: var(--dot, var(--gold)); opacity: 0.85;
     box-shadow: 0 0 5px var(--dot, var(--gold)); transition: width 0.15s ease, height 0.15s ease, margin 0.15s ease; }
   .hour-mote:hover .dot { opacity: 1; }
   /* editing a moment: it is singled out, the rest recede so a stray tap
-     can't land on the wrong one */
+     can't land on the wrong one; the whole line becomes its slider */
+  .hours-line.focus { cursor: ew-resize; }
   .hours-line.focus .hour-mote:not(.sel) { opacity: 0.22; pointer-events: none; }
   .hours-line.focus .hours-track { opacity: 0.5; }
   .hour-mote.sel { cursor: grab; }
-  .hour-mote.sel .dot { width: 13px; height: 13px; margin: 8.5px auto 0; opacity: 1; }
+  .hour-mote.sel .dot { width: 13px; height: 13px; margin: 13.5px auto 0; opacity: 1; }
   .moments-text.faded .moment-chip { opacity: 0.28; pointer-events: none; }
 
   /* ---- the "now" mote + its calm chip sheet ------------------------- */
@@ -321,15 +344,17 @@
     margin-bottom: 10px; opacity: 0.85; }
   .tend-report { font-size: 0.76rem; color: var(--ink-dim); line-height: 1.8; margin-top: 8px; }
   .tend-list { display: flex; flex-direction: column; gap: 6px; }
-  .tend-row { display: grid; grid-template-columns: 1fr 70px 60px; gap: 8px; align-items: center; }
+  .tend-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; }
   .tend-row input[type="text"], .tend-row input[type="number"] { min-height: 38px; }
+  .tend-x { color: var(--ink-dim); min-width: 34px; min-height: 34px; font-size: 0.9rem; }
+  .tend-x:hover { color: var(--bad); }
+  .tend-flags { display: flex; gap: 12px; align-items: center; }
   .tend-status { font-size: 0.78rem; }
   .tend-warning { font-size: 0.72rem; color: var(--ink-dim); margin-top: 6px; }
   .checklabel { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
 
   @media (max-width: 520px) {
     .hour-clock { font-size: 3.4rem; }
-    .tend-row { grid-template-columns: 1fr 56px 46px; }
   }
 </style>
 </head>
@@ -341,6 +366,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=4"></script>
+  <script type="module" src="src/main.js?v=9"></script>
 </body>
 </html>
