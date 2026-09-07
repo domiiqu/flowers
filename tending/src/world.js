@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=6';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=7';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -125,6 +125,23 @@ function momentValue(dateISO, data, re) {
   );
   return m ? m.f.Value : null;
 }
+// the value of a tag by its EXACT name (case-insensitive) — needed now that
+// several mood tags coexist ("mood (morning)" must not answer for "mood").
+function momentValueExact(dateISO, data, name) {
+  const nm = name.toLowerCase();
+  const m = (data.Moments || []).find(
+    (x) => x.f.Date === dateISO && x.f.Value != null && String(x.f.Tag || '').trim().toLowerCase() === nm
+  );
+  return m ? m.f.Value : null;
+}
+// the day's overall mood: the average of whichever time-of-day moods were
+// logged, else a plain "mood" tag, else nothing.
+function overallMood(dateISO, data) {
+  const parts = ['mood (morning)', 'mood (afternoon)', 'mood (late)']
+    .map((t) => momentValueExact(dateISO, data, t)).filter((v) => v != null);
+  if (parts.length) return parts.reduce((a, b) => a + b, 0) / parts.length;
+  return momentValueExact(dateISO, data, 'mood');
+}
 
 function computeTwoSuns(dateISO, data) {
   const s = momentValue(dateISO, data, /sleep/i);
@@ -148,7 +165,7 @@ function computeSnake(dateISO, data) {
 }
 
 function computeLight(dateISO, data, isToday) {
-  const mood = momentValue(dateISO, data, /mood/i);
+  const mood = overallMood(dateISO, data);
   if (mood != null) {
     const m = Math.max(0, Math.min(5, mood));
     return { light: 0.12 + (m / 5) * 0.76, lightHour: 13.5 };
@@ -208,7 +225,10 @@ export function dayStateFields(dateISO, data) {
     HabitsDone: w.habits.filter((h) => h.done).length,
     HabitsTotal: w.habits.length,
     Fog: w.fog,
-    Mood: momentValue(dateISO, data, /mood/i),
+    Mood: (() => { const v = overallMood(dateISO, data); return v == null ? null : Math.round(v); })(),
+    MoodMorning: momentValueExact(dateISO, data, 'mood (morning)'),
+    MoodAfternoon: momentValueExact(dateISO, data, 'mood (afternoon)'),
+    MoodLate: momentValueExact(dateISO, data, 'mood (late)'),
     Sleep: momentValue(dateISO, data, /sleep/i),
     HeldHour: w.heldHour,
     ScheduleCount: w.wires,

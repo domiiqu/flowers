@@ -74,23 +74,44 @@ export const SCHEMA = [
     // the day's world-state, flattened and written back — the base's
     // plate generator (an AI image field over a formula field) paints
     // from these; the slow math stays in the app (world.js)
-    { name: 'HabitsDone', type: 'number', options: { precision: 0 } },
-    { name: 'HabitsTotal', type: 'number', options: { precision: 0 } },
-    { name: 'Fog', type: 'number', options: { precision: 0 } },
-    { name: 'Mood', type: 'number', options: { precision: 0 } },
-    { name: 'Sleep', type: 'number', options: { precision: 2 } },
-    { name: 'HeldHour', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-    { name: 'ScheduleCount', type: 'number', options: { precision: 0 } },
-    { name: 'Moments', type: 'number', options: { precision: 0 } },
-    { name: 'NewTag', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-    { name: 'Aridity', type: 'number', options: { precision: 2 } },
-    { name: 'Path', type: 'number', options: { precision: 2 } },
-    { name: 'Sea', type: 'number', options: { precision: 2 } },
-    { name: 'TowerFloors', type: 'number', options: { precision: 0 } },
+    { name: 'HabitsDone', type: 'number', options: { precision: 0 },
+      description: 'Habits ticked this day (count).' },
+    { name: 'HabitsTotal', type: 'number', options: { precision: 0 },
+      description: 'Active habits in the roster this day (the denominator).' },
+    { name: 'Fog', type: 'number', options: { precision: 0 },
+      description: 'Brain fog 0–5, from a “fog” tag with a value that day (blank if none).' },
+    { name: 'Mood', type: 'number', options: { precision: 0 },
+      description: 'Overall mood 0–5: the average of the day’s morning/afternoon/late moods, else a plain “mood” tag. Drives the sky’s light.' },
+    { name: 'MoodMorning', type: 'number', options: { precision: 0 },
+      description: 'Morning mood 0–5, from the “mood (morning)” tag.' },
+    { name: 'MoodAfternoon', type: 'number', options: { precision: 0 },
+      description: 'Afternoon mood 0–5, from the “mood (afternoon)” tag.' },
+    { name: 'MoodLate', type: 'number', options: { precision: 0 },
+      description: 'Late/evening mood 0–5, from the “mood (late)” tag.' },
+    { name: 'Sleep', type: 'number', options: { precision: 2 },
+      description: 'Hours slept, from a “sleep” tag with a value. Under 5 makes two suns.' },
+    { name: 'HeldHour', type: 'checkbox', options: { icon: 'check', color: 'greenBright' },
+      description: 'An hour was held (scary mode) this day → the monolith + long shadow.' },
+    { name: 'ScheduleCount', type: 'number', options: { precision: 0 },
+      description: 'Number of timed schedule items → telephone poles with sagging wires.' },
+    { name: 'Moments', type: 'number', options: { precision: 0 },
+      description: 'Tags caught this day → birds.' },
+    { name: 'NewTag', type: 'checkbox', options: { icon: 'check', color: 'greenBright' },
+      description: 'A never-before-seen tag entered the day → the snake (novelty has a body).' },
+    { name: 'Aridity', type: 'number', options: { precision: 2 },
+      description: 'Drought 0–1 over the last 180 days. Grows fast with CONSECUTIVE untracked days (+0.15/day after the first) and with tracked-but-unfed days (+0.05); heals slowly with tracking (−0.04/day). Hysteresis: breaks fast, mends slow. Ramp: green field → scrub → cracked earth → pale dunes.' },
+    { name: 'Path', type: 'number', options: { precision: 2 },
+      description: 'Tracking continuity 0–1 over the last 14 days; the most recent 3 days count double. Confident road → faint trace → footprints → gone.' },
+    { name: 'Sea', type: 'number', options: { precision: 2 },
+      description: 'Reward for constancy 0–1: needs a 7-day tracking streak to appear, maxes near a 21-day streak ((streak−7)/14). Withdraws as quiet days pass (gone after 3 untracked).' },
+    { name: 'TowerFloors', type: 'number', options: { precision: 0 },
+      description: 'The archive: one floor per 10 day-notes written (Days.Note). Note: the current app has no note field, so this stays 0 until notes exist.' },
     // the two slower clocks: the year (season, from the date) and the
     // life (days tracked so far — the hand maturing across the practice)
-    { name: 'Season', type: 'singleLineText' },
-    { name: 'DaysTracked', type: 'number', options: { precision: 0 } },
+    { name: 'Season', type: 'singleLineText',
+      description: 'winter / spring / summer / autumn, from the date’s month (northern hemisphere). Drives the base palette.' },
+    { name: 'DaysTracked', type: 'number', options: { precision: 0 },
+      description: 'Distinct days the practice has touched so far (within the loaded ~180-day window). Drives the illustrator’s maturing hand.' },
     // the print ritual: the app checks this; the base's automation paints
     // into an image field on the row when it turns true.
     { name: 'Print?', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
@@ -133,7 +154,8 @@ const DEFAULTS = {
       Link: 'https://example.com/replace-me-with-the-cart' },
   ],
   Tags: [
-    'b', 'l', 'd', 'snack', 'coffee', 'mood', 'sleep', 'fog', 'energy',
+    'b', 'l', 'd', 'snack', 'coffee',
+    'mood (morning)', 'mood (afternoon)', 'mood (late)', 'sleep', 'fog', 'energy',
     'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
   ].map((Name, i) => ({ Name, Order: i + 1, Active: true })),
 };
@@ -408,7 +430,7 @@ export function tickFor(date, habitName) {
 export async function tick(date, habit) {
   const fields = {
     Key: key(date, habit.f.Name), Date: date, Habit: habit.f.Name,
-    Seeds: 1, Status: 'unclaimed',
+    Seeds: habit.f.Seeds ?? 1, Status: 'unclaimed', // the habit's own point value
   };
   const existing = tickFor(date, habit.f.Name);
   if (existing) Object.assign(existing.f, fields);
@@ -539,7 +561,8 @@ export function momentsFor(date) {
 // a starter vocabulary — shown only until her own tags take over. never
 // seeded as data; just fills whatever slots her real usage hasn't yet.
 export const STARTER_TAGS = [
-  'b', 'l', 'd', 'snack', 'coffee', 'mood', 'sleep', 'fog', 'energy',
+  'b', 'l', 'd', 'snack', 'coffee',
+  'mood (morning)', 'mood (afternoon)', 'mood (late)', 'sleep', 'fog', 'energy',
   'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
 ];
 
@@ -548,6 +571,9 @@ export const STARTER_TAGS = [
 // number; world.js reads them back by name for the plate (mood → light,
 // sleep → two suns, fog → fog banks). keys are matched case-insensitively.
 export const VALUE_TAGS = {
+  'mood (morning)':   { name: 'mood (morning)',   kind: 'scale', min: 0, max: 5 },
+  'mood (afternoon)': { name: 'mood (afternoon)', kind: 'scale', min: 0, max: 5 },
+  'mood (late)':      { name: 'mood (late)',      kind: 'scale', min: 0, max: 5 },
   mood:   { name: 'mood',   kind: 'scale',  min: 0, max: 5 },
   energy: { name: 'energy', kind: 'scale',  min: 0, max: 5 },
   fog:    { name: 'fog',    kind: 'scale',  min: 0, max: 5 },

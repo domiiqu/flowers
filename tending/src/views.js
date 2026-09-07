@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=6';
-import { dayStateFields } from './world.js?v=6';
-import * as gcal from './gcal.js?v=6';
+import * as store from './store.js?v=7';
+import { dayStateFields } from './world.js?v=7';
+import * as gcal from './gcal.js?v=7';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -128,16 +128,12 @@ export function mountDay(app, date) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
 
-  const wallet = h('button', { class: 'wallet' });
-  app.appendChild(wallet);
-  const unbindWalletHold = holdToAct(wallet, {
-    ms: 900,
-    onComplete: async () => {
-      const got = await store.gather();
-      renderWallet();
-      if (got) whisper(`${got} seed${got === 1 ? '' : 's'} gathered.`, 2200);
-    },
-  });
+  // top-right: the day's points — the sum of the point values of the habits
+  // done today (each habit's worth is set in tend). A dot appears under the
+  // number as the day fills: light blue past 75%, ultramarine at 100%.
+  // (The seed economy — waiting, gathering, the shop — is hidden for now.)
+  const tally = h('div', { class: 'day-tally', 'aria-label': 'points today' });
+  app.appendChild(tally);
 
   // the date itself is the page's face now — big and quiet, the arrows
   // small beside it.
@@ -182,21 +178,27 @@ export function mountDay(app, date) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/gallery' }, 'the gallery'),
-    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
 
-  function renderWallet() {
-    clear(wallet);
-    wallet.appendChild(h('span', { class: 'dot' }, '◦ '));
-    wallet.appendChild(document.createTextNode(String(store.wallet())));
-    const pending = store.pendingTicks();
-    if (pending.length) {
-      const waiting = pending.reduce((a, t) => a + (t.f.Seeds || 0), 0);
-      wallet.appendChild(document.createTextNode(` · ${waiting} waiting — hold to gather`));
+  function dayPointsInfo() {
+    const habits = store.activeHabits();
+    let earned = 0, total = 0;
+    for (const hb of habits) {
+      const pts = hb.f.Seeds || 0;
+      total += pts;
+      if (store.tickFor(date, hb.f.Name)) earned += pts;
     }
+    return { earned, total, ratio: total ? earned / total : 0 };
+  }
+  function renderTally() {
+    clear(tally);
+    const { earned, ratio } = dayPointsInfo();
+    tally.appendChild(h('div', { class: 'tally-num' }, String(earned)));
+    if (ratio >= 1) tally.appendChild(h('span', { class: 'tally-dot full' }));
+    else if (ratio >= 0.75) tally.appendChild(h('span', { class: 'tally-dot near' }));
   }
 
   // ---- the schedule ---------------------------------------------------
@@ -342,7 +344,7 @@ export function mountDay(app, date) {
           return; // already gathered or withered — the ledger doesn't undo that
         }
         renderLedger();
-        renderWallet();
+        renderTally();
         scheduleDaySync();
       });
       ledger.appendChild(word);
@@ -744,7 +746,7 @@ export function mountDay(app, date) {
   });
   backdrop.addEventListener('click', () => closeSheet());
 
-  renderWallet();
+  renderTally();
   renderSchedule();
   renderPrint();
   renderLedger();
@@ -764,7 +766,6 @@ export function mountDay(app, date) {
 
   return () => {
     unbindSwipe();
-    unbindWalletHold();
     document.removeEventListener('pointerdown', onDocDown);
     stopPollPrint();
     if (syncTimer) runDaySync(); // flush a pending write before leaving
@@ -818,7 +819,6 @@ export function mountGallery(app) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
-    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
@@ -1030,7 +1030,6 @@ export function mountTend(app) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
-    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
   ]);
   app.appendChild(hints);

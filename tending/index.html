@@ -135,6 +135,15 @@
     max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
+  /* the day's points, top-right — the number, and a filling-dot beneath:
+     light blue past 75%, ultramarine at 100% (same dot as the timeline) */
+  .day-tally { position: fixed; top: 14px; right: 20px; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .tally-num { font-size: 1.35rem; color: var(--ink-strong); font-variant-numeric: tabular-nums; line-height: 1; }
+  .tally-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tally-dot.near { background: #8fbce6; box-shadow: 0 0 5px #8fbce6; }
+  .tally-dot.full { background: #2f43c9; box-shadow: 0 0 7px #2f43c9; }
+
   /* ---- the day, now: a prominent date over soft schedule blocks ----- */
   .day-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
   .day-arrow { font-size: 1.4rem; min-width: 44px; min-height: 44px; opacity: 0.6; }
@@ -353,6 +362,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=6"></script>
+  <script type="module" src="src/main.js?v=7"></script>
 </body>
 </html>
