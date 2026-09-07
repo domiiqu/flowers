@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=7';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=8';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -221,9 +221,12 @@ function countTrackedDays(dateISO, data) {
 
 export function dayStateFields(dateISO, data) {
   const w = computeWorldState(dateISO, data);
+  // bonus habits sit outside the total, so an undone one never adds a cloud;
+  // a done one still counts toward what's done (leaf mass / overachievement)
+  const bonusNames = new Set((data.Habits || []).filter((h) => h.f.Active && h.f.Bonus).map((h) => h.f.Name));
   return {
     HabitsDone: w.habits.filter((h) => h.done).length,
-    HabitsTotal: w.habits.length,
+    HabitsTotal: w.habits.filter((h) => !bonusNames.has(h.name)).length,
     Fog: w.fog,
     Mood: (() => { const v = overallMood(dateISO, data); return v == null ? null : Math.round(v); })(),
     MoodMorning: momentValueExact(dateISO, data, 'mood (morning)'),

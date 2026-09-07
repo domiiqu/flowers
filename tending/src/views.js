@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=7';
-import { dayStateFields } from './world.js?v=7';
-import * as gcal from './gcal.js?v=7';
+import * as store from './store.js?v=8';
+import { dayStateFields } from './world.js?v=8';
+import * as gcal from './gcal.js?v=8';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -188,10 +188,11 @@ export function mountDay(app, date) {
     let earned = 0, total = 0;
     for (const hb of habits) {
       const pts = hb.f.Seeds || 0;
-      total += pts;
-      if (store.tickFor(date, hb.f.Name)) earned += pts;
+      const done = !!store.tickFor(date, hb.f.Name);
+      if (hb.f.Bonus) { if (done) earned += pts; }   // bonus: adds when done, never in the total
+      else { total += pts; if (done) earned += pts; } // required: counts both ways
     }
-    return { earned, total, ratio: total ? earned / total : 0 };
+    return { earned, total, ratio: total ? earned / total : (earned > 0 ? 1 : 0) };
   }
   function renderTally() {
     clear(tally);
@@ -333,7 +334,8 @@ export function mountDay(app, date) {
     }
     habits.forEach((habit, i) => {
       const tick = store.tickFor(date, habit.f.Name);
-      const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') }, habit.f.Name || '');
+      const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') + (habit.f.Bonus ? ' bonus' : '') },
+        habit.f.Name || '');
       word.addEventListener('click', async () => {
         const cur = store.tickFor(date, habit.f.Name);
         if (!cur) {
@@ -1085,8 +1087,19 @@ function rowEditor(table, label, extraFields, defaultsFn) {
       active.addEventListener('change', () => {
         store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked });
       });
+      // the bonus flag — a starred habit sits outside the day's total:
+      // skipping it never lowers the score, doing it adds points on top
+      const bonus = h('input', { type: 'checkbox' });
+      bonus.checked = !!row.f.Bonus;
+      bonus.addEventListener('change', () => {
+        store.upsertRow(table, 'Name', { Name: row.f.Name, Bonus: bonus.checked });
+      });
+      const flags = h('div', { class: 'tend-flags' }, [
+        h('label', { class: 'checklabel', title: 'bonus — outside the total; adds points when done' }, [bonus, '✦']),
+        h('label', { class: 'checklabel' }, [active, 'on']),
+      ]);
       const line = h('div', { class: 'tend-row' },
-        [nameInput, ...fieldInputs, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]);
+        [nameInput, ...fieldInputs, flags, deleteX(table, row, renderList)]);
       list.appendChild(line);
     }
   }

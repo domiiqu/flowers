@@ -27,6 +27,8 @@ export const SCHEMA = [
     { name: 'Variety', type: 'number', options: { precision: 0 } },
     { name: 'Order', type: 'number', options: { precision: 0 } },
     { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Bonus', type: 'checkbox', options: { icon: 'star', color: 'yellowBright' },
+      description: 'A bonus habit: left out of the day’s total, so skipping it never lowers the score — but doing it adds its points on top (the day can pass 100%).' },
     { name: 'Notes', type: 'multilineText' },
   ]},
   // the tag vocabulary — the words offered as chips. a typed tag joins it;

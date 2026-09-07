@@ -1,8 +1,8 @@
 // scary.js — the hour. high-adrenaline is quarantined here; nothing else
 // in the app pulses or alarms.
 
-import * as store from './store.js?v=7';
-import { holdToAct } from './views.js?v=7';
+import * as store from './store.js?v=8';
+import { holdToAct } from './views.js?v=8';
 
 const DURATIONS = [60, 45, 25];
 const WORDS = { 60: 'sixty', 45: 'forty-five', 25: 'twenty-five' };
