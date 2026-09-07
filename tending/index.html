@@ -184,26 +184,30 @@
 
   /* ---- the hours line: the day, midnight to midnight; moments are
        dots you can recolour, drag through time, or take back ---------- */
-  .hours-line { position: relative; height: 30px; margin: 2px auto 4px; touch-action: pan-y; }
+  /* width:100% is load-bearing — the line's children are all absolutely
+     positioned, so without it this flex item collapses to zero width and
+     every dot stacks at the far left (the timeline vanishes). */
+  .hours-line { position: relative; width: 100%; height: 30px; margin: 2px auto 4px; touch-action: pan-y; }
   .moments-text { text-align: center; font-size: 0.72rem; line-height: 1.7; margin: 0 auto 12px;
     color: var(--ink); word-break: break-word; transition: opacity 0.25s ease; }
   .moment-chip { color: var(--ink); }
   .moment-chip:hover { color: var(--ink-strong); }
   .hours-track { position: absolute; left: 4%; right: 4%; top: 50%; height: 1px; background: var(--line);
     transition: opacity 0.25s ease; }
-  .hour-mote { position: absolute; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  .hour-mote { position: absolute; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
     padding: 0; border: none; background: none; cursor: grab; touch-action: none;
     -webkit-touch-callout: none; user-select: none; transition: opacity 0.25s ease; }
-  .hour-mote .dot { display: block; width: 8px; height: 8px; margin: 11px auto 0; border-radius: 50%;
+  .hour-mote .dot { display: block; width: 8px; height: 8px; margin: 16px auto 0; border-radius: 50%;
     background: var(--dot, var(--gold)); opacity: 0.85;
     box-shadow: 0 0 5px var(--dot, var(--gold)); transition: width 0.15s ease, height 0.15s ease, margin 0.15s ease; }
   .hour-mote:hover .dot { opacity: 1; }
   /* editing a moment: it is singled out, the rest recede so a stray tap
-     can't land on the wrong one */
+     can't land on the wrong one; the whole line becomes its slider */
+  .hours-line.focus { cursor: ew-resize; }
   .hours-line.focus .hour-mote:not(.sel) { opacity: 0.22; pointer-events: none; }
   .hours-line.focus .hours-track { opacity: 0.5; }
   .hour-mote.sel { cursor: grab; }
-  .hour-mote.sel .dot { width: 13px; height: 13px; margin: 8.5px auto 0; opacity: 1; }
+  .hour-mote.sel .dot { width: 13px; height: 13px; margin: 13.5px auto 0; opacity: 1; }
   .moments-text.faded .moment-chip { opacity: 0.28; pointer-events: none; }
 
   /* ---- the "now" mote + its calm chip sheet ------------------------- */
@@ -328,15 +332,16 @@
     margin-bottom: 10px; opacity: 0.85; }
   .tend-report { font-size: 0.76rem; color: var(--ink-dim); line-height: 1.8; margin-top: 8px; }
   .tend-list { display: flex; flex-direction: column; gap: 6px; }
-  .tend-row { display: grid; grid-template-columns: 1fr 70px 60px; gap: 8px; align-items: center; }
+  .tend-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; }
   .tend-row input[type="text"], .tend-row input[type="number"] { min-height: 38px; }
+  .tend-x { color: var(--ink-dim); min-width: 34px; min-height: 34px; font-size: 0.9rem; }
+  .tend-x:hover { color: var(--bad); }
   .tend-status { font-size: 0.78rem; }
   .tend-warning { font-size: 0.72rem; color: var(--ink-dim); margin-top: 6px; }
   .checklabel { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
 
   @media (max-width: 520px) {
     .hour-clock { font-size: 3.4rem; }
-    .tend-row { grid-template-columns: 1fr 56px 46px; }
   }
 </style>
 </head>
@@ -348,6 +353,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=5"></script>
+  <script type="module" src="src/main.js?v=6"></script>
 </body>
 </html>

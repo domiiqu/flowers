@@ -1,8 +1,8 @@
 // scary.js — the hour. high-adrenaline is quarantined here; nothing else
 // in the app pulses or alarms.
 
-import * as store from './store.js?v=5';
-import { holdToAct } from './views.js?v=5';
+import * as store from './store.js?v=6';
+import { holdToAct } from './views.js?v=6';
 
 const DURATIONS = [60, 45, 25];
 const WORDS = { 60: 'sixty', 45: 'forty-five', 25: 'twenty-five' };
@@ -29,7 +29,7 @@ function h(tag, attrs = {}, children = []) {
 }
 
 const HINTS = [
-  ['#/day/', 'the day'], ['#/meadow', 'the meadow'], ['#/shop', 'the shop'], ['#/unwind', 'unwind'], ['#/tend', 'tend'],
+  ['#/day/', 'the day'], ['#/gallery', 'the gallery'], ['#/shop', 'the shop'], ['#/tend', 'tend'],
 ];
 
 export function mount(app) {

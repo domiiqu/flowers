@@ -29,6 +29,14 @@ export const SCHEMA = [
     { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
     { name: 'Notes', type: 'multilineText' },
   ]},
+  // the tag vocabulary — the words offered as chips. a typed tag joins it;
+  // deleting one drops it from the chips but never touches the Moments that
+  // already used it (those live on their own, keyed by text).
+  { name: 'Tags', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+  ]},
   { name: 'Ticks', fields: [
     { name: 'Key', type: 'singleLineText' },
     { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
@@ -124,6 +132,10 @@ const DEFAULTS = {
     { Name: 'the thing in the cart',     Cost: 80, Sign: '🎁', Order: 4, Active: true,
       Link: 'https://example.com/replace-me-with-the-cart' },
   ],
+  Tags: [
+    'b', 'l', 'd', 'snack', 'coffee', 'mood', 'sleep', 'fog', 'energy',
+    'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
+  ].map((Name, i) => ({ Name, Order: i + 1, Active: true })),
 };
 
 // ------------------------------------------------------------------ time
@@ -222,6 +234,13 @@ const airtable = {
     });
     return { id: page.records[0].id, f: page.records[0].fields };
   },
+  async update(table, id, fields) {
+    const s = getSettings();
+    const rec = await at(`/${s.baseId}/${encodeURIComponent(table)}/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ fields, typecast: true }),
+    });
+    return { id: rec.id, f: rec.fields };
+  },
   async destroy(table, id) {
     const s = getSettings();
     await at(`/${s.baseId}/${encodeURIComponent(table)}?records[]=${id}`, { method: 'DELETE' });
@@ -259,6 +278,12 @@ const sandbox = {
     recs.push(r); sbWrite(table, recs);
     return r;
   },
+  async update(table, id, fields) {
+    const recs = sbRead(table);
+    const hit = recs.find(r => r.id === id);
+    if (hit) { Object.assign(hit.f, fields); sbWrite(table, recs); }
+    return hit;
+  },
   async destroy(table, id) {
     sbWrite(table, sbRead(table).filter(r => r.id !== id));
   },
@@ -283,6 +308,21 @@ async function runOp(op) {
     const recs = await b.list(op.table);
     const hit = recs.find(r => r.f.Key === op.key);
     if (hit) await b.destroy(op.table, hit.id);
+    return;
+  }
+  // find a row by one of its field values (the backend's real id may
+  // differ from the in-memory temp id, so we always look it up fresh),
+  // then delete or update it — how rename-in-place and delete replay.
+  if (op.kind === 'destroyByField') {
+    const recs = await b.list(op.table);
+    const hit = recs.find(r => r.f[op.field] === op.value);
+    if (hit) await b.destroy(op.table, hit.id);
+    return;
+  }
+  if (op.kind === 'updateByField') {
+    const recs = await b.list(op.table);
+    const hit = recs.find(r => r.f[op.field] === op.value);
+    if (hit) await b.update(op.table, hit.id, op.fields);
     return;
   }
 }
@@ -322,7 +362,7 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
+  data: { Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
   loaded: false,
   problem: null,
 };
@@ -474,6 +514,7 @@ export async function captureMoment({ tag, value, words, time, sure = 'exact', d
   if (words) fields.Words = words;
   S.data.Moments.push({ id: 'tmp' + Math.random(), f: fields });
   write({ kind: 'upsert', table: 'Moments', mergeField: 'Key', fields });
+  ensureTag(tag); // a new word joins the vocabulary the first time it's caught
   return fields.Key;
 }
 
@@ -516,30 +557,28 @@ export function valueTagFor(tag) {
   return VALUE_TAGS[String(tag || '').trim().toLowerCase()] || null;
 }
 
-// the chips: her own vocabulary, surfacing by recency then frequency.
-// before any history exists, the starter words fill the rest — they
-// recede on their own as real tags outrank them.
+// the chips: the active tag vocabulary, most-recently-used first. Deleted
+// tags never appear (even if history used them). Before the Tags table
+// exists (an un-replanted base, a bare sandbox) it falls back to moment
+// history plus the starter words, so capture still works.
 export function tagChips(n = 8) {
-  const seen = new Map(); // tag -> { count, last }
+  const lastUse = new Map(); // tag -> latest stamp
   for (const m of S.data.Moments) {
-    const tag = m.f.Tag;
-    if (!tag) continue;
-    const cur = seen.get(tag) || { count: 0, last: '' };
-    cur.count++;
+    if (!m.f.Tag) continue;
     const stamp = `${m.f.Date} ${m.f.Time || ''}`;
-    if (stamp > cur.last) cur.last = stamp;
-    seen.set(tag, cur);
+    if (stamp > (lastUse.get(m.f.Tag) || '')) lastUse.set(m.f.Tag, stamp);
   }
-  const ranked = [...seen.entries()]
-    .sort((a, b) => b[1].last.localeCompare(a[1].last) || b[1].count - a[1].count)
-    .map(([tag]) => tag);
-  if (ranked.length < n) {
-    for (const t of STARTER_TAGS) {
-      if (ranked.length >= n) break;
-      if (!ranked.includes(t)) ranked.push(t);
-    }
+  const active = activeTags();
+  let pool;
+  if (active.length) {
+    const order = new Map(active.map((t) => [t.f.Name, t.f.Order || 0]));
+    pool = active.map((t) => t.f.Name).sort((a, b) =>
+      (lastUse.get(b) || '').localeCompare(lastUse.get(a) || '') || (order.get(a) || 0) - (order.get(b) || 0));
+  } else {
+    pool = [...lastUse.keys()].sort((a, b) => (lastUse.get(b) || '').localeCompare(lastUse.get(a) || ''));
+    for (const t of STARTER_TAGS) if (!pool.includes(t)) pool.push(t);
   }
-  return ranked.slice(0, n);
+  return pool.slice(0, n);
 }
 
 export async function logHour(minutes, outcome) {
@@ -564,6 +603,43 @@ export async function upsertRow(table, mergeField, fields) {
   else S.data[table].push({ id: 'tmp' + Math.random(), f: fields });
   write({ kind: 'upsert', table, mergeField, fields });
 }
+
+// rename a row IN PLACE (by its old Name) — not a create-a-new-one, which
+// is what upserting a fresh Name would do. history that referenced the old
+// name (ticks, moments) keeps it; the roster carries the new one forward.
+export async function renameNamed(table, oldName, newName) {
+  const nm = String(newName || '').trim();
+  if (!nm || nm === oldName) return;
+  const row = S.data[table].find(r => r.f.Name === oldName);
+  if (row) row.f.Name = nm;
+  write({ kind: 'updateByField', table, field: 'Name', value: oldName, fields: { Name: nm } });
+}
+
+// delete a row by Name — gone from the roster/vocabulary, but anything that
+// already used the name stays untouched (ticks and moments are keyed on
+// their own text, not on this row).
+export async function deleteNamed(table, name) {
+  S.data[table] = S.data[table].filter(r => r.f.Name !== name);
+  write({ kind: 'destroyByField', table, field: 'Name', value: name });
+}
+
+// a typed tag joins the vocabulary the first time it's used (or wakes back
+// up if it was deleted and typed again).
+export async function ensureTag(name) {
+  const nm = String(name || '').trim();
+  if (!nm) return;
+  const row = (S.data.Tags || []).find(t => t.f.Name === nm);
+  if (row) {
+    if (!row.f.Active) { row.f.Active = true; write({ kind: 'upsert', table: 'Tags', mergeField: 'Name', fields: { Name: nm, Active: true } }); }
+    return;
+  }
+  const order = 1 + (S.data.Tags || []).reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  const fields = { Name: nm, Active: true, Order: order };
+  (S.data.Tags = S.data.Tags || []).push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Tags', mergeField: 'Name', fields });
+}
+export const activeTags = () =>
+  (S.data.Tags || []).filter(t => t.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 
 // --------------------------------------------------------- planting base
 // creates any missing tables in the given base via the airtable meta api,

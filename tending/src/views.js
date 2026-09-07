@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=5';
-import { dayStateFields } from './world.js?v=5';
-import * as gcal from './gcal.js?v=5';
+import * as store from './store.js?v=6';
+import { dayStateFields } from './world.js?v=6';
+import * as gcal from './gcal.js?v=6';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -480,6 +480,45 @@ export function mountDay(app, date) {
     mote.addEventListener('pointercancel', cancel);
   }
 
+  // the dot is small; once one is selected, let a drag ANYWHERE along the
+  // line carry it — the whole timeline becomes its slider, far easier on a
+  // thumb than grabbing an 8px dot. bound once; reads the live selection.
+  function bindLineSlide() {
+    let sliding = false, pid = null;
+    const track = () => hoursLine.querySelector('.hours-track');
+    const sel = () => hoursLine.querySelector('.hour-mote.sel');
+    function place(clientX) {
+      const t = track(), m = sel();
+      if (t && m) m.style.left = `${pctFromClientX(clientX, t).toFixed(2)}%`;
+    }
+    hoursLine.addEventListener('pointerdown', (e) => {
+      if (!selectedKey || e.target.closest('.hour-mote')) return; // dot has its own drag
+      e.preventDefault(); e.stopPropagation();
+      sliding = true; pid = e.pointerId;
+      try { hoursLine.setPointerCapture(pid); } catch {}
+      place(e.clientX);
+    });
+    hoursLine.addEventListener('pointermove', (e) => {
+      if (sliding && e.pointerId === pid) place(e.clientX);
+    });
+    hoursLine.addEventListener('pointerup', async (e) => {
+      if (!sliding || e.pointerId !== pid) return;
+      sliding = false;
+      try { hoursLine.releasePointerCapture(pid); } catch {}
+      const t = track();
+      if (!t || !selectedKey) return;
+      const minutes = (pctFromClientX(e.clientX, t) / 100) * 1440;
+      const m = store.S.data.Moments.find((x) => x.f.Key === selectedKey);
+      const patch = { Time: fmtMinutes(minutes) };
+      if (m && m.f.Sure === 'day') patch.Sure = 'about';
+      await store.adjustMoment(selectedKey, patch);
+      renderHoursLine();
+      showDetail(selectedKey);
+      scheduleDaySync();
+    });
+    hoursLine.addEventListener('pointercancel', () => { sliding = false; });
+  }
+
   function selectMoment(key) {
     selectedKey = key;
     renderHoursLine();
@@ -710,6 +749,7 @@ export function mountDay(app, date) {
   renderPrint();
   renderLedger();
   renderHoursLine();
+  bindLineSlide();
 
   // birth today's row on arrival — this also catches state set in other
   // rooms (a held hour) and keeps the plate generator's feed current even
@@ -984,6 +1024,8 @@ export function mountTend(app) {
     { key: 'Seeds', type: 'number', width: 70 },
   ], () => ({ Variety: 1 + Math.floor(Math.random() * 900), Order: nextOrder('Habits'), Active: true, Seeds: 3 })));
 
+  root.appendChild(tagsEditor());
+
   root.appendChild(shopEditor());
 
   const hints = h('div', { class: 'hints' }, [
@@ -1000,12 +1042,22 @@ function nextOrder(table) {
   return 1 + rows.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
 }
 
-async function renameRow(table, row, newName) {
-  const newName2 = newName.trim();
-  if (!newName2 || newName2 === row.f.Name) return;
-  const carried = { ...row.f, Name: newName2 };
-  await store.upsertRow(table, 'Name', carried);
-  await store.upsertRow(table, 'Name', { Name: row.f.Name, Active: false });
+// rename in place (never a duplicate) and only when it actually changed
+function renameRow(table, row, newName) {
+  const nm = newName.trim();
+  if (!nm || nm === row.f.Name) return Promise.resolve();
+  return store.renameNamed(table, row.f.Name, nm);
+}
+// a small ✕ that deletes a roster row after a confirm — gone from the
+// options, but past days keep whatever used its name
+function deleteX(table, row, after) {
+  const x = h('button', { class: 'plain tend-x', 'aria-label': `delete ${row.f.Name}` }, '✕');
+  x.addEventListener('click', async () => {
+    if (!window.confirm(`delete “${row.f.Name}”? past days keep it; it just stops being offered.`)) return;
+    await store.deleteNamed(table, row.f.Name);
+    after();
+  });
+  return x;
 }
 
 function rowEditor(table, label, extraFields, defaultsFn) {
@@ -1034,7 +1086,8 @@ function rowEditor(table, label, extraFields, defaultsFn) {
       active.addEventListener('change', () => {
         store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked });
       });
-      const line = h('div', { class: 'tend-row' }, [nameInput, ...fieldInputs, h('label', { class: 'checklabel' }, [active, 'on'])]);
+      const line = h('div', { class: 'tend-row' },
+        [nameInput, ...fieldInputs, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]);
       list.appendChild(line);
     }
   }
@@ -1076,7 +1129,7 @@ function shopEditor() {
       const active = h('input', { type: 'checkbox' });
       active.checked = !!row.f.Active;
       active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
-      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, costInput, h('label', { class: 'checklabel' }, [active, 'on'])]));
+      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, costInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
       list.appendChild(h('div', { class: 'tend-row', style: 'grid-template-columns:1fr' }, [linkInput]));
     }
   }
@@ -1099,5 +1152,50 @@ function shopEditor() {
   });
   section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addSign, addCost]));
   section.appendChild(h('div', { class: 'row', style: 'margin-top:6px' }, [addLink, addBtn]));
+  return section;
+}
+
+// the tag vocabulary — the words offered as chips when catching a moment.
+// add one here (or just type it while capturing); delete one to stop it
+// being offered, without touching the days that already used it.
+function tagsEditor() {
+  const table = 'Tags';
+  const section = h('div', { class: 'tend-section' });
+  section.appendChild(h('h2', {}, 'tags'));
+  section.appendChild(h('div', { class: 'tend-warning italic', style: 'margin-top:0' },
+    'deleting a tag only drops it from the chips — past days keep it.'));
+  const list = h('div', { class: 'tend-list' });
+  section.appendChild(list);
+
+  function renderList() {
+    clear(list);
+    const rows = [...(store.S.data.Tags || [])].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+    if (!rows.length) {
+      list.appendChild(h('div', { class: 'dim italic' }, 'no tags yet — type one while catching a moment, or add below.'));
+      return;
+    }
+    for (const row of rows) {
+      const nameInput = h('input', { type: 'text', class: 'field' });
+      nameInput.value = row.f.Name || '';
+      nameInput.addEventListener('blur', () => renameRow(table, row, nameInput.value).then(renderList));
+      const active = h('input', { type: 'checkbox' });
+      active.checked = !!row.f.Active;
+      active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
+      list.appendChild(h('div', { class: 'tend-row' },
+        [nameInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
+    }
+  }
+  renderList();
+
+  const addName = h('input', { type: 'text', placeholder: 'a new tag…', class: 'field' });
+  const addBtn = h('button', { class: 'btn' }, 'add');
+  addBtn.addEventListener('click', async () => {
+    const name = addName.value.trim();
+    if (!name) return;
+    await store.ensureTag(name);
+    addName.value = '';
+    renderList();
+  });
+  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addBtn]));
   return section;
 }
