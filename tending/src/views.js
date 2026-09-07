@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=9';
-import { dayStateFields } from './world.js?v=9';
-import * as gcal from './gcal.js?v=9';
+import * as store from './store.js?v=4';
+import { dayStateFields } from './world.js?v=4';
+import * as gcal from './gcal.js?v=4';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
@@ -13,18 +13,6 @@ const SURE_COLOR = { exact: '#c94a3f', about: '#c98d84', day: '#5b82c4' };
 const SURE_WORD = { exact: 'exact', about: 'roughly', day: 'all day' };
 const SURE_NEXT = { exact: 'about', about: 'day', day: 'exact' };
 const sureOf = (m) => SURE_COLOR[m.f.Sure] ? m.f.Sure : 'exact';
-
-// the day's finished print lives in ONE field — the base's AI image field,
-// "Plate generator". Read only that (never scan every field), so a stray
-// image in some other column can't be mistaken for the plate.
-const PLATE_FIELD = 'Plate generator';
-function plateImageUrl(row) {
-  if (!row) return '';
-  const v = row.f[PLATE_FIELD];
-  if (Array.isArray(v) && v[0] && v[0].url) return v[0].url; // attachment shape
-  if (typeof v === 'string' && /^https?:\/\//.test(v)) return v; // url/text shape
-  return '';
-}
 
 // ------------------------------------------------------------------ dom
 
@@ -140,12 +128,16 @@ export function mountDay(app, date) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
 
-  // top-right: the day's points — the sum of the point values of the habits
-  // done today (each habit's worth is set in tend). A dot appears under the
-  // number as the day fills: light blue past 75%, ultramarine at 100%.
-  // (The seed economy — waiting, gathering, the shop — is hidden for now.)
-  const tally = h('div', { class: 'day-tally', 'aria-label': 'points today' });
-  app.appendChild(tally);
+  const wallet = h('button', { class: 'wallet' });
+  app.appendChild(wallet);
+  const unbindWalletHold = holdToAct(wallet, {
+    ms: 900,
+    onComplete: async () => {
+      const got = await store.gather();
+      renderWallet();
+      if (got) whisper(`${got} seed${got === 1 ? '' : 's'} gathered.`, 2200);
+    },
+  });
 
   // the date itself is the page's face now — big and quiet, the arrows
   // small beside it.
@@ -161,7 +153,10 @@ export function mountDay(app, date) {
     onclick: () => (location.hash = `#/day/${store.addDays(date, 1)}`) }, '›'));
   root.appendChild(header);
 
-  // (no "today" link — the arrows and swipe carry you back; the word is gone.)
+  if (date !== today) {
+    root.appendChild(h('div', { class: 'today-link' },
+      h('button', { class: 'plain italic', onclick: () => (location.hash = '#/day/') }, 'today')));
+  }
 
   // the day's shape — schedule as soft blocks (Google Calendar when
   // connected, otherwise editable blocks kept in Days.Schedule)
@@ -185,28 +180,21 @@ export function mountDay(app, date) {
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
 
-  function dayPointsInfo() {
-    const habits = store.activeHabits();
-    let earned = 0, total = 0;
-    for (const hb of habits) {
-      const pts = hb.f.Seeds || 0;
-      const done = !!store.tickFor(date, hb.f.Name);
-      if (hb.f.Bonus) { if (done) earned += pts; }   // bonus: adds when done, never in the total
-      else { total += pts; if (done) earned += pts; } // required: counts both ways
+  function renderWallet() {
+    clear(wallet);
+    wallet.appendChild(h('span', { class: 'dot' }, '◦ '));
+    wallet.appendChild(document.createTextNode(String(store.wallet())));
+    const pending = store.pendingTicks();
+    if (pending.length) {
+      const waiting = pending.reduce((a, t) => a + (t.f.Seeds || 0), 0);
+      wallet.appendChild(document.createTextNode(` · ${waiting} waiting — hold to gather`));
     }
-    return { earned, total, ratio: total ? earned / total : (earned > 0 ? 1 : 0) };
-  }
-  function renderTally() {
-    clear(tally);
-    const { earned, ratio } = dayPointsInfo();
-    tally.appendChild(h('div', { class: 'tally-num' }, String(earned)));
-    if (ratio >= 1) tally.appendChild(h('span', { class: 'tally-dot full' }));
-    else if (ratio >= 0.75) tally.appendChild(h('span', { class: 'tally-dot near' }));
   }
 
   // ---- the schedule ---------------------------------------------------
@@ -283,31 +271,18 @@ export function mountDay(app, date) {
   }
 
   // ---- the print ritual ----------------------------------------------
-  // while a print is being painted in the base, quietly poll for it so it
-  // swaps in on its own — no refresh. gives up after a couple of minutes;
-  // the gallery (which refreshes on entry) catches any it missed.
-  let printTimer = null;
-  function pollForPrint() {
-    if (printTimer || !store.connected()) return;
-    let tries = 0;
-    printTimer = setInterval(async () => {
-      tries++;
-      const ok = await store.reloadTable('Days');
-      if (ok && plateImageUrl(store.dayFor(date))) { stopPollPrint(); renderPrint(); }
-      else if (tries >= 20) stopPollPrint(); // ~2 minutes
-    }, 6000);
+  function printImageUrl(row) {
+    if (!row) return '';
+    for (const v of Object.values(row.f)) {
+      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
+    }
+    return '';
   }
-  function stopPollPrint() { clearInterval(printTimer); printTimer = null; }
-
   function renderPrint() {
     clear(printBox);
     const row = store.dayFor(date);
-    const url = plateImageUrl(row);
+    const url = printImageUrl(row);
     if (url) {
-      stopPollPrint();
-      // the print has landed — release the ritual flag so the press is
-      // idle again (and re-printable later); harmless if already clear.
-      if (row && row.f['Print?']) store.saveDay(date, { 'Print?': false });
       const a = h('a', { class: 'print-shown', href: url, target: '_blank', rel: 'noopener' },
         [h('img', { class: 'print-img', src: url, alt: 'the day, printed' })]);
       printBox.appendChild(a);
@@ -315,12 +290,11 @@ export function mountDay(app, date) {
     }
     const requested = !!(row && row.f['Print?']);
     const btn = h('button', { class: 'plain print-btn italic' }, requested ? 'printing…' : 'print this day');
-    if (requested) { btn.setAttribute('disabled', ''); pollForPrint(); }
+    if (requested) btn.setAttribute('disabled', '');
     btn.addEventListener('click', async () => {
       await store.requestPrint(date);
       renderPrint();
-      pollForPrint();
-      whisper('the press is set — your print will appear here, and in the gallery.', 3800);
+      whisper('the press is set — your print will arrive here soon.', 3600);
     });
     printBox.appendChild(btn);
   }
@@ -334,8 +308,7 @@ export function mountDay(app, date) {
     }
     habits.forEach((habit, i) => {
       const tick = store.tickFor(date, habit.f.Name);
-      const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') + (habit.f.Bonus ? ' bonus' : '') },
-        habit.f.Name || '');
+      const word = h('button', { class: 'plain italic ledger-word' + (tick ? ' done' : '') }, habit.f.Name || '');
       word.addEventListener('click', async () => {
         const cur = store.tickFor(date, habit.f.Name);
         if (!cur) {
@@ -346,7 +319,7 @@ export function mountDay(app, date) {
           return; // already gathered or withered — the ledger doesn't undo that
         }
         renderLedger();
-        renderTally();
+        renderWallet();
         scheduleDaySync();
       });
       ledger.appendChild(word);
@@ -482,45 +455,6 @@ export function mountDay(app, date) {
     mote.addEventListener('pointermove', move);
     mote.addEventListener('pointerup', up);
     mote.addEventListener('pointercancel', cancel);
-  }
-
-  // the dot is small; once one is selected, let a drag ANYWHERE along the
-  // line carry it — the whole timeline becomes its slider, far easier on a
-  // thumb than grabbing an 8px dot. bound once; reads the live selection.
-  function bindLineSlide() {
-    let sliding = false, pid = null;
-    const track = () => hoursLine.querySelector('.hours-track');
-    const sel = () => hoursLine.querySelector('.hour-mote.sel');
-    function place(clientX) {
-      const t = track(), m = sel();
-      if (t && m) m.style.left = `${pctFromClientX(clientX, t).toFixed(2)}%`;
-    }
-    hoursLine.addEventListener('pointerdown', (e) => {
-      if (!selectedKey || e.target.closest('.hour-mote')) return; // dot has its own drag
-      e.preventDefault(); e.stopPropagation();
-      sliding = true; pid = e.pointerId;
-      try { hoursLine.setPointerCapture(pid); } catch {}
-      place(e.clientX);
-    });
-    hoursLine.addEventListener('pointermove', (e) => {
-      if (sliding && e.pointerId === pid) place(e.clientX);
-    });
-    hoursLine.addEventListener('pointerup', async (e) => {
-      if (!sliding || e.pointerId !== pid) return;
-      sliding = false;
-      try { hoursLine.releasePointerCapture(pid); } catch {}
-      const t = track();
-      if (!t || !selectedKey) return;
-      const minutes = (pctFromClientX(e.clientX, t) / 100) * 1440;
-      const m = store.S.data.Moments.find((x) => x.f.Key === selectedKey);
-      const patch = { Time: fmtMinutes(minutes) };
-      if (m && m.f.Sure === 'day') patch.Sure = 'about';
-      await store.adjustMoment(selectedKey, patch);
-      renderHoursLine();
-      showDetail(selectedKey);
-      scheduleDaySync();
-    });
-    hoursLine.addEventListener('pointercancel', () => { sliding = false; });
   }
 
   function selectMoment(key) {
@@ -748,12 +682,11 @@ export function mountDay(app, date) {
   });
   backdrop.addEventListener('click', () => closeSheet());
 
-  renderTally();
+  renderWallet();
   renderSchedule();
   renderPrint();
   renderLedger();
   renderHoursLine();
-  bindLineSlide();
 
   // birth today's row on arrival — this also catches state set in other
   // rooms (a held hour) and keeps the plate generator's feed current even
@@ -768,8 +701,8 @@ export function mountDay(app, date) {
 
   return () => {
     unbindSwipe();
+    unbindWalletHold();
     document.removeEventListener('pointerdown', onDocDown);
-    stopPollPrint();
     if (syncTimer) runDaySync(); // flush a pending write before leaving
   };
 }
@@ -783,41 +716,41 @@ export function mountGallery(app) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
   root.appendChild(h('div', { class: 'meadow-title italic' }, 'the gallery'));
-  const wall = h('div', { class: 'gallery-wall' });
-  root.appendChild(wall);
-  let alive = true;
 
-  function render() {
-    clear(wall);
-    const prints = [...store.S.data.Days]
-      .map((d) => ({ date: d.f.Date || d.f.Key, url: plateImageUrl(d) }))
-      .filter((p) => p.url && p.date)
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-    if (!prints.length) {
-      wall.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
-        'no prints yet — press “print this day” on a day to begin the wall.'));
-      return;
+  function printImageUrl(row) {
+    for (const v of Object.values(row.f)) {
+      if (Array.isArray(v) && v[0] && v[0].url && /image/i.test(v[0].type || '')) return v[0].url;
     }
-    const grid = h('div', { class: 'gallery-grid' });
-    for (const p of prints) {
-      grid.appendChild(h('a', { class: 'gallery-cell', href: `#/day/${p.date}` }, [
-        h('img', { class: 'gallery-img', src: p.url, alt: p.date, loading: 'lazy' }),
-        h('div', { class: 'gallery-date dim italic' }, store.fmtDate(p.date)),
-      ]));
-    }
-    wall.appendChild(grid);
+    return '';
   }
 
-  render();
-  // pull the freshest Days once on entry, so a just-printed day shows up
-  if (store.connected()) store.reloadTable('Days').then(() => { if (alive) render(); });
+  const prints = [...store.S.data.Days]
+    .map((d) => ({ date: d.f.Date || d.f.Key, url: printImageUrl(d) }))
+    .filter((p) => p.url && p.date)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  if (!prints.length) {
+    root.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
+      'no prints yet — press “print this day” on a day to begin the wall.'));
+  } else {
+    const grid = h('div', { class: 'gallery-grid' });
+    for (const p of prints) {
+      const cell = h('a', { class: 'gallery-cell', href: `#/day/${p.date}` }, [
+        h('img', { class: 'gallery-img', src: p.url, alt: p.date, loading: 'lazy' }),
+        h('div', { class: 'gallery-date dim italic' }, store.fmtDate(p.date)),
+      ]);
+      grid.appendChild(cell);
+    }
+    root.appendChild(grid);
+  }
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
+    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
-  return () => { alive = false; };
+  return () => {};
 }
 
 
@@ -1019,12 +952,11 @@ export function mountTend(app) {
     { key: 'Seeds', type: 'number', width: 70 },
   ], () => ({ Variety: 1 + Math.floor(Math.random() * 900), Order: nextOrder('Habits'), Active: true, Seeds: 3 })));
 
-  root.appendChild(tagsEditor());
-
   root.appendChild(shopEditor());
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
+    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
   ]);
   app.appendChild(hints);
@@ -1036,22 +968,12 @@ function nextOrder(table) {
   return 1 + rows.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
 }
 
-// rename in place (never a duplicate) and only when it actually changed
-function renameRow(table, row, newName) {
-  const nm = newName.trim();
-  if (!nm || nm === row.f.Name) return Promise.resolve();
-  return store.renameNamed(table, row.f.Name, nm);
-}
-// a small ✕ that deletes a roster row after a confirm — gone from the
-// options, but past days keep whatever used its name
-function deleteX(table, row, after) {
-  const x = h('button', { class: 'plain tend-x', 'aria-label': `delete ${row.f.Name}` }, '✕');
-  x.addEventListener('click', async () => {
-    if (!window.confirm(`delete “${row.f.Name}”? past days keep it; it just stops being offered.`)) return;
-    await store.deleteNamed(table, row.f.Name);
-    after();
-  });
-  return x;
+async function renameRow(table, row, newName) {
+  const newName2 = newName.trim();
+  if (!newName2 || newName2 === row.f.Name) return;
+  const carried = { ...row.f, Name: newName2 };
+  await store.upsertRow(table, 'Name', carried);
+  await store.upsertRow(table, 'Name', { Name: row.f.Name, Active: false });
 }
 
 function rowEditor(table, label, extraFields, defaultsFn) {
@@ -1080,19 +1002,7 @@ function rowEditor(table, label, extraFields, defaultsFn) {
       active.addEventListener('change', () => {
         store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked });
       });
-      // the bonus flag — a starred habit sits outside the day's total:
-      // skipping it never lowers the score, doing it adds points on top
-      const bonus = h('input', { type: 'checkbox' });
-      bonus.checked = !!row.f.Bonus;
-      bonus.addEventListener('change', () => {
-        store.upsertRow(table, 'Name', { Name: row.f.Name, Bonus: bonus.checked });
-      });
-      const flags = h('div', { class: 'tend-flags' }, [
-        h('label', { class: 'checklabel', title: 'bonus — outside the total; adds points when done' }, [bonus, '✦']),
-        h('label', { class: 'checklabel' }, [active, 'on']),
-      ]);
-      const line = h('div', { class: 'tend-row' },
-        [nameInput, ...fieldInputs, flags, deleteX(table, row, renderList)]);
+      const line = h('div', { class: 'tend-row' }, [nameInput, ...fieldInputs, h('label', { class: 'checklabel' }, [active, 'on'])]);
       list.appendChild(line);
     }
   }
@@ -1134,7 +1044,7 @@ function shopEditor() {
       const active = h('input', { type: 'checkbox' });
       active.checked = !!row.f.Active;
       active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
-      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, costInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
+      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, costInput, h('label', { class: 'checklabel' }, [active, 'on'])]));
       list.appendChild(h('div', { class: 'tend-row', style: 'grid-template-columns:1fr' }, [linkInput]));
     }
   }
@@ -1157,50 +1067,5 @@ function shopEditor() {
   });
   section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addSign, addCost]));
   section.appendChild(h('div', { class: 'row', style: 'margin-top:6px' }, [addLink, addBtn]));
-  return section;
-}
-
-// the tag vocabulary — the words offered as chips when catching a moment.
-// add one here (or just type it while capturing); delete one to stop it
-// being offered, without touching the days that already used it.
-function tagsEditor() {
-  const table = 'Tags';
-  const section = h('div', { class: 'tend-section' });
-  section.appendChild(h('h2', {}, 'tags'));
-  section.appendChild(h('div', { class: 'tend-warning italic', style: 'margin-top:0' },
-    'deleting a tag only drops it from the chips — past days keep it.'));
-  const list = h('div', { class: 'tend-list' });
-  section.appendChild(list);
-
-  function renderList() {
-    clear(list);
-    const rows = [...(store.S.data.Tags || [])].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-    if (!rows.length) {
-      list.appendChild(h('div', { class: 'dim italic' }, 'no tags yet — type one while catching a moment, or add below.'));
-      return;
-    }
-    for (const row of rows) {
-      const nameInput = h('input', { type: 'text', class: 'field' });
-      nameInput.value = row.f.Name || '';
-      nameInput.addEventListener('blur', () => renameRow(table, row, nameInput.value).then(renderList));
-      const active = h('input', { type: 'checkbox' });
-      active.checked = !!row.f.Active;
-      active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
-      list.appendChild(h('div', { class: 'tend-row' },
-        [nameInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
-    }
-  }
-  renderList();
-
-  const addName = h('input', { type: 'text', placeholder: 'a new tag…', class: 'field' });
-  const addBtn = h('button', { class: 'btn' }, 'add');
-  addBtn.addEventListener('click', async () => {
-    const name = addName.value.trim();
-    if (!name) return;
-    await store.ensureTag(name);
-    addName.value = '';
-    renderList();
-  });
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addBtn]));
   return section;
 }

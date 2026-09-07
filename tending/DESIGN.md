@@ -281,10 +281,7 @@ Plain and small: PAT + base id fields; **plant the base** (creates missing
 tables *and grows missing fields on tables that already exist* via the meta
 API, sows defaults — `store.plantBase`, so replanting upgrades an old base
 in place); **carry the sandbox over** (`store.transplantSandbox`); export
-everything as JSON; and tiny editors to add/rename/**delete** habits,
-**tags** (the chip vocabulary), shop items — rename is in place now (never
-a duplicate), and delete drops a row from the roster/vocabulary while the
-ticks and moments that used its name live on
+everything as JSON; and tiny editors to add/rename habits, shop items
 (needed for sandbox mode; with Airtable connected the base itself is the
 admin UI — say so here in one line). Show connection state and queued-writes
 count plainly. A one-line warning that the token lives in this browser only.

@@ -1,9 +1,9 @@
 // main.js — hash router and glue. boots the sandbox, loads the soil,
 // and hands each room off to its view.
 
-import * as store from './store.js?v=9';
-import * as views from './views.js?v=9';
-import * as scary from './scary.js?v=9';
+import * as store from './store.js?v=4';
+import * as views from './views.js?v=4';
+import * as scary from './scary.js?v=4';
 
 const app = document.getElementById('app');
 const queuedot = document.getElementById('queuedot');
@@ -88,10 +88,10 @@ async function boot() {
   if (store.S.problem) {
     views.whisper('the soil is quiet — working from what is saved here.', 4200);
   } else {
-    // the seed economy (waiting / gathering / withering) is hidden for now,
-    // so its whisper is too — the withering still runs quietly underneath.
-    witherReport();
-    if (wasFirst) {
+    const { lost, count } = witherReport();
+    if (lost > 0) {
+      views.whisper(`${lost} seed${lost === 1 ? '' : 's'} withered while you were away — ${count} tick${count === 1 ? '' : 's'} unclaimed too long.`, 5000);
+    } else if (wasFirst) {
       views.whisper('this garden is growing in your browser. when you want it permanent — tend.', 6000);
     }
   }
