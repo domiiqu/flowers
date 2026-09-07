@@ -351,6 +351,17 @@ async function runOp(op) {
   }
 }
 
+// a write can fail two ways. a *transient* failure (offline, a 5xx, a rate
+// limit) will succeed if we try again later, so we keep the op and replay it.
+// a *permanent* failure (a 4xx — a field the base doesn't have, a deleted
+// table, a bad record) will never succeed as written, so replaying it just
+// jams the queue and blocks every write behind it. we drop those instead,
+// remembering the last one so the app can say what happened.
+function isPermanent(err) {
+  const code = +((String(err && err.message).match(/airtable (\d{3})/) || [])[1] || 0);
+  return code >= 400 && code < 500 && code !== 429; // client error, not rate-limit
+}
+
 let flushing = false;
 export async function flushQueue() {
   if (flushing) return;
@@ -358,25 +369,33 @@ export async function flushQueue() {
   try {
     let q = qRead();
     while (q.length) {
-      await runOp(q[0]);
+      try {
+        await runOp(q[0]);
+      } catch (e) {
+        if (!isPermanent(e)) { console.warn('queue holds:', e.message); break; }
+        // this op can never land as written — drop it so it can't wedge the
+        // queue and stop every future write (a print, a tag) from syncing.
+        console.warn('dropped a stuck write:', q[0].kind, q[0].table, e.message);
+        S.dropped = { op: q[0], error: e.message };
+      }
       q = q.slice(1);
       qWrite(q);
     }
-  } catch (e) {
-    console.warn('queue holds:', e.message);
   } finally {
     flushing = false;
   }
 }
 export function queuedCount() { return qRead().length; }
+export function lastDropped() { return S.dropped || null; }
 
 async function write(op) {
+  await flushQueue();
+  if (qRead().length) { qWrite([...qRead(), op]); return false; } // transient backlog — get in line
   try {
-    await flushQueue();
-    if (qRead().length) throw new Error('queue not empty');
     await runOp(op);
     return true;
   } catch (e) {
+    if (isPermanent(e)) { S.dropped = { op, error: e.message }; return false; } // don't jam the queue with poison
     console.warn('kept for later:', e.message);
     qWrite([...qRead(), op]);
     return false;
@@ -389,20 +408,26 @@ export const S = {
   data: { Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
   loaded: false,
   problem: null,
+  dropped: null,
 };
 
 export async function loadAll() {
   const b = backend();
   S.problem = null;
-  try {
-    await flushQueue();
-    for (const t of SCHEMA) S.data[t.name] = await b.list(t.name);
-    S.loaded = true;
-    await witherOldSeeds();
-  } catch (e) {
-    S.problem = e.message;
-    S.loaded = true;
+  await flushQueue(); // swallows its own errors — a jam here must not blank reads
+  // load each table on its own. a base that's drifted from the schema (a
+  // hidden gift shop, a not-yet-planted table) leaves one list 404-ing;
+  // that must not blank the calendar and everything else that *does* load.
+  const failed = [];
+  for (const t of SCHEMA) {
+    try { S.data[t.name] = await b.list(t.name); }
+    catch (e) { failed.push(t.name); console.warn(`table "${t.name}" unavailable:`, e.message); }
   }
+  S.loaded = true;
+  try { await witherOldSeeds(); } catch (e) { console.warn(e); }
+  // only a total failure means we're really cut off (bad token, no network);
+  // a few missing tables is just a partly-planted base, still usable.
+  S.problem = failed.length === SCHEMA.length ? 'could not reach the base' : null;
 }
 
 // re-list a single table into memory — used to poll for a print that the
@@ -536,13 +561,15 @@ export async function requestPrint(date) {
     return { ok: false, sandbox: true };
   }
   const op = { kind: 'upsert', table: 'Days', mergeField: 'Key', fields };
+  await flushQueue(); // clears any self-healable jam first (drops poison)
+  if (qRead().length) return { ok: false, error: 'an earlier write is still waiting to sync' };
   try {
-    await flushQueue();
-    if (qRead().length) throw new Error('an earlier write is still waiting to sync');
     await runOp(op);
     return { ok: true };
   } catch (e) {
-    qWrite([...qRead(), op]); // keep it, so it isn't lost — but say what happened
+    // a permanent failure (a missing field/table) would only jam the queue —
+    // don't re-queue it; report exactly what airtable rejected.
+    if (!isPermanent(e)) qWrite([...qRead(), op]);
     return { ok: false, error: e.message };
   }
 }

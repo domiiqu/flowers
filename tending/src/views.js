@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=11';
-import { dayStateFields } from './world.js?v=11';
-import * as gcal from './gcal.js?v=11';
+import * as store from './store.js?v=12';
+import { dayStateFields } from './world.js?v=12';
+import * as gcal from './gcal.js?v=12';
 
 // a moment's sureness, made visible on the hours line: exact is red (the
 // timestamp is trusted), roughly a warm rose, all-day a calm blue that
