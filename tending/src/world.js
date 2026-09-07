@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=10';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=11';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
