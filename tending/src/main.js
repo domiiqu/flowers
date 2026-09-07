@@ -1,9 +1,9 @@
 // main.js — hash router and glue. boots the sandbox, loads the soil,
 // and hands each room off to its view.
 
-import * as store from './store.js?v=9';
-import * as views from './views.js?v=9';
-import * as scary from './scary.js?v=9';
+import * as store from './store.js?v=12';
+import * as views from './views.js?v=12';
+import * as scary from './scary.js?v=12';
 
 const app = document.getElementById('app');
 const queuedot = document.getElementById('queuedot');
@@ -85,7 +85,12 @@ async function boot() {
   await store.loadAll();
   route();
 
-  if (store.S.problem) {
+  const dropped = store.lastDropped();
+  if (dropped) {
+    // a queued write couldn't land and was let go so it wouldn't jam the rest.
+    // say exactly what the base rejected — usually a missing field or table.
+    views.whisper(`a write couldn’t sync and was dropped — ${dropped.error}`, 7000);
+  } else if (store.S.problem) {
     views.whisper('the soil is quiet — working from what is saved here.', 4200);
   } else {
     // the seed economy (waiting / gathering / withering) is hidden for now,
