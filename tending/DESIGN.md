@@ -74,6 +74,36 @@ Not a stack of daily postcards: **one persistent world.**
 - (the user did *not* choose a prose chronicle — narrative is shown and
   inhabited, not narrated.)
 
+### Phase 2, chosen: the far side & the moon-turn (the double, first face)
+Grounded in the user's thesis *The Double as a Triangle or a Pink and
+Slippery Moon*: the app is a **double-machine** — the plate (d1) is the
+lit, logged face; the unloggable real day is the big-D Double behind it;
+the render must simulate the pursuit of comprehension **without
+resolving** (resolution kills the numinous). Rule: **data crisp** (d1 =
+the log), **uncertainty in the render** (d2 = the world).
+- Every plate gains a **reverse (d2) we never fully see**; the moon on the
+  timeline is the **threshold**. A moon affordance / tap on the plate
+  *turns it over* to the day's far side.
+- Far side = same territory rendered as reverse: lower-res, heavier grain,
+  atmospheric ripple, night/pink-green register, more blank/masked.
+- Authored three ways: the day's data seen from behind (a fatigue span →
+  a shadow mass; a held hour → a distant light); **emergence I author**
+  (an inhabitant/structure she didn't specify — co-authored d2); and
+  **deliberate blank** where the day is unrecorded (Remainder's hockey
+  mask — the unknown shown *as* unknown).
+- **Sleep is the crossing**: woke/slept (sun/moon) marks define the night
+  span; the far side *is* the night. Logged sleep furnishes it; unlogged
+  leaves it blank/numinous.
+- **Orlando remade at the threshold**: lit-face figure steered by her
+  (agency), far-side figure altered by emergence (both — her earlier
+  answer). Authoring controls + seasonal accumulation come later.
+- Irresolution rules: no labels, no legend, grainier than the lit face,
+  always a pink slippery moon.
+- Build: prototype the far-side render in `study/` first (my visual review
+  against the numinous register), then wire the moon-turn into the app.
+  Touches print.js/world.js/views.js/index.html; **no new data tables**
+  (reads Phase-1 data). Past days can be turned.
+
 ### sequencing
 Phase 1 (instrument day) builds now; a minimal `world.js` rewire keeps the
 plate reading the new tables so it never goes blank. Phase 2 (Orlando
