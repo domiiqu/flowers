@@ -8,6 +8,78 @@ ground, Georgia serif, whispered italics, film grain — but this room is a
 day-book you keep, and the keeping itself must feel like the nightly unwind:
 easy, seductive, one screen, no hunting.
 
+## v3 — the instrument day & the living world (current direction)
+
+A ground-up rethink of both the logging surface and the generative world.
+This section supersedes, where they conflict: the flower-bed/ledger day
+page, the moment "Sure" (roughly/about/all-day) flags, the b/l/d starter
+tags, and the nightly Trackers/Entries questions. What stays: the Moebius
+plate as the day's image, the world grammar's *spirit* (data →
+consequence, slow variables with memory), the hour, the plate palette.
+
+### the instrument day (Phase 1 — the new day page, top to bottom)
+1. **the plate** — unchanged as the day's painted image, at the top.
+2. **day-long events** — a faint left-aligned list of things true at the
+   *day* level (Period, WFH, and the old habits folded in here: "moved my
+   body", "went outside"…). Tap to light one on for the day; add-new
+   inline. These are booleans, not appointments. They drive the oak
+   (count of events lit = leaf mass) — habits-as-day-events.
+3. **the timeline** — a thin horizontal line, midnight→midnight, with hour
+   ticks. A rail of **instruments** beside it: woke (sun), slept (moon),
+   food, water, fatigue, despondency, tech brain… add-your-own.
+   - **drag an instrument onto the line**, slide to the rough hour; **drag
+     its edge to give it a duration** (fatigue ~3–5pm). Point-events (a
+     meal) need no duration; states (fatigue) stretch.
+   - **tap any placed instrument to add a note** (food especially).
+   - this *replaces* the moment/tag capture and kills the sure-flags:
+     horizontal position = when, width = how long, natively. Start over.
+   - keep a fast path: drop an instrument at "now" in one tap for
+     out-the-door capture (the thing the now-mote did, re-homed).
+4. **Personal | Work** — the screen splits; each side carries the same
+   three 1–5 scales: **Alignment, Novelty, Agency**. Six values a day.
+5. **notes** — a block; bullets now, voice-to-text as v2.
+
+Calendar: there is *no* real integration today (the old Schedule field
+never got sync or an editor). The timeline is the day's time surface;
+true calendar import (ICS/Google) stays a later verse.
+
+### data model (Phase 1)
+- `Markers` (catalog: Name, Order, Active) + `DayMarks` (Key `date·name`,
+  Date, Marker) — day-long events; seed with folded habits + Period, WFH.
+- `Instruments` (catalog: Name, Glyph sun|moon|dot, Order, Active,
+  Spans bool) + `Timeline` (Key, Date, Instrument, Start min-of-day, End
+  nullable, Note) — replaces Moments' Sure/Time model.
+- `Ratings` (Key `date·domain·axis`, Date, Domain personal|work, Axis
+  alignment|novelty|agency, Value 1–5).
+- `Days.Note` stays for notes. Trackers/Entries retire from the UI
+  (sleep now = sun→moon; fog = a "tech brain"/"brain fog" instrument;
+  mood folds toward the ratings / plate light). Moments' Sure flag retires.
+
+### the living world (Phase 2+, north star — narrow with her)
+Not a stack of daily postcards: **one persistent world.**
+- **the changing protagonist (Orlando)** — the figure is not constant; it
+  transforms across seasons/long arcs (form, dress, maybe identity). Who
+  walks the world is itself written by the data over time.
+- **night is a universe inside the universe** — sun→moon on the timeline
+  is a threshold: sleep enters a nested inner world (a dreamspace with its
+  own weather/inhabitants), not a gap. Nesting = an outer world you pan
+  across, inner worlds you drop into.
+- **persistent & pannable** — the archive becomes a territory that
+  accretes (mountains from held hours stay, the tower grows, the sea
+  advances), scrolled like a map / a Sims lot that remembers — not cards.
+- **seasons & epochs** — sustained patterns (weeks/months), not single
+  days, turn the whole world through ages (Jemisin's Fifth Season).
+- **inhabitants & companions** — creatures born of patterns (the snake
+  already does this for new tags); a companion that follows and reacts.
+- (the user did *not* choose a prose chronicle — narrative is shown and
+  inhabited, not narrated.)
+
+### sequencing
+Phase 1 (instrument day) builds now; a minimal `world.js` rewire keeps the
+plate reading the new tables so it never goes blank. Phase 2 (Orlando
+figure + night-nesting) and Phase 3 (persistent world, seasons,
+inhabitants) follow once Phase 1 is lived-in.
+
 ## the moods (this is the core design law)
 
 Different tools carry different voltages. The app shifts, the user never
