@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=13';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=14';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -29,9 +29,9 @@ function activeHabitsOf(data) {
     .sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 }
 
-function activeMarkersOf(data) {
-  return (data.Markers || [])
-    .filter((m) => m.f.Active)
+function activeInstrumentsOf(data) {
+  return (data.Instruments || [])
+    .filter((i) => i.f.Active)
     .sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 }
 
@@ -49,13 +49,14 @@ function buildDayInfo(data) {
   };
   for (const t of data.Ticks || []) touch(t.f.Date, false);
   for (const m of data.Moments || []) touch(m.f.Date, isMealTag(m.f.Tag));
-  // the instrument day (grafted): day-events, placed instruments and
-  // ratings all count as "something happened" for aridity/path/sea, same
-  // as a tick or a moment did before them. a "food" instrument on the
-  // timeline is a meal signal too, alongside the old b/l/d/snack tags.
-  for (const d of data.DayMarks || []) touch(d.f.Date, false);
+  // the instrument day: a placed instrument, a rating or a written note all
+  // count as "something happened" for aridity/path/sea, same as a tick or a
+  // moment did before them. a "food" instrument on the timeline is a meal
+  // signal too, alongside the old b/l/d/snack tags. DayMarks is no longer
+  // written (the day-events pill row retired) so it's dropped from here.
   for (const t of data.Timeline || []) touch(t.f.Date, String(t.f.Instrument || '').toLowerCase() === 'food');
   for (const r of data.Ratings || []) touch(r.f.Date, false);
+  for (const d of data.Days || []) if ((d.f.Note || '').trim()) touch(d.f.Date, false);
   return info;
 }
 
@@ -241,33 +242,24 @@ function computeHabitsOnly(dateISO, data, isToday) {
     .map((t) => ({ name: t.f.Habit, done: true }));
 }
 
-// the oak reads the BROAD union — habits (Ticks) plus day-events (DayMarks,
-// Period/WFH/anything added inline) — so lighting either kind of pill fills
-// the tree. This is deliberately wider than computeHabitsOnly: the two
-// live plate and the Airtable print are different renderings of the same
-// day and were never going to pixel-match anyway, so there's no need to
-// force them onto one tree-fullness basis.
-function computeDayEvents(dateISO, data, isToday) {
+// the oak now grows from the timeline: each ACTIVE instrument is an entry,
+// and it's "done" the moment it has at least one Timeline row that date —
+// an instrument not yet logged today renders as a cloud (the same
+// letter-of-the-name positioning as habits used to get, just keyed on the
+// instrument's name now); logging it converts that cloud into a leaf
+// cluster. Day-long events/DayMarks no longer feed the plate at all.
+function computeInstrumentEvents(dateISO, data, isToday) {
   if (isToday) {
-    const ticked = new Set(
-      (data.Ticks || []).filter((t) => t.f.Date === dateISO).map((t) => t.f.Habit)
+    const logged = new Set(
+      (data.Timeline || []).filter((t) => t.f.Date === dateISO).map((t) => t.f.Instrument)
     );
-    const marked = new Set(
-      (data.DayMarks || []).filter((m) => m.f.Date === dateISO).map((m) => m.f.Marker)
-    );
-    const habitNames = new Set(activeHabitsOf(data).map((h) => h.f.Name));
-    const out = activeHabitsOf(data).map((h) => ({ name: h.f.Name, done: ticked.has(h.f.Name) }));
-    for (const m of activeMarkersOf(data)) {
-      if (habitNames.has(m.f.Name)) continue; // a marker sharing a habit's name never doubles up
-      out.push({ name: m.f.Name, done: marked.has(m.f.Name) });
-    }
-    return out;
+    return activeInstrumentsOf(data).map((i) => ({ name: i.f.Name, done: logged.has(i.f.Name) }));
   }
-  // past days: only what was actually recorded, from either source.
-  const seen = new Map();
-  for (const t of data.Ticks || []) if (t.f.Date === dateISO && t.f.Habit) seen.set(t.f.Habit, true);
-  for (const m of data.DayMarks || []) if (m.f.Date === dateISO && m.f.Marker) seen.set(m.f.Marker, true);
-  return [...seen.keys()].map((name) => ({ name, done: true }));
+  // past days: only what was actually logged that day — no clouds for an
+  // instrument that simply wasn't tracked, or wasn't yet part of the roster.
+  const seen = new Set();
+  for (const t of data.Timeline || []) if (t.f.Date === dateISO && t.f.Instrument) seen.add(t.f.Instrument);
+  return [...seen].map((name) => ({ name, done: true }));
 }
 
 // the same world, flattened to scalars for the Days row — the base's
@@ -350,6 +342,6 @@ export function computeWorldState(dateISO, data) {
     snake: computeSnake(dateISO, data),
     wires: computeWires(dateISO, data),
     twoSuns: computeTwoSuns(dateISO, data),
-    habits: computeDayEvents(dateISO, data, isToday),
+    habits: computeInstrumentEvents(dateISO, data, isToday),
   };
 }
