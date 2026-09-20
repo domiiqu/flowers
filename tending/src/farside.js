@@ -452,6 +452,8 @@ export function farSideFields(dateISO, data, prev, slow) {
 //
 // `prev` is the last World row STRICTLY BEFORE this date. The planet is
 // continuous: a day inherits the place as it stood and moves it a little.
+const ACCRUED = new Set(['being', 'law', 'place', 'name', 'event']);
+
 export function farSideFor(dateISO, data, slow) {
   const rows = (data.World || []).filter((w) => w.f.Key);
   const existing = rows.find((w) => w.f.Key === dateISO);
@@ -484,6 +486,19 @@ export function farSideFor(dateISO, data, slow) {
     const already = existing && existing.f[field];
     world[field] = already || canon(kind);
   }
+
+  // The accrued canon — everything she has ratified beyond the three pinned
+  // rows. This is how a creature that turns up twice becomes a permanent
+  // resident: she writes it into Canon as a `being`, and every plate after
+  // that is bound by it. Without this the ratification loop is decorative,
+  // because the generator never sees what she accepted.
+  // Copied forward once, like the pinned rows, so canon accepted later never
+  // rewrites a plate that was already made.
+  world.Canon = (existing && existing.f.Canon) || (data.Canon || [])
+    .filter((c) => c.f.Active && ACCRUED.has(c.f.Kind))
+    .sort((a, b) => String(a.f.Added || '').localeCompare(String(b.f.Added || '')))
+    .map((c) => `- ${c.f.Name ? c.f.Name + ': ' : ''}${String(c.f.Text || '').trim()}`)
+    .join('\n');
 
   const specimen = germinate(dateISO, data);
   if (specimen) {

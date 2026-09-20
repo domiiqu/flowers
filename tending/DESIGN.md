@@ -384,6 +384,28 @@ exposes no generative-image field type), generating from those formulas into
 - **What is the planet called, and what are its laws?** The `Canon` rows
   seeded so far are drafts in my hand, deliberately thin. This is the part
   that is hers to build, day after day.
+
+#### ratification — how a thing that turns up becomes a resident
+
+The generator adds things nobody specified. That is the co-authored d2 the
+thesis asks for, and it is not noise to be suppressed: **if something turns
+up twice and she likes it, she writes it into `Canon` as a `being`** (or a
+`law`, `place`, `name`, `event`), and from then on every plate is bound by
+it. `farSideFor` joins every Active accrued row into `World.Canon`, both
+prompts carry it under *"what is already true here, and may not be
+contradicted"*, and it is copied forward once at row creation so canon
+accepted later never rewrites a plate already made. Without that wiring the
+loop would be decorative — she could bless a creature and the generator
+would never hear about it.
+
+**Creatures are not people.** The prompt now welcomes creatures explicitly,
+at any number and any distance, and separately holds the *person* count at
+exactly one (the inhabitant) — nothing bipedal-and-clothed, in a suit or
+mask, holding a tool, or reading as a small human at work. The first plate
+produced a suited humanoid crouching at a fallen disc, which quietly invents
+a society and tool-users; banning "a second figure" outright would have
+banned the creatures the canon explicitly promises. The distinction is the
+fix.
 - ~~What writes `World` each day?~~ **Built: `src/farside.js`.** Pure
   functions beside `world.js` — `computeFarSide(dateISO, data, prev, slow)`
   returns the whole `World` row, `germinate(dateISO, data)` returns the day's

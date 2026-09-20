@@ -208,6 +208,9 @@ export const SCHEMA = [
     { name: 'Style', type: 'multilineText' },
     { name: 'Voice', type: 'multilineText' },
     { name: 'Planet', type: 'multilineText' },
+    // every Active Canon row of kind being/law/place/name/event, joined —
+    // the accrued world, and the reason ratifying a creature has teeth
+    { name: 'Canon', type: 'multilineText' },
     { name: 'Regenerate?', type: 'checkbox', options: { icon: 'check', color: 'purpleBright' } },
   ]},
   { name: 'Specimens', fields: [
