@@ -2,10 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=14';
-import { dayPrint } from './print.js?v=14';
-import { computeWorldState, dayStateFields } from './world.js?v=14';
-import * as gcal from './gcal.js?v=14';
+import * as store from './store.js?v=15';
+import { dayStateFields } from './world.js?v=15';
+import * as gcal from './gcal.js?v=15';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -178,7 +177,7 @@ function buildInstrumentAdd(onSubmit) {
   const wrap = h('div', { class: 'inline-add' });
   function showButton() {
     clear(wrap);
-    const btn = h('button', { class: 'plain italic tl-add-btn' }, '+ instrument');
+    const btn = h('button', { class: 'plain italic tl-add-btn' }, '+ tag');
     btn.addEventListener('click', showField);
     wrap.appendChild(btn);
   }
@@ -193,7 +192,7 @@ function buildInstrumentAdd(onSubmit) {
     // thumb. checking the phase at callback time (not registration time)
     // sidesteps that regardless of whether blur fires sync or async.
     let phase = 'input'; // 'input' -> 'glyphpick' -> 'closed'
-    const input = h('input', { class: 'field inline-add-field', placeholder: 'a new instrument…' });
+    const input = h('input', { class: 'field inline-add-field', placeholder: 'a new tag…' });
     function cancel() { if (phase === 'closed') return; phase = 'closed'; showButton(); }
     function toGlyphPick(name) {
       phase = 'glyphpick';
@@ -244,15 +243,9 @@ export function mountDay(app, date) {
 
   // (no "today" link — the arrows and swipe carry you back; the word is gone.)
 
-  // the plate — restored, live: the day itself, painted in-browser from
-  // the instrument day's data. portrait, at the top — what the coming
-  // "far side" will one day turn over.
-  const plate = h('div', { class: 'plate' });
-  root.appendChild(plate);
-
-  // the print ritual — a quiet action under the plate, not a second big
-  // image. the live plate above is the day's face on the page; a print
-  // is a committed keepsake that lands in the gallery instead.
+  // the day's ONLY image: the airtable-rendered plate. once it exists it
+  // shows prominently here, at the top of the day; until then this is a
+  // quiet "print this day" action, never a big empty box.
   const printBox = h('div', { class: 'print-ritual' });
   root.appendChild(printBox);
 
@@ -286,27 +279,6 @@ export function mountDay(app, date) {
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   root.appendChild(hints);
-
-  function plateSize() {
-    const w = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
-    const hh = Math.round((window.innerHeight || 700) * 0.6);
-    return [Math.max(200, w), Math.max(240, hh)];
-  }
-
-  function renderPlate(crossfade = false) {
-    const [pw, ph] = plateSize();
-    if (crossfade) {
-      plate.style.opacity = '0';
-      setTimeout(() => {
-        plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
-        plate.style.opacity = '1';
-      }, 180);
-    } else {
-      plate.innerHTML = dayPrint(computeWorldState(date, store.S.data), pw, ph);
-    }
-  }
-  function onResize() { renderPlate(); }
-  window.addEventListener('resize', onResize);
 
   // ---- the schedule ---------------------------------------------------
   // soft blocks, not a poem. Google Calendar when it's connected;
@@ -398,9 +370,9 @@ export function mountDay(app, date) {
   }
   function stopPollPrint() { clearInterval(printTimer); printTimer = null; }
 
-  // quiet, not a second big image — the live plate above is the day's
-  // face on the page. once a print lands, this becomes a small line
-  // pointing at the gallery, where the actual keepsake lives.
+  // the airtable render, once it exists, IS the day's face on the page —
+  // shown large and portrait at the top; a small line under it points at
+  // the gallery, where every keepsake collects.
   function renderPrint() {
     clear(printBox);
     const row = store.dayFor(date);
@@ -410,7 +382,10 @@ export function mountDay(app, date) {
       // the print has landed — release the ritual flag so the press is
       // idle again (and re-printable later); harmless if already clear.
       if (row && row.f['Print?']) store.saveDay(date, { 'Print?': false });
-      printBox.appendChild(h('a', { class: 'plain italic print-done', href: '#/gallery' }, 'printed — in the gallery ↗'));
+      const shown = h('div', { class: 'print-shown' });
+      shown.appendChild(h('img', { class: 'print-img', src: url, alt: `the day's plate — ${store.fmtDate(date)}` }));
+      shown.appendChild(h('a', { class: 'plain italic print-done', href: '#/gallery' }, 'printed — in the gallery ↗'));
+      printBox.appendChild(shown);
       return;
     }
     const requested = !!(row && row.f['Print?']);
@@ -453,21 +428,29 @@ export function mountDay(app, date) {
   // one lane per active instrument, all sharing one x-axis (0..1440
   // minutes) with the ruler above. no more rail/drag-a-chip — the lane
   // itself IS the instrument, so a tap on its own empty track places it.
-  // every mark stretches from both edges (the Spans flag is ignored).
+  //
+  // a mark is a POINT in time by default (Start === End, drawn as a small
+  // dot) — never an implied 30-minute block. sun/moon are ALWAYS points
+  // (wake/sleep are instants); a plain dot can be stretched into a span by
+  // double-clicking it, after which its handles work as before, with a
+  // 30-minute floor on how short a stretched span can get.
 
   function minutesToPct(min) { return Math.max(0, Math.min(100, (min / 1440) * 100)); }
 
+  // a point is represented as End == null OR End === Start — either is
+  // written back consistently by every code path below.
+  function isPoint(row) { return row.f.End == null || row.f.End === row.f.Start; }
+  function canHaveDuration(inst) { return inst && inst.f.Glyph !== 'sun' && inst.f.Glyph !== 'moon'; }
+
   function positionMarkEl(el, row) {
     el.style.left = `${minutesToPct(row.f.Start)}%`;
-    el.style.width = `${minutesToPct((row.f.End != null ? row.f.End : row.f.Start + 30) - row.f.Start)}%`;
+    el.style.width = isPoint(row) ? '' : `${minutesToPct(row.f.End - row.f.Start)}%`;
   }
 
   async function placeOn(inst, start) {
-    const s = Math.max(0, Math.min(1409, Math.round(start)));
-    const end = Math.min(1439, s + 30);
-    await store.placeInstrument({ instrument: inst.f.Name, date, start: s, end });
+    const s = Math.max(0, Math.min(1439, Math.round(start)));
+    await store.placeInstrument({ instrument: inst.f.Name, date, start: s });
     renderMarks();
-    renderPlate(true);
     scheduleDaySync();
   }
 
@@ -503,19 +486,24 @@ export function mountDay(app, date) {
   }
 
   // a placed mark: dragging its body retimes it (Start and End shift
-  // together, preserving duration); dragging the left handle moves Start
-  // alone; dragging the right handle moves End alone. a tap (near-zero
-  // movement on the body) opens the edit sheet instead. setPointerCapture
-  // + stopPropagation on every one of these so a horizontal slide never
-  // reaches bindSwipe — belt & suspenders alongside .timeline-section
-  // already being excluded from swipe's own interactive() check.
-  function bindMarkDrag(el, row, trackEl, leftHandle, rightHandle) {
+  // together, preserving duration, or a point stays a point); dragging the
+  // left handle moves Start alone; dragging the right handle moves End
+  // alone, never below a 30-minute floor. a tap (near-zero movement on the
+  // body) opens the edit sheet after a short pause — long enough for a
+  // SECOND tap to arrive first and read as a double-click instead, which
+  // (dots only, never sun/moon) turns a point into a 30-minute span.
+  // setPointerCapture + stopPropagation on every one of these so a
+  // horizontal slide never reaches bindSwipe — belt & suspenders alongside
+  // .timeline-section already being excluded from swipe's own
+  // interactive() check.
+  function bindMarkDrag(el, row, trackEl, leftHandle, rightHandle, canDuration) {
     const WOBBLE = 8;
-    let pid = null, sx = 0, sy = 0, moved = false, startStart = 0, startEnd = 0;
+    const DBLCLICK_MS = 320;
+    let pid = null, sx = 0, sy = 0, moved = false, startStart = 0, startEnd = 0, tapTimer = null;
     function down(e) {
       if (pid != null) return;
       pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false;
-      startStart = row.f.Start; startEnd = row.f.End;
+      startStart = row.f.Start; startEnd = isPoint(row) ? row.f.Start : row.f.End;
       try { el.setPointerCapture(pid); } catch {}
       e.stopPropagation();
     }
@@ -530,26 +518,43 @@ export function mountDay(app, date) {
       const dur = startEnd - startStart;
       const newStart = Math.max(0, Math.min(1440 - dur, Math.round(startStart + deltaMin)));
       row.f.Start = newStart;
-      row.f.End = newStart + dur;
+      row.f.End = dur === 0 ? newStart : newStart + dur; // a point (dur 0) stays a point
       positionMarkEl(el, row);
     }
     function up(e) {
       if (pid !== e.pointerId) return;
       pid = null;
-      if (!moved) { openInstrumentSheet(row); return; }
-      store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
-      renderPlate(true);
-      scheduleDaySync();
+      if (moved) {
+        store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
+        scheduleDaySync();
+        return;
+      }
+      // a plain tap: wait a beat for a possible second tap (dblclick) —
+      // if none comes, it's just a tap, so open the edit sheet.
+      if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; return; } // this WAS the second tap
+      tapTimer = setTimeout(() => { tapTimer = null; openInstrumentSheet(row); }, DBLCLICK_MS);
     }
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', () => { pid = null; moved = false; });
 
-    bindHandle(leftHandle, 'left');
-    bindHandle(rightHandle, 'right');
+    if (canDuration) {
+      el.addEventListener('dblclick', async (e) => {
+        e.stopPropagation();
+        if (!isPoint(row)) return; // already a span — handles do the stretching
+        row.f.End = Math.min(1439, row.f.Start + 30);
+        await store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
+        renderMarks();
+        scheduleDaySync();
+      });
+    }
+
+    if (leftHandle) bindHandle(leftHandle, 'left');
+    if (rightHandle) bindHandle(rightHandle, 'right');
 
     function bindHandle(handle, side) {
+      const MIN_DUR = 30;
       let hpid = null, hsx = 0, hStart = 0, hEnd = 0;
       function hdown(e) {
         if (hpid != null) return;
@@ -563,9 +568,9 @@ export function mountDay(app, date) {
         const r = trackEl.getBoundingClientRect();
         const deltaMin = ((e.clientX - hsx) / r.width) * 1440;
         if (side === 'right') {
-          row.f.End = Math.max(hStart + 5, Math.min(1439, Math.round(hEnd + deltaMin)));
+          row.f.End = Math.max(hStart + MIN_DUR, Math.min(1439, Math.round(hEnd + deltaMin)));
         } else {
-          row.f.Start = Math.min(hEnd - 5, Math.max(0, Math.round(hStart + deltaMin)));
+          row.f.Start = Math.min(hEnd - MIN_DUR, Math.max(0, Math.round(hStart + deltaMin)));
         }
         positionMarkEl(el, row);
       }
@@ -573,7 +578,6 @@ export function mountDay(app, date) {
         if (hpid !== e.pointerId) return;
         hpid = null;
         store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
-        renderPlate(true);
         scheduleDaySync();
       }
       handle.addEventListener('pointerdown', hdown);
@@ -594,17 +598,72 @@ export function mountDay(app, date) {
       const trackEl = laneTracks.get(row.f.Instrument);
       const inst = store.S.data.Instruments.find((i) => i.f.Name === row.f.Instrument);
       if (!trackEl || !inst) continue; // its instrument was deactivated/renamed since — no lane to host it
-      const span = h('div', { class: 'tl-span' });
+      const point = isPoint(row);
+      const span = h('div', { class: point ? 'tl-point' : 'tl-span' });
       span.style.setProperty('--hue', hueFor(inst.f.Name));
       positionMarkEl(span, row);
-      span.appendChild(h('span', { class: 'tl-span-glyph' }, glyphChar(inst.f.Glyph)));
-      const leftHandle = h('button', { class: 'plain tl-handle tl-handle-left', 'aria-label': 'adjust start' });
-      const rightHandle = h('button', { class: 'plain tl-handle tl-handle-right', 'aria-label': 'adjust end' });
-      span.appendChild(leftHandle);
-      span.appendChild(rightHandle);
-      bindMarkDrag(span, row, trackEl, leftHandle, rightHandle);
+      span.appendChild(h('span', { class: point ? 'tl-point-glyph' : 'tl-span-glyph' }, glyphChar(inst.f.Glyph)));
+      let leftHandle = null, rightHandle = null;
+      if (!point) {
+        leftHandle = h('button', { class: 'plain tl-handle tl-handle-left', 'aria-label': 'adjust start' });
+        rightHandle = h('button', { class: 'plain tl-handle tl-handle-right', 'aria-label': 'adjust end' });
+        span.appendChild(leftHandle);
+        span.appendChild(rightHandle);
+      }
+      bindMarkDrag(span, row, trackEl, leftHandle, rightHandle, canHaveDuration(inst));
       trackEl.appendChild(span);
     }
+  }
+
+  // a lane's label: glyph, name, and a small pencil that opens rename +
+  // delete inline — the SAME rename/delete infrastructure (renameNamed /
+  // deleteNamed on Instruments) the edit sheet below also uses, so a tag
+  // can be managed from either place. deleting only drops it from the
+  // offered lanes; days that already placed it keep their marks.
+  function buildLaneLabel(inst) {
+    const label = h('div', { class: 'tl-lane-label' });
+    function renderView() {
+      clear(label);
+      label.appendChild(h('span', { class: 'tl-lane-glyph' }, glyphChar(inst.f.Glyph)));
+      label.appendChild(h('span', { class: 'tl-lane-name' }, inst.f.Name));
+      const editBtn = h('button', { class: 'plain tl-lane-edit', 'aria-label': `edit ${inst.f.Name}` }, '✎');
+      editBtn.addEventListener('click', (e) => { e.stopPropagation(); renderEdit(); });
+      label.appendChild(editBtn);
+    }
+    function renderEdit() {
+      clear(label);
+      const input = h('input', { class: 'field tl-lane-edit-field' });
+      input.value = inst.f.Name;
+      let phase = 'open'; // 'open' -> 'closed', guards blur firing after Enter/Escape/delete
+      async function commit() {
+        if (phase === 'closed') return;
+        phase = 'closed';
+        const nm = input.value.trim();
+        if (nm && nm !== inst.f.Name) await store.renameNamed('Instruments', inst.f.Name, nm);
+        renderLanes();
+      }
+      // renderLanes() (not the local renderView()) — the "now" button is
+      // appended onto this label from outside buildLaneLabel, so only a
+      // full lane rebuild is guaranteed to restore it.
+      function cancel() { if (phase === 'closed') return; phase = 'closed'; renderLanes(); }
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener('blur', () => setTimeout(() => { if (phase === 'open') commit(); }, 120));
+      const delBtn = h('button', { class: 'plain mini-x', 'aria-label': `delete ${inst.f.Name}` }, '✕');
+      delBtn.addEventListener('click', async () => {
+        phase = 'closed';
+        if (!window.confirm(`delete “${inst.f.Name}”? past days keep it; it just stops being offered.`)) { phase = 'open'; return; }
+        await store.deleteNamed('Instruments', inst.f.Name);
+        renderLanes();
+      });
+      label.appendChild(input);
+      label.appendChild(delBtn);
+      setTimeout(() => input.focus(), 0);
+    }
+    renderView();
+    return label;
   }
 
   function renderLanes() {
@@ -623,15 +682,12 @@ export function mountDay(app, date) {
     lanesGrid.appendChild(ruler);
 
     for (const inst of store.activeInstruments()) {
-      const label = h('div', { class: 'tl-lane-label' }, [
-        h('span', { class: 'tl-lane-glyph' }, glyphChar(inst.f.Glyph)),
-        h('span', { class: 'tl-lane-name' }, inst.f.Name),
-      ]);
-      if (date === today) {
-        const nowBtn = h('button', { class: 'plain tl-lane-now' }, 'now');
-        nowBtn.addEventListener('click', () => placeOn(inst, nowMinutes()));
-        label.appendChild(nowBtn);
-      }
+      const label = buildLaneLabel(inst);
+      // always available — a point-in-time mark at the current clock time,
+      // never hidden behind a same-day check.
+      const nowBtn = h('button', { class: 'plain tl-lane-now' }, 'now');
+      nowBtn.addEventListener('click', () => placeOn(inst, nowMinutes()));
+      label.appendChild(nowBtn);
       const laneTrack = h('div', { class: 'tl-lane-track' });
       laneTrack.style.setProperty('--hue', hueFor(inst.f.Name));
       bindLaneTap(laneTrack, inst);
@@ -672,9 +728,9 @@ export function mountDay(app, date) {
     instSheet.appendChild(top);
 
     instSheet.appendChild(h('div', { class: 'instrument-sheet-name italic' }, row.f.Instrument));
-    const timeText = row.f.End != null
-      ? `${fmtClock(row.f.Start)} – ${fmtClock(row.f.End)} · ${fmtDuration(row.f.End - row.f.Start)}`
-      : fmtClock(row.f.Start);
+    const timeText = isPoint(row)
+      ? fmtClock(row.f.Start)
+      : `${fmtClock(row.f.Start)} – ${fmtClock(row.f.End)} · ${fmtDuration(row.f.End - row.f.Start)}`;
     instSheet.appendChild(h('div', { class: 'instrument-sheet-time dim italic' }, timeText));
 
     const noteArea = h('textarea', { class: 'field', placeholder: 'a note…' });
@@ -687,10 +743,37 @@ export function mountDay(app, date) {
       await store.removeTimeline(row.f.Key);
       closeInstrumentSheet();
       renderMarks();
-      renderPlate(true);
       scheduleDaySync();
     });
     instSheet.appendChild(delBtn);
+
+    // the tag itself (not just this one placed mark) — rename or delete it
+    // from here too, using the same rename/delete infrastructure the lane
+    // label's pencil uses. renaming never touches past marks that already
+    // carry the old name (they're keyed by text, same as everywhere else).
+    const tagName = row.f.Instrument;
+    const tagRow = h('div', { class: 'row', style: 'justify-content:center;' });
+    const tagInput = h('input', { class: 'field', style: 'max-width:12em;text-align:center;' });
+    tagInput.value = tagName;
+    tagInput.addEventListener('blur', async () => {
+      const nm = tagInput.value.trim();
+      if (!nm || nm === tagName) return;
+      await store.renameNamed('Instruments', tagName, nm);
+      closeInstrumentSheet();
+      renderLanes();
+    });
+    tagInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tagInput.blur(); });
+    tagRow.appendChild(tagInput);
+    instSheet.appendChild(tagRow);
+    const deleteTagBtn = h('button', { class: 'plain italic', style: 'align-self:center;font-size:0.78rem;opacity:0.7;' },
+      `delete the “${tagName}” tag`);
+    deleteTagBtn.addEventListener('click', async () => {
+      if (!window.confirm(`delete “${tagName}”? past days keep it; it just stops being offered.`)) return;
+      await store.deleteNamed('Instruments', tagName);
+      closeInstrumentSheet();
+      renderLanes();
+    });
+    instSheet.appendChild(deleteTagBtn);
 
     instSheet.classList.add('open');
     instBackdrop.classList.add('open');
@@ -703,7 +786,47 @@ export function mountDay(app, date) {
   // snapping; both paths end at the same commit, so there's no special
   // casing between "a tap" and "a drag that didn't move".
 
-  const AXES = ['alignment', 'novelty', 'agency'];
+  // the axis list is a stored setting now (settings.axes), not a hardcoded
+  // const — adding or deleting one applies to BOTH domains, since they
+  // share the same rows. defaults to the original three until she edits it.
+  const DEFAULT_AXES = ['alignment', 'novelty', 'agency'];
+  function getAxes() {
+    const s = store.getSettings();
+    return Array.isArray(s.axes) && s.axes.length ? s.axes : DEFAULT_AXES;
+  }
+  function saveAxes(list) {
+    store.saveSettings({ ...store.getSettings(), axes: list });
+  }
+  function buildAxisAdd(onSubmit) {
+    const wrap = h('div', { class: 'inline-add' });
+    function showButton() {
+      clear(wrap);
+      const btn = h('button', { class: 'plain italic tl-add-btn' }, '+ axis');
+      btn.addEventListener('click', showField);
+      wrap.appendChild(btn);
+    }
+    function showField() {
+      clear(wrap);
+      const input = h('input', { class: 'field inline-add-field', placeholder: 'a new axis…' });
+      let phase = 'open';
+      function cancel() { if (phase === 'closed') return; phase = 'closed'; showButton(); }
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const name = input.value.trim().toLowerCase();
+          phase = 'closed';
+          if (!name) return showButton();
+          onSubmit(name);
+          showButton();
+        } else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener('blur', () => setTimeout(() => { if (phase === 'open') cancel(); }, 120));
+      wrap.appendChild(input);
+      setTimeout(() => input.focus(), 0);
+    }
+    showButton();
+    return wrap;
+  }
 
   function buildRatingSlider(domain, axis) {
     const hit = h('div', { class: 'rating-hit', role: 'slider', 'aria-label': `${domain} ${axis}` });
@@ -763,17 +886,37 @@ export function mountDay(app, date) {
 
   function renderDomains() {
     clear(domains);
+    const axes = getAxes();
     for (const domain of ['personal', 'work']) {
       const col = h('div', { class: 'domain-col' });
       col.appendChild(h('h3', { class: 'italic' }, domain));
-      for (const axis of AXES) {
+      for (const axis of axes) {
         const rowEl = h('div', { class: 'rating-row' });
-        rowEl.appendChild(h('div', { class: 'rating-label italic dim' }, axis));
+        const labelRow = h('div', { class: 'rating-label-row' });
+        labelRow.appendChild(h('div', { class: 'rating-label italic dim' }, axis));
+        const delBtn = h('button', { class: 'plain mini-x', 'aria-label': `remove the ${axis} axis` }, '✕');
+        delBtn.addEventListener('click', () => {
+          const cur = getAxes();
+          if (cur.length <= 1) { whisper('at least one axis has to stay.', 2400); return; }
+          if (!window.confirm(`remove the “${axis}” axis from both columns?`)) return;
+          saveAxes(cur.filter((a) => a !== axis));
+          renderDomains();
+        });
+        labelRow.appendChild(delBtn);
+        rowEl.appendChild(labelRow);
         rowEl.appendChild(buildRatingSlider(domain, axis));
         col.appendChild(rowEl);
       }
       domains.appendChild(col);
     }
+    const addRow = h('div', { class: 'axis-add-row' });
+    addRow.appendChild(buildAxisAdd((name) => {
+      const cur = getAxes();
+      if (cur.includes(name)) { whisper('that axis already exists.', 2200); return; }
+      saveAxes([...cur, name]);
+      renderDomains();
+    }));
+    domains.appendChild(addRow);
   }
 
   // --------------------------------------------------------------- notes
@@ -781,7 +924,7 @@ export function mountDay(app, date) {
   function renderNotes() {
     clear(notesBlock);
     const day = store.dayFor(date);
-    const ta = h('textarea', { class: 'field notes-field', placeholder: 'a line for the day…' });
+    const ta = h('textarea', { class: 'field notes-field', placeholder: 'Notes…' });
     ta.value = (day && day.f.Note) || '';
     ta.addEventListener('blur', () => { store.saveDay(date, { Note: ta.value }); scheduleDaySync(); });
     ta.addEventListener('keydown', (e) => {
@@ -795,7 +938,6 @@ export function mountDay(app, date) {
     notesBlock.appendChild(ta);
   }
 
-  renderPlate();
   renderPrint();
   renderSchedule();
   renderLanes();
@@ -815,7 +957,6 @@ export function mountDay(app, date) {
 
   return () => {
     unbindSwipe();
-    window.removeEventListener('resize', onResize);
     stopPollPrint();
     if (syncTimer) runDaySync(); // flush a pending write before leaving
   };
@@ -1061,14 +1202,11 @@ export function mountTend(app) {
   });
   root.appendChild(exportSection);
 
-  // editors ---------------------------------------------------------
-  root.appendChild(rowEditor('Habits', 'habits', [
-    { key: 'Seeds', type: 'number', width: 70 },
-  ], () => ({ Variety: 1 + Math.floor(Math.random() * 900), Order: nextOrder('Habits'), Active: true, Seeds: 3 })));
-
-  root.appendChild(tagsEditor());
-
-  root.appendChild(shopEditor());
+  // tend keeps only connections (airtable + google calendar) and export —
+  // the shop, habits, points/seeds settings and the tag roster all stepped
+  // back from the experience already; their editors are retired from here
+  // too. the base itself (or the day page's own lane pencil) is the place
+  // to manage a tag now.
 
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
@@ -1076,178 +1214,4 @@ export function mountTend(app) {
   ]);
   app.appendChild(hints);
   return () => {};
-}
-
-function nextOrder(table) {
-  const rows = store.S.data[table] || [];
-  return 1 + rows.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
-}
-
-// rename in place (never a duplicate) and only when it actually changed
-function renameRow(table, row, newName) {
-  const nm = newName.trim();
-  if (!nm || nm === row.f.Name) return Promise.resolve();
-  return store.renameNamed(table, row.f.Name, nm);
-}
-// a small ✕ that deletes a roster row after a confirm — gone from the
-// options, but past days keep whatever used its name
-function deleteX(table, row, after) {
-  const x = h('button', { class: 'plain tend-x', 'aria-label': `delete ${row.f.Name}` }, '✕');
-  x.addEventListener('click', async () => {
-    if (!window.confirm(`delete “${row.f.Name}”? past days keep it; it just stops being offered.`)) return;
-    await store.deleteNamed(table, row.f.Name);
-    after();
-  });
-  return x;
-}
-
-function rowEditor(table, label, extraFields, defaultsFn) {
-  const section = h('div', { class: 'tend-section' });
-  section.appendChild(h('h2', {}, label));
-  const list = h('div', { class: 'tend-list' });
-  section.appendChild(list);
-
-  function renderList() {
-    clear(list);
-    const rows = [...(store.S.data[table] || [])].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-    for (const row of rows) {
-      const nameInput = h('input', { type: 'text', class: 'field' });
-      nameInput.value = row.f.Name || '';
-      nameInput.addEventListener('blur', () => renameRow(table, row, nameInput.value).then(renderList));
-      const fieldInputs = extraFields.map((f) => {
-        const inp = h('input', { type: f.type, class: 'field', style: `width:${f.width}px` });
-        inp.value = row.f[f.key] ?? '';
-        inp.addEventListener('blur', () => {
-          store.upsertRow(table, 'Name', { Name: row.f.Name, [f.key]: Number(inp.value) || 0 });
-        });
-        return inp;
-      });
-      const active = h('input', { type: 'checkbox' });
-      active.checked = !!row.f.Active;
-      active.addEventListener('change', () => {
-        store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked });
-      });
-      // the bonus flag — a starred habit sits outside the day's total:
-      // skipping it never lowers the score, doing it adds points on top
-      const bonus = h('input', { type: 'checkbox' });
-      bonus.checked = !!row.f.Bonus;
-      bonus.addEventListener('change', () => {
-        store.upsertRow(table, 'Name', { Name: row.f.Name, Bonus: bonus.checked });
-      });
-      const flags = h('div', { class: 'tend-flags' }, [
-        h('label', { class: 'checklabel', title: 'bonus — outside the total; adds points when done' }, [bonus, '✦']),
-        h('label', { class: 'checklabel' }, [active, 'on']),
-      ]);
-      const line = h('div', { class: 'tend-row' },
-        [nameInput, ...fieldInputs, flags, deleteX(table, row, renderList)]);
-      list.appendChild(line);
-    }
-  }
-  renderList();
-
-  const addName = h('input', { type: 'text', placeholder: 'name…', class: 'field' });
-  const addBtn = h('button', { class: 'btn' }, 'add');
-  addBtn.addEventListener('click', async () => {
-    const name = addName.value.trim();
-    if (!name) return;
-    await store.upsertRow(table, 'Name', { Name: name, ...defaultsFn() });
-    addName.value = '';
-    renderList();
-  });
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addBtn]));
-  return section;
-}
-
-function shopEditor() {
-  const table = 'Shop';
-  const section = h('div', { class: 'tend-section' });
-  section.appendChild(h('h2', {}, 'shop'));
-  const list = h('div', { class: 'tend-list' });
-  section.appendChild(list);
-
-  function renderList() {
-    clear(list);
-    const rows = [...store.S.data.Shop].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-    for (const row of rows) {
-      const nameInput = h('input', { type: 'text', class: 'field' });
-      nameInput.value = row.f.Name || '';
-      nameInput.addEventListener('blur', () => renameRow(table, row, nameInput.value).then(renderList));
-      const costInput = h('input', { type: 'number', class: 'field', style: 'width:64px' });
-      costInput.value = row.f.Cost ?? '';
-      costInput.addEventListener('blur', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Cost: Number(costInput.value) || 0 }));
-      const linkInput = h('input', { type: 'text', class: 'field', placeholder: 'link…' });
-      linkInput.value = row.f.Link || '';
-      linkInput.addEventListener('blur', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Link: linkInput.value.trim() }));
-      const active = h('input', { type: 'checkbox' });
-      active.checked = !!row.f.Active;
-      active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
-      list.appendChild(h('div', { class: 'tend-row' }, [nameInput, costInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
-      list.appendChild(h('div', { class: 'tend-row', style: 'grid-template-columns:1fr' }, [linkInput]));
-    }
-  }
-  renderList();
-
-  const addName = h('input', { type: 'text', placeholder: 'name…', class: 'field' });
-  const addCost = h('input', { type: 'number', placeholder: 'cost', class: 'field', style: 'width:80px' });
-  const addSign = h('input', { type: 'text', placeholder: 'sign (emoji)', class: 'field', style: 'width:100px' });
-  const addLink = h('input', { type: 'text', placeholder: 'link (optional)…', class: 'field' });
-  const addBtn = h('button', { class: 'btn' }, 'add');
-  addBtn.addEventListener('click', async () => {
-    const name = addName.value.trim();
-    if (!name) return;
-    await store.upsertRow(table, 'Name', {
-      Name: name, Cost: Number(addCost.value) || 10, Sign: addSign.value.trim() || '·',
-      Link: addLink.value.trim(), Order: nextOrder(table), Active: true,
-    });
-    addName.value = ''; addCost.value = ''; addSign.value = ''; addLink.value = '';
-    renderList();
-  });
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addSign, addCost]));
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:6px' }, [addLink, addBtn]));
-  return section;
-}
-
-// the tag vocabulary — the words offered as chips when catching a moment.
-// add one here (or just type it while capturing); delete one to stop it
-// being offered, without touching the days that already used it.
-function tagsEditor() {
-  const table = 'Tags';
-  const section = h('div', { class: 'tend-section' });
-  section.appendChild(h('h2', {}, 'tags'));
-  section.appendChild(h('div', { class: 'tend-warning italic', style: 'margin-top:0' },
-    'deleting a tag only drops it from the chips — past days keep it.'));
-  const list = h('div', { class: 'tend-list' });
-  section.appendChild(list);
-
-  function renderList() {
-    clear(list);
-    const rows = [...(store.S.data.Tags || [])].sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
-    if (!rows.length) {
-      list.appendChild(h('div', { class: 'dim italic' }, 'no tags yet — type one while catching a moment, or add below.'));
-      return;
-    }
-    for (const row of rows) {
-      const nameInput = h('input', { type: 'text', class: 'field' });
-      nameInput.value = row.f.Name || '';
-      nameInput.addEventListener('blur', () => renameRow(table, row, nameInput.value).then(renderList));
-      const active = h('input', { type: 'checkbox' });
-      active.checked = !!row.f.Active;
-      active.addEventListener('change', () => store.upsertRow(table, 'Name', { Name: row.f.Name, Active: active.checked }));
-      list.appendChild(h('div', { class: 'tend-row' },
-        [nameInput, h('label', { class: 'checklabel' }, [active, 'on']), deleteX(table, row, renderList)]));
-    }
-  }
-  renderList();
-
-  const addName = h('input', { type: 'text', placeholder: 'a new tag…', class: 'field' });
-  const addBtn = h('button', { class: 'btn' }, 'add');
-  addBtn.addEventListener('click', async () => {
-    const name = addName.value.trim();
-    if (!name) return;
-    await store.ensureTag(name);
-    addName.value = '';
-    renderList();
-  });
-  section.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, [addName, addBtn]));
-  return section;
 }
