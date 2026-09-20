@@ -328,17 +328,50 @@ alive is **atmosphere**, not character animation. Build order:
 mobile, and it breaks both the no-build rule and the Airtable pipeline.
 Tiers 1–3 get closer to the reference than a four-second clip would.
 
-#### the tables (to build)
+#### the place, decided
 
-- **`World`** — the continuous state, one snapshot row per day, each
-  inheriting from the last (the place drifts; it is not re-invented). A past
-  card turns to the world *as it stood*. Carries the layer prompt, the
-  dispatch, and the plate image.
-- **`Specimens`** — the cabinet. Name, date found, the conditions that made
-  it, traits, rarity, image, her notes. Hand-editable: this is the canon
-  loop.
-- **`Canon`** — accepted names and facts, concatenated into every prompt.
-  The generator may not contradict it.
+**Another planet.** Alien vegetation, strange physics, creatures. The
+inhabitant **has a voice**, and the far side **has teeth** — but teeth as
+*cost*, not punishment: canon's opening line for the planet is "the place is
+indifferent, and it is expensive." A planet that punished her for a bad night
+would be the guilt machine the law above forbids; a planet that *charges* her
+is a world.
+
+#### the tables (built — base `life_emergent`)
+
+Three tables, following this base's existing contract: **no linked records,
+everything denormalized on text keys, `Key` is the upsert key.**
+
+- **`Canon`** — the law. `Name / Kind / Text / Active / Added / Notes`.
+  `Kind` = style · voice · planet · law · being · place · name · event. The
+  three pinned rows (style, voice, planet) are copied forward as text onto
+  every new `World` and `Specimens` row, so a past plate keeps the canon it
+  was made under and later edits never rewrite history. Editing a row by
+  hand **is** the ratification loop.
+- **`World`** — the continuous place, one snapshot row per day inheriting
+  from the last. `Key / Date / Era / Region / Sky / Far / Mid / Near / Light
+  / Weather / Inhabitant / Teeth / Masked / Changed / Found / Drift / Style /
+  Voice / Planet / Dispatch / Regenerate? / Plate` + two formulas.
+  **`Sky / Far / Mid / Near` are the four parallax planes** and must always
+  be filled — the browser lifts them for depth-on-tilt, so a flat plate is a
+  bug, not a style choice.
+- **`Specimens`** — the cabinet. `Name / Found / Kind / Conditions / Traits /
+  Rarity / Rarity note / Style / Planet / Image / Notes` + `Prompt`. Rarity
+  runs 0→1 with 1 rarest, computed against her own history. The sim writes
+  `Conditions` and `Traits`; she overwrites `Name`, and her name is what gets
+  promoted into `Canon`.
+
+**The prompts live in formula fields, never inside an AI field's config.**
+An AI field's prompt cannot be edited through the API once created, so
+holding both prompts in formulas (`World."Plate prompt"`,
+`World."Dispatch prompt"`, `Specimens."Prompt"`) keeps them tunable forever
+and versioned in one place. They are siblings of `Days."Day's prompt"` and
+follow its conventions exactly: field **IDs** not names, an `&` chain of
+`IF`/`SWITCH`, and the style coda last.
+
+The image fields themselves are hand-made in the Airtable UI (the API
+exposes no generative-image field type), generating from those formulas into
+`World.Plate` and `Specimens.Image` — mirroring `Days."Plate generator"`.
 
 #### still open
 
@@ -348,12 +381,14 @@ Tiers 1–3 get closer to the reference than a four-second clip would.
   an **event** — when the world visibly shifts, that shift means something.
   Day to day, the motion, the inhabitant and the specimen carry the
   difference.)
-- **What is the place?** Not yet named. (Ark/hold in transit, a deepening
-  stratum, something else.)
-- **Does the inhabitant have a voice**, or is the dispatch an impersonal
-  instrument log?
-- **Does the far side ever show her something she does not want to see?**
-  The double either has teeth or it does not.
+- **What is the planet called, and what are its laws?** The `Canon` rows
+  seeded so far are drafts in my hand, deliberately thin. This is the part
+  that is hers to build, day after day.
+- **What writes `World` each day?** The sim (`world.js`) is specified but not
+  built: it must read the day's `Timeline` and compose the four planes,
+  `Teeth`, `Masked` and `Drift` without ever using her log's vocabulary.
+- **What trips `Regenerate?`** — a `Drift` threshold, an `Era` turn, or her
+  hand.
 
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated
