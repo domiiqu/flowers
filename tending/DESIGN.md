@@ -385,6 +385,42 @@ exposes no generative-image field type), generating from those formulas into
   seeded so far are drafts in my hand, deliberately thin. This is the part
   that is hers to build, day after day.
 
+#### the turn — `src/farview.js`
+
+**The print makes the card; the card is the portal.** Touching the printed
+plate turns it over and the far side takes the whole screen. The turn starts
+from the card's own rect, so the plate appears to rotate where it sits and
+then swell to fill the viewport — it is the same object seen from behind,
+not a link to another room.
+
+**The bleed is the argument, not decoration.** The front is bounded,
+committed, printable, hangs in the gallery. The back has no edges, is never
+twice the same, and cannot be printed. `object-fit: cover`, so the far side
+is never letterboxed — a thing with no edges must not be given any. The
+words sit *on* the world, never in a panel beside it. No legend, ever; the
+only affordance is how to leave.
+
+**Driven by the Web Animations API, never a CSS transition.** A transition
+depends on the browser resolving style between the start and end writes, and
+it does not reliably do that for an element inserted in the same task — the
+two writes coalesce, no `transitionstart` fires, and the card silently
+teleports open instead of turning. `animate()` takes its keyframes literally
+and cannot be coalesced away. Verified by sampling the computed matrix
+through the turn rather than by looking at it.
+
+**Tier 1 of motion lives here:** the plate breathes — a slow push and drift
+on periods (37s, 53s, 61s) that never visibly loop, grain, and a light wash
+— and it answers `deviceorientation`, with pointer as the desktop fallback.
+A single flat plate cannot give true parallax; this is the honest version,
+and it is the hook tiers 2 and 3 attach to once the plate arrives in
+separable layers. That is why the sky/far/mid/near spec is in the image
+prompt from the first day.
+
+**The far side rides the day's own debounce.** `views.syncFarSide()` runs
+beside `saveDayState`, taking the land's slow memory straight from
+`computeWorldState` rather than recomputing it, and is wrapped so the far
+side can never take the day page down with it.
+
 #### ratification — how a thing that turns up becomes a resident
 
 The generator adds things nobody specified. That is the co-authored d2 the
@@ -432,7 +468,7 @@ fix.
   Name, because Name is hers to overwrite and upserting on it would fork a
   duplicate on every rename; a Name she has already rewritten is never
   clobbered by a re-run.
-  **Still to wire:** the flip itself.
+  **The flip is built too** — `src/farview.js`. See below.
 
 - **When the plate repaints.** Not nightly. `Drift` is measured against the
   last **painted** plate, and the planes are weighted — `Far` (the land's
