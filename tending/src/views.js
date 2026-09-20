@@ -2,9 +2,9 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=15';
-import { dayStateFields } from './world.js?v=15';
-import * as gcal from './gcal.js?v=15';
+import * as store from './store.js?v=16';
+import { dayStateFields } from './world.js?v=16';
+import * as gcal from './gcal.js?v=16';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -171,8 +171,9 @@ function hueFor(name) {
   return hh % 360;
 }
 
-// for a new instrument: name, then a tiny glyph pick (☀/☾/·)
-// in place of the "+" chip — no window.prompt() anywhere in this flow.
+// for a new instrument: just a name — every new tag is a dot (sun/moon are
+// pinned lanes, never offered here; see ensureSunMoon). no window.prompt()
+// anywhere in this flow.
 function buildInstrumentAdd(onSubmit) {
   const wrap = h('div', { class: 'inline-add' });
   function showButton() {
@@ -183,37 +184,20 @@ function buildInstrumentAdd(onSubmit) {
   }
   function showField() {
     clear(wrap);
-    // a three-stage phase, not a boolean: moving from the text field to
-    // the glyph pick removes (and so blurs) the input as part of the very
-    // same keydown handler that advances the phase — a boolean "done"
-    // flag set only at the *final* commit stays false through that
-    // transition, so the input's own deferred blur-cancel (see below)
-    // would fire 120ms later and wipe the glyph pick out from under her
-    // thumb. checking the phase at callback time (not registration time)
-    // sidesteps that regardless of whether blur fires sync or async.
-    let phase = 'input'; // 'input' -> 'glyphpick' -> 'closed'
+    let phase = 'open'; // 'open' -> 'closed'
     const input = h('input', { class: 'field inline-add-field', placeholder: 'a new tag…' });
     function cancel() { if (phase === 'closed') return; phase = 'closed'; showButton(); }
-    function toGlyphPick(name) {
-      phase = 'glyphpick';
-      clear(wrap);
-      wrap.appendChild(h('span', { class: 'dim italic inline-add-label' }, name));
-      for (const g of ['sun', 'moon', 'dot']) {
-        const b = h('button', { class: 'plain glyph-pick' }, glyphChar(g));
-        b.addEventListener('click', () => { phase = 'closed'; onSubmit(name, g); showButton(); });
-        wrap.appendChild(b);
-      }
-      setTimeout(() => { if (phase === 'glyphpick') { phase = 'closed'; onSubmit(name, 'dot'); showButton(); } }, 6000);
-    }
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const name = input.value.trim();
-        if (!name) return cancel();
-        toGlyphPick(name);
+        phase = 'closed';
+        if (!name) return showButton();
+        onSubmit(name, 'dot');
+        showButton();
       } else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
-    input.addEventListener('blur', () => setTimeout(() => { if (phase === 'input') cancel(); }, 120));
+    input.addEventListener('blur', () => setTimeout(() => { if (phase === 'open') cancel(); }, 120));
     wrap.appendChild(input);
     setTimeout(() => input.focus(), 0);
   }
@@ -540,10 +524,13 @@ export function mountDay(app, date) {
     el.addEventListener('pointercancel', () => { pid = null; moved = false; });
 
     if (canDuration) {
+      // a toggle both ways: a point expands to a 30-minute span; a span
+      // collapses back to a point. the collapse writes End === Start — the
+      // same shape isPoint() reads back after reload, so it round-trips
+      // exactly like every other point mark in the app.
       el.addEventListener('dblclick', async (e) => {
         e.stopPropagation();
-        if (!isPoint(row)) return; // already a span — handles do the stretching
-        row.f.End = Math.min(1439, row.f.Start + 30);
+        row.f.End = isPoint(row) ? Math.min(1439, row.f.Start + 30) : row.f.Start;
         await store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
         renderMarks();
         scheduleDaySync();
@@ -615,17 +602,28 @@ export function mountDay(app, date) {
     }
   }
 
-  // a lane's label: glyph, name, and a small pencil that opens rename +
-  // delete inline — the SAME rename/delete infrastructure (renameNamed /
-  // deleteNamed on Instruments) the edit sheet below also uses, so a tag
-  // can be managed from either place. deleting only drops it from the
-  // offered lanes; days that already placed it keep their marks.
+  // a lane's label: glyph, name, an inline quiet "now" (places a
+  // point-in-time mark at the current clock time), and a small pencil that
+  // opens rename + delete inline — the SAME rename/delete infrastructure
+  // (renameNamed / deleteNamed on Instruments) the edit sheet below also
+  // uses, so a tag can be managed from either place. deleting only drops it
+  // from the offered lanes; days that already placed it keep their marks.
+  //
+  // sun and moon are pinned lanes — always present, never deletable — so
+  // the ✕ is suppressed for them specifically by Glyph (never by Name, so
+  // renaming one stays safe); rename (✎) stays available for them too.
   function buildLaneLabel(inst) {
     const label = h('div', { class: 'tl-lane-label' });
+    const pinned = inst.f.Glyph === 'sun' || inst.f.Glyph === 'moon';
     function renderView() {
       clear(label);
       label.appendChild(h('span', { class: 'tl-lane-glyph' }, glyphChar(inst.f.Glyph)));
       label.appendChild(h('span', { class: 'tl-lane-name' }, inst.f.Name));
+      // always available — a point-in-time mark at the current clock time,
+      // never hidden behind a same-day check.
+      const nowBtn = h('button', { class: 'plain tl-lane-now' }, 'now');
+      nowBtn.addEventListener('click', () => placeOn(inst, nowMinutes()));
+      label.appendChild(nowBtn);
       const editBtn = h('button', { class: 'plain tl-lane-edit', 'aria-label': `edit ${inst.f.Name}` }, '✎');
       editBtn.addEventListener('click', (e) => { e.stopPropagation(); renderEdit(); });
       label.appendChild(editBtn);
@@ -642,31 +640,36 @@ export function mountDay(app, date) {
         if (nm && nm !== inst.f.Name) await store.renameNamed('Instruments', inst.f.Name, nm);
         renderLanes();
       }
-      // renderLanes() (not the local renderView()) — the "now" button is
-      // appended onto this label from outside buildLaneLabel, so only a
-      // full lane rebuild is guaranteed to restore it.
+      // renderLanes() (not the local renderView()) keeps every lane (order,
+      // any other edits) consistent after a rename/cancel.
       function cancel() { if (phase === 'closed') return; phase = 'closed'; renderLanes(); }
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); commit(); }
         else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
       });
       input.addEventListener('blur', () => setTimeout(() => { if (phase === 'open') commit(); }, 120));
-      const delBtn = h('button', { class: 'plain mini-x', 'aria-label': `delete ${inst.f.Name}` }, '✕');
-      delBtn.addEventListener('click', async () => {
-        phase = 'closed';
-        if (!window.confirm(`delete “${inst.f.Name}”? past days keep it; it just stops being offered.`)) { phase = 'open'; return; }
-        await store.deleteNamed('Instruments', inst.f.Name);
-        renderLanes();
-      });
       label.appendChild(input);
-      label.appendChild(delBtn);
+      if (!pinned) {
+        const delBtn = h('button', { class: 'plain mini-x', 'aria-label': `delete ${inst.f.Name}` }, '✕');
+        delBtn.addEventListener('click', async () => {
+          phase = 'closed';
+          if (!window.confirm(`delete “${inst.f.Name}”? past days keep it; it just stops being offered.`)) { phase = 'open'; return; }
+          await store.deleteNamed('Instruments', inst.f.Name);
+          renderLanes();
+        });
+        label.appendChild(delBtn);
+      }
       setTimeout(() => input.focus(), 0);
     }
     renderView();
     return label;
   }
 
-  function renderLanes() {
+  async function renderLanes() {
+    // sun (wake) and moon (sleep) are pinned, permanent lanes — self-heal
+    // the roster before drawing it, so there's always exactly one of each.
+    await store.ensureSunMoon();
+
     clear(lanesGrid);
     laneTracks.clear();
 
@@ -681,13 +684,16 @@ export function mountDay(app, date) {
     }
     lanesGrid.appendChild(ruler);
 
-    for (const inst of store.activeInstruments()) {
+    // sun first, moon second, then everything else in its existing
+    // (Order-sorted) order — identified by Glyph, never by Name.
+    const roster = store.activeInstruments();
+    const sunLane = roster.find((i) => i.f.Glyph === 'sun');
+    const moonLane = roster.find((i) => i.f.Glyph === 'moon');
+    const rest = roster.filter((i) => i.f.Glyph !== 'sun' && i.f.Glyph !== 'moon');
+    const ordered = [sunLane, moonLane, ...rest].filter(Boolean);
+
+    for (const inst of ordered) {
       const label = buildLaneLabel(inst);
-      // always available — a point-in-time mark at the current clock time,
-      // never hidden behind a same-day check.
-      const nowBtn = h('button', { class: 'plain tl-lane-now' }, 'now');
-      nowBtn.addEventListener('click', () => placeOn(inst, nowMinutes()));
-      label.appendChild(nowBtn);
       const laneTrack = h('div', { class: 'tl-lane-track' });
       laneTrack.style.setProperty('--hue', hueFor(inst.f.Name));
       bindLaneTap(laneTrack, inst);
