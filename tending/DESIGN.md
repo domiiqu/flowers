@@ -400,8 +400,29 @@ exposes no generative-image field type), generating from those formulas into
   the two faces remember one life and only render it differently.
   Rarity is measured against days *strictly before* today, so a first-ever
   shape is rarest; counting today in its own denominator inverted it.
-  **Still to wire:** the write path to `World`/`Specimens`, and the flip
-  itself.
+  **The write path is wired too:** `Canon`/`World`/`Specimens` are in
+  `store.SCHEMA` (so `plant the base` grows them and `loadAll` reads them),
+  with `worldFor` / `worldBefore` / `canonText` / `saveWorld` / `specimenFor`
+  / `saveSpecimen` beside the other domain acts. `farside.farSideFor(date,
+  data, slow)` does a day in one call — inherits the place, carries canon
+  forward, germinates, and decides whether to repaint — and the caller just
+  writes what it returns. `Specimens` is keyed on the **date**, never the
+  Name, because Name is hers to overwrite and upserting on it would fork a
+  duplicate on every rename; a Name she has already rewritten is never
+  clobbered by a re-run.
+  **Still to wire:** the flip itself.
+
+- **When the plate repaints.** Not nightly. `Drift` is measured against the
+  last **painted** plate, and the planes are weighted — `Far` (the land's
+  slow memory) 0.40 and `Sky` (the night) 0.25 are structural; `Mid` and
+  `Near` are the day's furniture and shuffle constantly. An ordinary day
+  scores ~0.1 and holds; a day where the slow memory moves crosses 0.5 and
+  repaints. **A day with no plate of its own is not a gap** — the card shows
+  the most recent painted plate until the place has actually moved. That is
+  what "a place you visit" means, and it is why the repaint test asks how far
+  the place has drifted rather than whether this date has an image.
+  `Regenerate?` is only ever written `true`, never `false`, so it cannot
+  clear a box she checked by hand.
 - **What trips `Regenerate?`** — a `Drift` threshold, an `Era` turn, or her
   hand.
 

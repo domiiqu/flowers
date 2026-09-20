@@ -305,12 +305,22 @@ function maskedOf(s) {
 // how far the place has moved since the last painted plate. Regeneration
 // is an event, not a nightly chore: a place you visit is not repainted
 // every night.
+// The planes are not equal. Far is the land's slow memory and Sky is the
+// night — those are structural, and when they move the place has really
+// moved. Mid and Near are the day's furniture and shuffle constantly.
+// Weighting them equally meant an ordinary day scored high enough to
+// repaint, which would have made the plate a nightly chore instead of an
+// event. Measured against the last PAINTED plate, so quiet days accumulate
+// rather than each being compared to a neighbour that was never painted.
+const DRIFT_WEIGHTS = { Far: 0.40, Sky: 0.25, Mid: 0.15, Near: 0.10, Light: 0.05, Weather: 0.05 };
+
 function driftOf(next, prev) {
   if (!prev) return 1;
-  const keys = ['Sky', 'Far', 'Mid', 'Near', 'Light', 'Weather'];
-  let changed = 0;
-  for (const k of keys) if ((prev[k] || '') !== (next[k] || '')) changed++;
-  return Math.round((changed / keys.length) * 100) / 100;
+  let d = 0;
+  for (const [k, w] of Object.entries(DRIFT_WEIGHTS)) {
+    if ((prev[k] || '') !== (next[k] || '')) d += w;
+  }
+  return Math.round(d * 100) / 100;
 }
 
 // ---------------------------------------------------------- germination
@@ -432,4 +442,66 @@ function changedOf(next, prev) {
 // contract as world.dayStateFields, so the write path is an upsert on Key.
 export function farSideFields(dateISO, data, prev, slow) {
   return computeFarSide(dateISO, data, prev, slow);
+}
+
+// ------------------------------------------------------- the day's turn
+// One call does the whole far side for a date: finds the place it inherits
+// from, carries canon forward, germinates whatever the day earned, and
+// decides whether the plate is worth repainting. Still pure — it reads
+// `data` and returns what to write; the writing itself is store.js's job.
+//
+// `prev` is the last World row STRICTLY BEFORE this date. The planet is
+// continuous: a day inherits the place as it stood and moves it a little.
+export function farSideFor(dateISO, data, slow) {
+  const rows = (data.World || []).filter((w) => w.f.Key);
+  const existing = rows.find((w) => w.f.Key === dateISO);
+  const before = rows
+    .filter((w) => w.f.Key < dateISO)
+    .sort((a, b) => (a.f.Key < b.f.Key ? 1 : -1));
+  const prev = before[0];
+  // drift and "what changed" are both measured against the last plate that
+  // was actually PAINTED — not merely the last row written. Days the place
+  // held still therefore accumulate toward the next repaint instead of each
+  // being compared against a neighbour nobody ever saw.
+  const painted = before.find((w) => Array.isArray(w.f.Plate) && w.f.Plate.length > 0);
+
+  const world = computeFarSide(dateISO, data, painted ? painted.f : null, slow);
+
+  // continuity: era and region persist until something turns them.
+  world.Era = (existing && existing.f.Era) || (prev && prev.f.Era) || 'the long settling';
+  world.Region = (existing && existing.f.Region) || (prev && prev.f.Region)
+    || 'the low shelf, where the ground still holds water';
+
+  // canon is copied forward ONCE, at row creation, and never rewritten —
+  // a past plate keeps the canon it was made under, exactly as a past plate
+  // on the front face renders from that day's recorded rows and not from
+  // today's roster.
+  const canon = (kind) => {
+    const row = (data.Canon || []).find((c) => c.f.Active && c.f.Kind === kind);
+    return row ? String(row.f.Text || '') : '';
+  };
+  for (const [field, kind] of [['Style', 'style'], ['Voice', 'voice'], ['Planet', 'planet']]) {
+    const already = existing && existing.f[field];
+    world[field] = already || canon(kind);
+  }
+
+  const specimen = germinate(dateISO, data);
+  if (specimen) {
+    world.Found = specimen.Name;
+    specimen.Key = dateISO;
+    specimen.Style = world.Style;
+    specimen.Planet = world.Planet;
+  }
+
+  // Repaint is an EVENT, not a nightly chore — a place you visit is not
+  // repainted every night, and a day without a plate of its own is not a
+  // gap: the card shows the most recent PAINTED plate until the place has
+  // actually moved. So the question is never "does this date have a plate"
+  // (a new day never does, which would repaint nightly) but "has the place
+  // drifted far enough from the one we painted last".
+  // Only ever set true, never false: writing false each day would silently
+  // clear a box she checked by hand.
+  if (!painted || world.Drift >= 0.5) world['Regenerate?'] = true;
+
+  return { world, specimen };
 }
