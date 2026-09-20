@@ -384,9 +384,24 @@ exposes no generative-image field type), generating from those formulas into
 - **What is the planet called, and what are its laws?** The `Canon` rows
   seeded so far are drafts in my hand, deliberately thin. This is the part
   that is hers to build, day after day.
-- **What writes `World` each day?** The sim (`world.js`) is specified but not
-  built: it must read the day's `Timeline` and compose the four planes,
-  `Teeth`, `Masked` and `Drift` without ever using her log's vocabulary.
+- ~~What writes `World` each day?~~ **Built: `src/farside.js`.** Pure
+  functions beside `world.js` — `computeFarSide(dateISO, data, prev, slow)`
+  returns the whole `World` row, `germinate(dateISO, data)` returns the day's
+  specimen or null. Three laws are written at the head of that file and are
+  the reason it is code rather than a prompt: the sim decides what is there
+  and the generator only renders it; nothing in its output may speak her log
+  (an instrument becomes a species by the hash of its name, never by being
+  named); and difference, never grade. The sun/moon lanes are read by
+  **Glyph**, never by Name.
+  `Masked` is the day's literal largest unlogged stretch, turned into
+  occluded ground — the unknown shown *as* unknown, straight out of the
+  thesis. The `FAR` plane deliberately reuses the front face's own slow
+  memory (`aridity / path / sea / towerFloors`) rather than recomputing it:
+  the two faces remember one life and only render it differently.
+  Rarity is measured against days *strictly before* today, so a first-ever
+  shape is rarest; counting today in its own denominator inverted it.
+  **Still to wire:** the write path to `World`/`Specimens`, and the flip
+  itself.
 - **What trips `Regenerate?`** — a `Drift` threshold, an `Era` turn, or her
   hand.
 
