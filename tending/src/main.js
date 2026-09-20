@@ -1,9 +1,9 @@
 // main.js — hash router and glue. boots the sandbox, loads the soil,
 // and hands each room off to its view.
 
-import * as store from './store.js?v=14';
-import * as views from './views.js?v=14';
-import * as scary from './scary.js?v=14';
+import * as store from './store.js?v=15';
+import * as views from './views.js?v=15';
+import * as scary from './scary.js?v=15';
 
 const app = document.getElementById('app');
 const queuedot = document.getElementById('queuedot');
