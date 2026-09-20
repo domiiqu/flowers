@@ -138,6 +138,44 @@ export const SCHEMA = [
       { name: 'held', color: 'yellowBright' }, { name: 'broken', color: 'redLight1' } ] } },
     { name: 'Seeds', type: 'number', options: { precision: 0 } },
   ]},
+  // the instrument day (Phase 1, grafted on): day-long events beside the
+  // habits (Period, WFH…), instruments placed on the day's timeline, and
+  // the personal|work ratings. See DESIGN.md's "the instrument day" section.
+  { name: 'Markers', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+  ]},
+  { name: 'DayMarks', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Marker', type: 'singleLineText' },
+  ]},
+  { name: 'Instruments', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Glyph', type: 'singleSelect', options: { choices: [
+      { name: 'sun' }, { name: 'moon' }, { name: 'dot' } ] } },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Spans', type: 'checkbox', options: { icon: 'check', color: 'blueBright' } },
+  ]},
+  { name: 'Timeline', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Instrument', type: 'singleLineText' },
+    { name: 'Start', type: 'number', options: { precision: 0 } },
+    { name: 'End', type: 'number', options: { precision: 0 } },
+    { name: 'Note', type: 'multilineText' },
+  ]},
+  { name: 'Ratings', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Domain', type: 'singleSelect', options: { choices: [
+      { name: 'personal' }, { name: 'work' } ] } },
+    { name: 'Axis', type: 'singleSelect', options: { choices: [
+      { name: 'alignment' }, { name: 'novelty' }, { name: 'agency' } ] } },
+    { name: 'Value', type: 'number', options: { precision: 0 } },
+  ]},
 ];
 
 const DEFAULTS = {
@@ -160,6 +198,21 @@ const DEFAULTS = {
     'mood (morning)', 'mood (afternoon)', 'mood (late)', 'sleep', 'fog', 'energy',
     'dairy', 'adderall 10mg', 'fog rolls in', 'cramps', 'heavy', 'light',
   ].map((Name, i) => ({ Name, Order: i + 1, Active: true })),
+  // day-long events beside the habits — Habits themselves already cover
+  // "moved my body" etc., so Markers only needs what habits don't carry.
+  Markers: [
+    { Name: 'period', Order: 1, Active: true },
+    { Name: 'wfh', Order: 2, Active: true },
+  ],
+  Instruments: [
+    { Name: 'woke',        Glyph: 'sun',  Order: 1, Active: true, Spans: false },
+    { Name: 'slept',       Glyph: 'moon', Order: 2, Active: true, Spans: false },
+    { Name: 'food',        Glyph: 'dot',  Order: 3, Active: true, Spans: false },
+    { Name: 'water',       Glyph: 'dot',  Order: 4, Active: true, Spans: false },
+    { Name: 'fatigue',     Glyph: 'dot',  Order: 5, Active: true, Spans: true },
+    { Name: 'despondency', Glyph: 'dot',  Order: 6, Active: true, Spans: true },
+    { Name: 'tech brain',  Glyph: 'dot',  Order: 7, Active: true, Spans: true },
+  ],
 };
 
 // ------------------------------------------------------------------ time
@@ -405,7 +458,10 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
+  data: {
+    Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [],
+    Markers: [], DayMarks: [], Instruments: [], Timeline: [], Ratings: [],
+  },
   loaded: false,
   problem: null,
   dropped: null,
@@ -717,6 +773,105 @@ export async function ensureTag(name) {
 }
 export const activeTags = () =>
   (S.data.Tags || []).filter(t => t.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+
+// --------------------------------------------------- day-long events (grafted)
+// the instrument day's day-events row is the UNION of active habits (the
+// existing Ticks economy) and active markers (Period, WFH, and anything
+// added inline) — one calm pill row, one toggle function. A habit-pill
+// still runs through tick()/untick() exactly as the ledger did (so the
+// day-tally and the withering/gathering machinery underneath keep working
+// unchanged); a marker-pill just flips a DayMarks row. The wallet/gather UI
+// is hidden in main already, so a marker doesn't need to feed the Ticks
+// economy the way Phase 1's toggleMark did — simpler, since there's no
+// pollen line left to show it.
+
+export const activeMarkers = () =>
+  S.data.Markers.filter((m) => m.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+
+export function markFor(date, name) {
+  return S.data.DayMarks.find((d) => d.f.Key === key(date, name));
+}
+
+export async function addMarker(name) {
+  const order = 1 + S.data.Markers.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  await upsertRow('Markers', 'Name', { Name: name, Order: order, Active: true });
+}
+
+// item is a row from activeHabits() or activeMarkers() — told apart by
+// which live array it actually came from (filter() preserves references).
+export async function toggleDayEvent(date, item) {
+  if (S.data.Habits.includes(item)) {
+    const cur = tickFor(date, item.f.Name);
+    if (!cur) { await tick(date, item); return true; }
+    if (cur.f.Status === 'unclaimed') { await untick(date, item.f.Name); return false; }
+    return true; // already gathered or withered — can't undo, stays lit
+  }
+  const existing = markFor(date, item.f.Name);
+  if (existing) {
+    S.data.DayMarks = S.data.DayMarks.filter((x) => x !== existing);
+    write({ kind: 'destroyByKey', table: 'DayMarks', key: existing.f.Key });
+    return false;
+  }
+  const fields = { Key: key(date, item.f.Name), Date: date, Marker: item.f.Name };
+  S.data.DayMarks.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'DayMarks', mergeField: 'Key', fields });
+  return true;
+}
+
+// -------------------------------------------------------- the timeline (grafted)
+// instruments placed on the day's line — position = when, width = how
+// long. Its own capture surface; unrelated to Moments (which stays, keyed
+// by text, for whatever still reads it elsewhere/back-compat).
+
+export const activeInstruments = () =>
+  S.data.Instruments.filter((i) => i.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+
+export function timelineFor(date) {
+  return S.data.Timeline.filter((t) => t.f.Date === date).sort((a, b) => (a.f.Start || 0) - (b.f.Start || 0));
+}
+
+export async function placeInstrument({ instrument, date, start, end, note }) {
+  const now = new Date();
+  const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const fields = { Key: `${date} ${stamp} · ${instrument}`, Date: date, Instrument: instrument, Start: Math.round(start) };
+  if (end != null) fields.End = Math.round(end);
+  if (note) fields.Note = note;
+  S.data.Timeline.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Timeline', mergeField: 'Key', fields });
+  return fields.Key;
+}
+
+export async function adjustTimeline(tkey, patch) {
+  const t = S.data.Timeline.find((x) => x.f.Key === tkey);
+  if (!t) return;
+  Object.assign(t.f, patch);
+  write({ kind: 'upsert', table: 'Timeline', mergeField: 'Key', fields: { Key: tkey, ...patch } });
+}
+
+export async function removeTimeline(tkey) {
+  S.data.Timeline = S.data.Timeline.filter((x) => x.f.Key !== tkey);
+  write({ kind: 'destroyByKey', table: 'Timeline', key: tkey });
+}
+
+export async function addInstrument(name, glyph) {
+  const order = 1 + S.data.Instruments.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  await upsertRow('Instruments', 'Name', { Name: name, Glyph: glyph || 'dot', Order: order, Active: true, Spans: false });
+}
+
+// ------------------------------------------------------------ ratings (grafted)
+// personal | work, each with three 1-5 scales: alignment, novelty, agency.
+
+export function ratingFor(date, domain, axis) {
+  return S.data.Ratings.find((r) => r.f.Key === `${date} · ${domain} · ${axis}`);
+}
+
+export async function setRating(date, domain, axis, value) {
+  const fields = { Key: `${date} · ${domain} · ${axis}`, Date: date, Domain: domain, Axis: axis, Value: value };
+  const existing = ratingFor(date, domain, axis);
+  if (existing) Object.assign(existing.f, fields);
+  else S.data.Ratings.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Ratings', mergeField: 'Key', fields });
+}
 
 // --------------------------------------------------------- planting base
 // creates any missing tables in the given base via the airtable meta api,
