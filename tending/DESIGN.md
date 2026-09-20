@@ -44,22 +44,29 @@ toggles anything:
 
 ## the rooms
 
-> **v3 — the day pares back (current).** The in-app SVG plate has retired:
-> the day is no longer painted live in the browser. Instead the day page is
-> a calm, near-blank page — a soft warm gradient with the grain over it —
-> carrying, top to bottom: the **date, prominent**; the **schedule as soft
-> blocks** (Google Calendar when connected — see below — else editable
-> blocks stored in `Days.Schedule`), with a quiet `＋ a plan` that creates
-> an event; the **print ritual**; then, kept small and quiet, the habit
-> ledger and the tag mote (they still feed the world-state). The painted
-> plate lives on as **the print**, generated in Airtable from the day's
-> world-state, not drawn by the app.
+> **v4 — the instrument day, the plate restored (current).** Two parallel
+> builds reconciled: the live plate is back, drawn in-browser at the top of
+> the day page exactly as `study/`'s Moebius work always intended; the
+> logging surface beneath it is Phase 1's **instrument day** — a timeline
+> of placed instruments and a calm row of day-long events — which replaced
+> the older habit ledger and the tag-capture sheet entirely. Top to bottom:
+> the **date, prominent**; **the plate**, live, portrait, crossfading on
+> every change; a quiet **print this day** line under it (see below); the
+> **schedule as soft blocks** (Google Calendar when connected — see below —
+> else editable blocks stored in `Days.Schedule`); **the timeline** (drag
+> an instrument from its rail onto the line, stretch a span, tap to note
+> it); **day-long events** (one pill row — active habits union active
+> markers — tap to light for the day); **personal | work** (six 1–5
+> scales); and **a line for the day** (Note).
 >
-> **The print ritual** replaces buying prints with seeds: a `print this day`
-> button checks `Days.Print?`; the base's automation paints the day into an
-> image field on that row; the button becomes the print itself once the
-> image lands. **The gallery** (`#/gallery`) is the wall of every printed
-> day — a plain grid of images, newest first, each a door back to its day.
+> **The print ritual** stays quiet on purpose, since the live plate above
+> is already the day's face: `print this day` checks `Days.Print?`; the
+> base's automation paints the day into an image field on that row from
+> the same flattened world-state (`world.dayStateFields`) the live plate
+> reads; once it lands the line becomes `printed — in the gallery ↗`. The
+> live plate is the working, mutable day; a print is a committed keepsake.
+> **The gallery** (`#/gallery`) is the wall of every printed day — a plain
+> grid of images, newest first, each a door back to its day.
 >
 > **Google Calendar** (`src/gcal.js`) connects straight from the browser via
 > Google Identity Services: a *public* OAuth client id set in tend (no
@@ -68,82 +75,56 @@ toggles anything:
 > back so the print still gets its wires. Setup: a Google Cloud OAuth client
 > id with the github.io origin allow-listed, scope `calendar.events`.
 >
-> The world-grammar prose below still governs **the print's prompt** (via
-> `world.dayStateFields` → the `Days` row → the base's formula), so it stays
-> as the reference — just read "the plate" as "the print" from here down.
+> The world-grammar prose below governs **both** the live plate and the
+> print's prompt (via `world.dayStateFields` → the `Days` row → the base's
+> formula) — they are two different renderings of the same day and are not
+> expected to pixel-match.
 
 ### the day — `#/day/YYYY-MM-DD` (default: today)
-One screen. No scrolling on desktop; a single gentle column on phones.
-- Header: `‹  friday · september 5  ›` (arrow keys work too). A small
-  "today" link when you've drifted.
-- **The bed**: the habit garden. Each active habit is a procedurally grown
-  plant (seeded by its `Variety` number — same species every day, *its*
-  flower). Unticked = a closed bud, dim. Click → it blooms (pop, unfurl,
-  luminous), `+3 seeds` floats up and fades. Click again (if unclaimed) to
-  take it back. Plants sway slightly, offset phases.
-- **The pollen line**: unclaimed seeds of the last 3 days as glowing motes,
-  each cohort labelled — `today · 9`, `yesterday · 5 — two days left`,
-  fading as they age. One action: **gather — press & hold** (900ms, with
-  the underline-progress idiom from the studio's "let go"). Gathering pulls
-  the motes into the wallet count with a little swarm animation.
-- Wallet, corner, quiet: `◦ 124 seeds` (click → shop).
-- **The day, gently**: the schedule block. Small italic lines
-  (`14:00 — dentist`). Click anywhere on it to edit in place (textarea,
-  save on blur → `Days.Schedule`). No calendar grid, no boxes: a poem of
-  appointments. (ICS/Google hookup is a later verse; the field exists.)
-- **The instruments**: one row of small tracker glyphs with today's value
-  (`fog 2 · fed yes · current 4 · slept 7½ · colour 4`). Click one → a
-  compact inline control right there (scale = row of 6 dots, yesno = two
-  words, number = stepper, words = a line). Saves on change. No modal, no
-  navigation.
-- **A line for the day**: one input at the bottom → `Days.Note`.
-- Corner hints (exact idiom of the field's `.hints`): `the meadow · the
-  shop · the hour · unwind · tend`.
+One screen, a single gentle column on phones, still readable on desktop.
+- Header: `‹  friday · september 5  ›` (arrow keys and a soft swipe work
+  too — see "touch is the first-class hand" below for how swipe and the
+  timeline's own drags stay out of each other's way).
+- **The plate**, live: drawn in-browser (`print.js`'s `dayPrint`) from
+  `world.computeWorldState`, portrait, crossfading (180ms fade-out/in) on
+  every mutation below. This is the day's face on the page.
+- **Print this day** — a quiet line under the plate (see the v4 callout
+  above); it is not shown inline again once printed, only linked to the
+  gallery.
+- **The schedule** — Google Calendar blocks when connected, else editable
+  `Days.Schedule` lines, unchanged from v3.
+- **The timeline** — the day's time surface, replacing the old habit
+  ledger and the tag-capture sheet entirely. A rail of **instruments**
+  (woke ☀, slept ☾, food •, water •, fatigue, despondency, tech brain… —
+  `store.activeInstruments()`, add your own inline, never `window.prompt()`)
+  beside a thin midnight-to-midnight line. Drag an instrument down onto the
+  line to place it at that rough hour (a spanning instrument gets a
+  default 30-minute width you then stretch by its handle; a point
+  instrument needs no duration); a `now` tap on the chip drops it at the
+  current time in one gesture (today only). Tap a placed instrument to
+  open its sheet — a note, and delete. Dragging a placed instrument slides
+  it in time; this drag is deliberately kept out of the header's
+  swipe-to-change-day gesture (see the touch rules below).
+- **Day-long events** — one calm, uniform pill row: `store.activeHabits()`
+  union `store.activeMarkers()` (Period, WFH, anything added inline),
+  toggled together by `store.toggleDayEvent()`. A habit-pill still runs
+  through the existing tick economy (so the day's point tally keeps
+  working, and a bonus habit keeps its ✦); a marker-pill just flips a
+  `DayMarks` row. Both read alike as "a thing that was true today" and
+  both feed the oak's leaf mass — see "the world grammar" below.
+- **Personal | Work** — the screen splits into two columns, each carrying
+  the same three 1–5 scales: **alignment, novelty, agency** (`Ratings`).
+- **A line for the day** — a notes block (`Days.Note`); Enter inserts a
+  bullet (`\n• `), deliberately simple.
+- Corner hints (exact idiom of the field's `.hints`): `the shop · the
+  hour · the gallery · tend`.
 
-### moments — caught in passing (lives inside the day page)
-The capture primitive (it absorbed the retired trackers too): **moments**
-are timestamped (or deliberately un-timestamped) tags — `adderall 10mg` at
-exactly 14:32, `mood 2` mid-afternoon, `cramps` sometime today. Built for
-running out the door with a poor memory: capture must cost two taps, and
-trusting the timestamp must cost zero.
-
-- A small glowing mote labelled **tag** sits fixed in the thumb zone
-  (bottom-right) of every day page. Tap → a calm layer slides up:
-  - her tag vocabulary as chips (`store.tagChips()` — recency then
-    frequency, trackers lend names before history exists), and at the end
-    of that same chip row one **create a tag…** line to type a new tag
-    (it joins the vocabulary forever after).
-  - tap a chip → **saved instantly** (`captureMoment`, time = now,
-    sure = 'exact'), layer starts dismissing. Two taps total.
-  - if the tag matches a scale-kind tracker's name, six small petals
-    appear for one optional extra tap (the value); skipping is fine.
-- **Sureness has a colour, and it lives on the dot.** A new tag times to
-  now and lands as a **red** dot (`Sure: 'exact'` — the timestamp is
-  trusted). The whole after-the-fact adjustment happens on the hours
-  line, not in a fleeting ribbon (`SURE_COLOR`/`SURE_WORD`/`SURE_NEXT` in
-  `views.js`): red **exact** → rose **roughly** (`'about'`) → blue **all
-  day** (`'day'`, time-agnostic: `heavy`, `light`, `cramps`).
-- **The hours line**: on the day page, beneath the plate and sized to it —
-  one thin horizontal line, midnight to midnight (the 24-hour day), the
-  day's moments strung on it as coloured dots. All-day (blue) dots gather
-  at the day's **end** and stack back from it; timed ones fall where their
-  clock says. The line is a small instrument:
-  - **tap a dot** → it is singled out (enlarged), every other dot and the
-    tag stream fade and go untappable, and a detail card shows
-    `14:32 · adderall 10mg — exact` with the sureness word (in its colour)
-    and a ✕ to take the moment back (`removeMoment`).
-  - **tap the selected dot again** (or its word) → walk the colour ring
-    exact → roughly → all-day (`adjustMoment` on `Sure`); becoming all-day
-    slides it to the end, leaving it un-fades it back.
-  - **press-and-drag a dot** → slide it through the hours; release commits
-    the new `Time`. Dragging an all-day dot gives it a place in time again
-    (`Sure: 'about'`).
-  - a tap anywhere off the line and off the card lets the moment go.
-- Voltage: calm. The layer must never feel like a form. No required
-  fields, no confirm buttons, nothing modal that traps.
-- Later verses: wearables write straight into `Moments` (same shape);
-  the meadow's day-plants grow fireflies hovering at heights matching
-  their hour.
+(Moments/tags-as-timestamped-capture — the sheet, the hours line, the
+sureness ring — retired with v4: the timeline is now the single time
+surface. `store`'s `Moments`/`tagChips`/`VALUE_TAGS` machinery stays in
+place underneath for back-compat and because scalar ratings still read
+tagged Moments by name (`momentValue`), but no day-page UI writes new
+Moments any more.)
 
 ### the world grammar (the print, v2 — approved direction)
 The day is a Moebius plate (see `study/`), and **every interaction is
@@ -197,33 +178,53 @@ never rewrite history.
 the postcards themselves, scrollable, tap one to visit the day. The
 meadow view and daySVG retire when the plate wiring lands.
 
-**Capture, reworked — the tag dump (urgent, before the plate wiring):**
-the now-sheet becomes a rapid-dump surface: it STAYS OPEN after each
-tag — tap tap tap, each entry logs with its timestamp and flashes into a
-small running stream inside the sheet; close is explicit (swipe down or ✕).
-The type-a-tag line autofocuses and Enter logs + clears for the next.
-Starter vocabulary (shown only until her own tags take over): b · l · d ·
-snack · dairy · coffee · adderall 10mg · fog rolls in · cramps · heavy ·
-light. The day page shows the day's tag stream with visible times
-(`13:05 b · 14:32 adderall 10mg`), and the hours line + now-mote get an
-empty-state hint so capture is discoverable. Nightly questions demote to
-optional: unwind leads with the harvest and the day-plate; scales (fog,
-mood, sleep, energy) remain but "ate enough" retires in favor of b/l/d
-tags. After a week of real tag data, the structure gets revisited.
-
 **The plate is portrait** — taller than wide on every screen (never the
-old square on iPad or landscape on desktop); the ledger, hours line and
-tag stream are all sized to it and centered, so the day reads as one
-column.
+old square on iPad or landscape on desktop); the timeline, day-events row
+and everything below are all sized to it and centered, so the day reads
+as one column.
 
-**The provenance ledger (new day-page concept, replacing click-the-flower):**
-under the plate, the habits stand as a single **dot-separated line** of
-small grey words, full plate width — like a print's documentation, a
-serial line (`moved my body · went outside · made something`). Tap a word
-→ it inks to black, the plate redraws (its cloud becomes its plant), one
-seed is earned. The plate is the day; the words are its provenance. Economy
-simplifies with it: **every habit = 1 seed**, a held hour = 4; gather and
-wither rules unchanged; shop default prices rescale accordingly.
+**The day-events row (replaces the old provenance ledger and, before
+that, click-the-flower):** under the plate, the day's lit things stand as
+one calm pill row — the union of active habits and active markers,
+`store.toggleDayEvent()`. Both a habit-pill and a marker-pill light the
+same way and both count toward the oak's leaf mass; only a habit-pill
+still earns a seed (through the pre-existing tick economy) and can wear
+the ✦ bonus star. The plate is the day; the row is its provenance.
+
+### Phase 2, chosen: the far side & the moon-turn (the double, first face)
+Grounded in the user's thesis *The Double as a Triangle or a Pink and
+Slippery Moon*: the app is a **double-machine** — the plate (d1) is the
+lit, logged face; the unloggable real day is the big-D Double behind it;
+the render must simulate the pursuit of comprehension **without
+resolving** (resolution kills the numinous). Rule: **data crisp** (d1 =
+the log), **uncertainty in the render** (d2 = the world).
+- Every plate gains a **reverse (d2) we never fully see**; the moon on the
+  timeline is the **threshold**. A moon affordance / tap on the plate
+  *turns it over* to the day's far side.
+- Far side = same territory rendered as reverse: lower-res, heavier grain,
+  atmospheric ripple, night/pink-green register, more blank/masked.
+- Authored three ways: the day's data seen from behind (a fatigue span →
+  a shadow mass; a held hour → a distant light); **emergence I author**
+  (an inhabitant/structure she didn't specify — co-authored d2); and
+  **deliberate blank** where the day is unrecorded (Remainder's hockey
+  mask — the unknown shown *as* unknown).
+- **Sleep is the crossing**: woke/slept (sun/moon) marks define the night
+  span; the far side *is* the night. Logged sleep furnishes it; unlogged
+  leaves it blank/numinous.
+- **Orlando remade at the threshold**: lit-face figure steered by her
+  (agency), far-side figure altered by emergence (both — her earlier
+  answer). Authoring controls + seasonal accumulation come later.
+- Irresolution rules: no labels, no legend, grainier than the lit face,
+  always a pink slippery moon.
+- Build: prototype the far-side render in `study/` first (my visual review
+  against the numinous register), then wire the moon-turn into the app.
+  Touches print.js/world.js/views.js/index.html; **no new data tables**
+  (reads the instrument-day's data — the timeline's woke/slept marks are
+  exactly the sleep-crossing this needs). Past days can be turned.
+
+This is the next build after the instrument day + restored plate (this
+round): the live plate above is exactly what the moon-turn will one day
+turn over.
 
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated
@@ -315,7 +316,16 @@ permanent — tend."*
 - Every target ≥ 44px; pointer events only; **nothing depends on hover or
   a keyboard** — arrow keys and shortcuts are conveniences layered on top.
 - **Swipe** left/right anywhere calm on the day page moves between days
-  (with a soft slide); the header arrows remain for taps.
+  (with a soft slide); the header arrows remain for taps. **The timeline
+  is excluded from this** (`.timeline-section` in `bindSwipe`'s
+  `interactive()` check) and every drag inside it calls
+  `setPointerCapture`, so a horizontal slide on a placed instrument or a
+  span's handle never also reads as swipe-to-change-day.
+- **Never `window.prompt()`** for "add a new X" (a day-event, an
+  instrument): the app can run as an iOS home-screen (standalone) web app,
+  where `window.prompt()` can be silently suppressed. Every such flow uses
+  an inline `.field` text input instead (`buildInlineTextAdd`/
+  `buildInstrumentAdd` in `views.js`).
 - Press-and-hold is the ceremonial verb everywhere — so every holdable
   element gets `-webkit-touch-callout: none; user-select: none;
   touch-action: manipulation;` and holds are driven by

@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=12';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=13';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -29,6 +29,12 @@ function activeHabitsOf(data) {
     .sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 }
 
+function activeMarkersOf(data) {
+  return (data.Markers || [])
+    .filter((m) => m.f.Active)
+    .sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+}
+
 // a date -> { tracked, meal } map across the whole loaded window, built
 // once and reused by aridity, path and sea, which all lean on the same
 // idea of "something happened, or didn't, on this day".
@@ -43,6 +49,13 @@ function buildDayInfo(data) {
   };
   for (const t of data.Ticks || []) touch(t.f.Date, false);
   for (const m of data.Moments || []) touch(m.f.Date, isMealTag(m.f.Tag));
+  // the instrument day (grafted): day-events, placed instruments and
+  // ratings all count as "something happened" for aridity/path/sea, same
+  // as a tick or a moment did before them. a "food" instrument on the
+  // timeline is a meal signal too, alongside the old b/l/d/snack tags.
+  for (const d of data.DayMarks || []) touch(d.f.Date, false);
+  for (const t of data.Timeline || []) touch(t.f.Date, String(t.f.Instrument || '').toLowerCase() === 'food');
+  for (const r of data.Ratings || []) touch(r.f.Date, false);
   return info;
 }
 
@@ -143,25 +156,60 @@ function overallMood(dateISO, data) {
   return momentValueExact(dateISO, data, 'mood');
 }
 
+// sleep, from the timeline's own woke/slept instruments — a wraparound
+// duration (slept last night, woke this morning) under 5h makes two suns.
+// falls back to the old "sleep" tagged Moment when the timeline has none
+// for this day, so a day logged the old way (or before she used the
+// timeline at all) never goes dark.
 function computeTwoSuns(dateISO, data) {
+  const todays = (data.Timeline || []).filter((t) => t.f.Date === dateISO);
+  const woke = todays.find((t) => t.f.Instrument === 'woke');
+  const slept = todays.find((t) => t.f.Instrument === 'slept');
+  if (woke && slept) {
+    const dur = woke.f.Start <= slept.f.Start
+      ? (woke.f.Start + 1440 - slept.f.Start)
+      : (woke.f.Start - slept.f.Start);
+    return dur < 300;
+  }
   const s = momentValue(dateISO, data, /sleep/i);
   return s != null ? s < 5 : false;
 }
 
+// fog banks, from a "tech brain"/"brain fog" instrument on the timeline —
+// a span's length in hours (clamped 0..5), a bare point-drop reads as a
+// fixed 2. Falls back to the old "fog" tagged Moment when there's no such
+// instrument logged that day.
 function computeFog(dateISO, data) {
+  const entry = (data.Timeline || []).find(
+    (t) => t.f.Date === dateISO && /tech brain|brain fog/i.test(t.f.Instrument || '')
+  );
+  if (entry) {
+    if (entry.f.End != null) return Math.max(0, Math.min(5, (entry.f.End - entry.f.Start) / 60));
+    return 2;
+  }
   return momentValue(dateISO, data, /fog/i);
 }
 
+// novelty has a body: true if a Moments tag OR a Timeline instrument makes
+// its very first appearance (in the loaded window) today.
 function computeSnake(dateISO, data) {
-  const todays = (data.Moments || []).filter((m) => m.f.Date === dateISO && m.f.Tag);
-  if (!todays.length) return false;
+  const todaysMoments = (data.Moments || []).filter((m) => m.f.Date === dateISO && m.f.Tag);
+  const todaysTimeline = (data.Timeline || []).filter((t) => t.f.Date === dateISO && t.f.Instrument);
+  if (!todaysMoments.length && !todaysTimeline.length) return false;
   const firstSeen = new Map();
   for (const m of data.Moments || []) {
     if (!m.f.Tag || m.f.Date > dateISO) continue;
     const cur = firstSeen.get(m.f.Tag);
     if (!cur || m.f.Date < cur) firstSeen.set(m.f.Tag, m.f.Date);
   }
-  return todays.some((m) => firstSeen.get(m.f.Tag) === dateISO);
+  const firstSeenInst = new Map();
+  for (const t of data.Timeline || []) {
+    if (!t.f.Instrument || t.f.Date > dateISO) continue;
+    const cur = firstSeenInst.get(t.f.Instrument);
+    if (!cur || t.f.Date < cur) firstSeenInst.set(t.f.Instrument, t.f.Date);
+  }
+  return todaysMoments.some((m) => firstSeen.get(m.f.Tag) === dateISO)
+    || todaysTimeline.some((t) => firstSeenInst.get(t.f.Instrument) === dateISO);
 }
 
 function computeLight(dateISO, data, isToday) {
@@ -177,7 +225,9 @@ function computeLight(dateISO, data, isToday) {
   return { light: 0.5, lightHour: 13.5 };
 }
 
-function computeHabits(dateISO, data, isToday) {
+// habits only (Ticks-driven) — the Airtable-facing HabitsDone/HabitsTotal
+// stay scoped to this, never broadened by the day-events grafted on below.
+function computeHabitsOnly(dateISO, data, isToday) {
   if (isToday) {
     const ticked = new Set(
       (data.Ticks || []).filter((t) => t.f.Date === dateISO).map((t) => t.f.Habit)
@@ -189,6 +239,35 @@ function computeHabits(dateISO, data, isToday) {
   return (data.Ticks || [])
     .filter((t) => t.f.Date === dateISO && t.f.Habit)
     .map((t) => ({ name: t.f.Habit, done: true }));
+}
+
+// the oak reads the BROAD union — habits (Ticks) plus day-events (DayMarks,
+// Period/WFH/anything added inline) — so lighting either kind of pill fills
+// the tree. This is deliberately wider than computeHabitsOnly: the two
+// live plate and the Airtable print are different renderings of the same
+// day and were never going to pixel-match anyway, so there's no need to
+// force them onto one tree-fullness basis.
+function computeDayEvents(dateISO, data, isToday) {
+  if (isToday) {
+    const ticked = new Set(
+      (data.Ticks || []).filter((t) => t.f.Date === dateISO).map((t) => t.f.Habit)
+    );
+    const marked = new Set(
+      (data.DayMarks || []).filter((m) => m.f.Date === dateISO).map((m) => m.f.Marker)
+    );
+    const habitNames = new Set(activeHabitsOf(data).map((h) => h.f.Name));
+    const out = activeHabitsOf(data).map((h) => ({ name: h.f.Name, done: ticked.has(h.f.Name) }));
+    for (const m of activeMarkersOf(data)) {
+      if (habitNames.has(m.f.Name)) continue; // a marker sharing a habit's name never doubles up
+      out.push({ name: m.f.Name, done: marked.has(m.f.Name) });
+    }
+    return out;
+  }
+  // past days: only what was actually recorded, from either source.
+  const seen = new Map();
+  for (const t of data.Ticks || []) if (t.f.Date === dateISO && t.f.Habit) seen.set(t.f.Habit, true);
+  for (const m of data.DayMarks || []) if (m.f.Date === dateISO && m.f.Marker) seen.set(m.f.Marker, true);
+  return [...seen.keys()].map((name) => ({ name, done: true }));
 }
 
 // the same world, flattened to scalars for the Days row — the base's
@@ -221,12 +300,17 @@ function countTrackedDays(dateISO, data) {
 
 export function dayStateFields(dateISO, data) {
   const w = computeWorldState(dateISO, data);
+  const isToday = dateISO === todayISO();
   // bonus habits sit outside the total, so an undone one never adds a cloud;
-  // a done one still counts toward what's done (leaf mass / overachievement)
+  // a done one still counts toward what's done (leaf mass / overachievement).
+  // habit-only here (never the broader day-events union w.habits carries) —
+  // the Airtable print's denominator stays the habit roster, matching what
+  // Days.HabitsTotal has always meant.
   const bonusNames = new Set((data.Habits || []).filter((h) => h.f.Active && h.f.Bonus).map((h) => h.f.Name));
+  const habitsOnly = computeHabitsOnly(dateISO, data, isToday);
   return {
-    HabitsDone: w.habits.filter((h) => h.done).length,
-    HabitsTotal: w.habits.filter((h) => !bonusNames.has(h.name)).length,
+    HabitsDone: habitsOnly.filter((h) => h.done).length,
+    HabitsTotal: habitsOnly.filter((h) => !bonusNames.has(h.name)).length,
     Fog: w.fog,
     Mood: (() => { const v = overallMood(dateISO, data); return v == null ? null : Math.round(v); })(),
     MoodMorning: momentValueExact(dateISO, data, 'mood (morning)'),
@@ -266,6 +350,6 @@ export function computeWorldState(dateISO, data) {
     snake: computeSnake(dateISO, data),
     wires: computeWires(dateISO, data),
     twoSuns: computeTwoSuns(dateISO, data),
-    habits: computeHabits(dateISO, data, isToday),
+    habits: computeDayEvents(dateISO, data, isToday),
   };
 }
