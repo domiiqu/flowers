@@ -2,11 +2,11 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=16';
-import { dayStateFields, computeWorldState } from './world.js?v=16';
-import { farSideFor } from './farside.js?v=16';
-import * as farview from './farview.js?v=16';
-import * as gcal from './gcal.js?v=16';
+import * as store from './store.js?v=17';
+import { dayStateFields, computeWorldState } from './world.js?v=17';
+import { farSideFor } from './farside.js?v=17';
+import * as farview from './farview.js?v=17';
+import * as gcal from './gcal.js?v=17';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray

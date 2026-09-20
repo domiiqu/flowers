@@ -13,7 +13,7 @@
 // plate generated in separable layers, which is why the layer spec is in
 // the image prompt from the first day.
 
-import * as store from './store.js?v=16';
+import * as store from './store.js?v=17';
 
 const PLATE_FIELD = 'Plate';
 
