@@ -215,7 +215,7 @@
   .tl-lane-label { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; font-style: italic;
     color: var(--ink); min-width: 0; }
   .tl-lane-glyph { color: var(--gold); font-style: normal; flex: 0 0 auto; }
-  .tl-lane-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-lane-name { overflow-wrap: anywhere; line-height: 1.22; }
   .tl-lane-now { flex: 0 0 auto; font-size: 0.62rem; font-style: italic; color: var(--gold); opacity: 0.75;
     min-height: 32px; min-width: 32px; padding: 0 2px; }
   .tl-lane-now:hover { opacity: 1; }
@@ -236,10 +236,11 @@
      through hsl() rather than any hardcoded dusk color. */
   .tl-span { position: absolute; top: 50%; height: 24px; transform: translateY(-50%); border-radius: 12px;
     background: hsl(var(--hue) 55% 82%); border: 1px solid hsl(var(--hue) 45% 60%);
-    min-width: 20px; touch-action: none; -webkit-touch-callout: none; }
-  .tl-span-glyph { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%); font-size: 0.8rem;
+    min-width: 30px; touch-action: none; -webkit-touch-callout: none; }
+  .tl-span-glyph { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); font-size: 0.72rem;
     color: var(--ink-strong); background: hsl(var(--hue) 55% 88%); border: 1px solid hsl(var(--hue) 45% 60%);
-    border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+    border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; }
   /* both handles sit entirely OUTSIDE the span's own body (never a
      negative offset creeping back over it), so a tap on even a
      minimum-width span still reaches the span, never a handle — a 44px
@@ -250,11 +251,11 @@
   .tl-handle-left { right: 100%; }
   .tl-handle::after { content: ''; position: absolute; top: 50%; width: 3px; height: 14px;
     transform: translateY(-50%); border-radius: 2px; background: hsl(var(--hue) 45% 55%); opacity: 0.85; }
-  .tl-handle-right::after { left: 4px; }
+  .tl-handle-right::after { left: 0; }
   /* pulled toward the OUTER edge of its own hit zone rather than the
      boundary — the glyph badge already sits right on the span's start
      edge, and centering both marks there made them collide visually */
-  .tl-handle-left::after { left: 4px; }
+  .tl-handle-left::after { left: auto; right: 0; }
 
   .tl-add-row { grid-column: 1 / -1; margin-top: 4px; }
   .tl-add-btn { opacity: 0.6; min-height: 40px; }
