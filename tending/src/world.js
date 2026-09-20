@@ -23,15 +23,17 @@ function isMealTag(tag) {
   return MEAL_TAGS.has(String(tag || '').trim().toLowerCase());
 }
 
-function activeHabitsOf(data) {
-  return (data.Habits || [])
-    .filter((h) => h.f.Active)
+function activeMarkersOf(data) {
+  return (data.Markers || [])
+    .filter((m) => m.f.Active)
     .sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
 }
 
 // a date -> { tracked, meal } map across the whole loaded window, built
 // once and reused by aridity, path and sea, which all lean on the same
-// idea of "something happened, or didn't, on this day".
+// idea of "something happened, or didn't, on this day". any of the new
+// instrument-day tables count as tracked too, alongside the older ones
+// (which stay populated — DayMarks toggles still write a Tick).
 function buildDayInfo(data) {
   const info = new Map();
   const touch = (date, meal) => {
@@ -44,6 +46,9 @@ function buildDayInfo(data) {
   for (const t of data.Ticks || []) touch(t.f.Date, false);
   for (const e of data.Entries || []) touch(e.f.Date, false);
   for (const m of data.Moments || []) touch(m.f.Date, isMealTag(m.f.Tag));
+  for (const d of data.DayMarks || []) touch(d.f.Date, false);
+  for (const t of data.Timeline || []) touch(t.f.Date, t.f.Instrument === 'food');
+  for (const r of data.Ratings || []) touch(r.f.Date, false);
   return info;
 }
 
@@ -108,17 +113,28 @@ function computeTowerFloors(dateISO, data) {
   return Math.floor(n / 10);
 }
 
+// point-events that day stand in for "the day had appointments" — a
+// telephone-pole count without needing the never-built Schedule editor.
 function computeWires(dateISO, data) {
-  const day = (data.Days || []).find((d) => d.f.Date === dateISO);
-  if (!day || !day.f.Schedule) return 0;
-  return day.f.Schedule.split('\n').filter((line) => line.trim()).length;
+  return (data.Timeline || []).filter((t) => t.f.Date === dateISO && t.f.End == null).length;
 }
 
 function computeHeldHour(dateISO, data) {
   return (data.Hours || []).some((h) => h.f.Date === dateISO && h.f.Outcome === 'held');
 }
 
+// sleep, from the timeline: woke minus slept, wrapping past midnight.
+// falls back to the old Entries/Moments reading when either mark (or
+// the whole feature) is missing, so nothing goes blank mid-transition.
 function computeTwoSuns(dateISO, data) {
+  const woke = (data.Timeline || []).find((t) => t.f.Date === dateISO && t.f.Instrument === 'woke');
+  const slept = (data.Timeline || []).find((t) => t.f.Date === dateISO && t.f.Instrument === 'slept');
+  if (woke && slept && woke.f.Start != null && slept.f.Start != null) {
+    const duration = woke.f.Start <= slept.f.Start
+      ? woke.f.Start + 1440 - slept.f.Start
+      : woke.f.Start - slept.f.Start;
+    return duration < 300;
+  }
   const entry = (data.Entries || []).find((e) => e.f.Tracker === 'sleep' && e.f.Date === dateISO);
   if (entry && entry.f.Value != null) return entry.f.Value < 5;
   const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /sleep/i.test(m.f.Tag || ''));
@@ -126,7 +142,17 @@ function computeTwoSuns(dateISO, data) {
   return false;
 }
 
+// fog, from the timeline: a "tech brain" (or legacy "brain fog") mark
+// that day — a span's duration maps to severity, a point is a flat 2.
+// falls back to the old Entries/Moments reading when absent.
 function computeFog(dateISO, data) {
+  const mark = (data.Timeline || []).find((t) => t.f.Date === dateISO && /tech brain|brain fog/i.test(t.f.Instrument || ''));
+  if (mark) {
+    if (mark.f.End != null && mark.f.Start != null) {
+      return Math.max(0, Math.min(5, (mark.f.End - mark.f.Start) / 60));
+    }
+    return 2;
+  }
   const entry = (data.Entries || []).find((e) => e.f.Tracker === 'brain fog' && e.f.Date === dateISO);
   if (entry && entry.f.Value != null) return entry.f.Value;
   const moment = (data.Moments || []).find((m) => m.f.Date === dateISO && m.f.Value != null && /fog/i.test(m.f.Tag || ''));
@@ -134,16 +160,28 @@ function computeFog(dateISO, data) {
   return null;
 }
 
+// the snake — novelty has a body. either a moment's tag or a timeline
+// instrument seen for the first time in the loaded window can trigger it.
 function computeSnake(dateISO, data) {
-  const todays = (data.Moments || []).filter((m) => m.f.Date === dateISO && m.f.Tag);
-  if (!todays.length) return false;
-  const firstSeen = new Map();
+  const todaysTags = (data.Moments || []).filter((m) => m.f.Date === dateISO && m.f.Tag);
+  const todaysInstruments = (data.Timeline || []).filter((t) => t.f.Date === dateISO && t.f.Instrument);
+  if (!todaysTags.length && !todaysInstruments.length) return false;
+
+  const firstSeenTag = new Map();
   for (const m of data.Moments || []) {
     if (!m.f.Tag || m.f.Date > dateISO) continue;
-    const cur = firstSeen.get(m.f.Tag);
-    if (!cur || m.f.Date < cur) firstSeen.set(m.f.Tag, m.f.Date);
+    const cur = firstSeenTag.get(m.f.Tag);
+    if (!cur || m.f.Date < cur) firstSeenTag.set(m.f.Tag, m.f.Date);
   }
-  return todays.some((m) => firstSeen.get(m.f.Tag) === dateISO);
+  if (todaysTags.some((m) => firstSeenTag.get(m.f.Tag) === dateISO)) return true;
+
+  const firstSeenInstrument = new Map();
+  for (const t of data.Timeline || []) {
+    if (!t.f.Instrument || t.f.Date > dateISO) continue;
+    const cur = firstSeenInstrument.get(t.f.Instrument);
+    if (!cur || t.f.Date < cur) firstSeenInstrument.set(t.f.Instrument, t.f.Date);
+  }
+  return todaysInstruments.some((t) => firstSeenInstrument.get(t.f.Instrument) === dateISO);
 }
 
 function computeLight(dateISO, data, isToday) {
@@ -159,18 +197,20 @@ function computeLight(dateISO, data, isToday) {
   return { light: 0.5, lightHour: 13.5 };
 }
 
+// the oak's leaf mass now reads day-marks (the folded-in habits plus
+// period/wfh and anything she's added), not the old habit ledger.
 function computeHabits(dateISO, data, isToday) {
   if (isToday) {
-    const ticked = new Set(
-      (data.Ticks || []).filter((t) => t.f.Date === dateISO).map((t) => t.f.Habit)
+    const lit = new Set(
+      (data.DayMarks || []).filter((m) => m.f.Date === dateISO).map((m) => m.f.Marker)
     );
-    return activeHabitsOf(data).map((h) => ({ name: h.f.Name, done: ticked.has(h.f.Name) }));
+    return activeMarkersOf(data).map((m) => ({ name: m.f.Name, done: lit.has(m.f.Name) }));
   }
   // past days: history shows what happened, never what didn't — no clouds
-  // for habits that simply weren't tracked or weren't yet part of the roster.
-  return (data.Ticks || [])
-    .filter((t) => t.f.Date === dateISO && t.f.Habit)
-    .map((t) => ({ name: t.f.Habit, done: true }));
+  // for markers that simply weren't lit or weren't yet part of the roster.
+  return (data.DayMarks || [])
+    .filter((m) => m.f.Date === dateISO && m.f.Marker)
+    .map((m) => ({ name: m.f.Marker, done: true }));
 }
 
 export function computeWorldState(dateISO, data) {

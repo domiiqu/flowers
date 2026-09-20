@@ -99,6 +99,41 @@ export const SCHEMA = [
       { name: 'held', color: 'yellowBright' }, { name: 'broken', color: 'redLight1' } ] } },
     { name: 'Seeds', type: 'number', options: { precision: 0 } },
   ]},
+  { name: 'Markers', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+  ]},
+  { name: 'DayMarks', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Marker', type: 'singleLineText' },
+  ]},
+  { name: 'Instruments', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Glyph', type: 'singleSelect', options: { choices: [
+      { name: 'sun' }, { name: 'moon' }, { name: 'dot' } ] } },
+    { name: 'Order', type: 'number', options: { precision: 0 } },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Spans', type: 'checkbox', options: { icon: 'check', color: 'blueBright' } },
+  ]},
+  { name: 'Timeline', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Instrument', type: 'singleLineText' },
+    { name: 'Start', type: 'number', options: { precision: 0 } },
+    { name: 'End', type: 'number', options: { precision: 0 } },
+    { name: 'Note', type: 'multilineText' },
+  ]},
+  { name: 'Ratings', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Domain', type: 'singleSelect', options: { choices: [
+      { name: 'personal' }, { name: 'work' } ] } },
+    { name: 'Axis', type: 'singleSelect', options: { choices: [
+      { name: 'alignment' }, { name: 'novelty' }, { name: 'agency' } ] } },
+    { name: 'Value', type: 'number', options: { precision: 0 } },
+  ]},
 ];
 
 const DEFAULTS = {
@@ -121,6 +156,24 @@ const DEFAULTS = {
     { Name: 'a new book',                Cost: 40, Sign: '📖', Order: 3, Active: true },
     { Name: 'the thing in the cart',     Cost: 80, Sign: '🎁', Order: 4, Active: true,
       Link: 'https://example.com/replace-me-with-the-cart' },
+  ],
+  Markers: [
+    { Name: 'moved my body',        Order: 1, Active: true },
+    { Name: 'went outside',         Order: 2, Active: true },
+    { Name: 'made something',       Order: 3, Active: true },
+    { Name: 'read paper pages',     Order: 4, Active: true },
+    { Name: 'in bed before midnight', Order: 5, Active: true },
+    { Name: 'period',               Order: 6, Active: true },
+    { Name: 'wfh',                  Order: 7, Active: true },
+  ],
+  Instruments: [
+    { Name: 'woke',        Glyph: 'sun',  Order: 1, Active: true, Spans: false },
+    { Name: 'slept',       Glyph: 'moon', Order: 2, Active: true, Spans: false },
+    { Name: 'food',        Glyph: 'dot',  Order: 3, Active: true, Spans: false },
+    { Name: 'water',       Glyph: 'dot',  Order: 4, Active: true, Spans: false },
+    { Name: 'fatigue',     Glyph: 'dot',  Order: 5, Active: true, Spans: true },
+    { Name: 'despondency', Glyph: 'dot',  Order: 6, Active: true, Spans: true },
+    { Name: 'tech brain',  Glyph: 'dot',  Order: 7, Active: true, Spans: true },
   ],
 };
 
@@ -320,7 +373,11 @@ async function write(op) {
 // ------------------------------------------------------------- the state
 
 export const S = {
-  data: { Habits: [], Ticks: [], Trackers: [], Entries: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [] },
+  data: {
+    Habits: [], Ticks: [], Trackers: [], Entries: [], Shop: [], Redemptions: [],
+    Days: [], Moments: [], Hours: [], Markers: [], DayMarks: [], Instruments: [],
+    Timeline: [], Ratings: [],
+  },
   loaded: false,
   problem: null,
 };
@@ -534,6 +591,97 @@ export async function logHour(minutes, outcome) {
     S.data.Ticks.push({ id: 'tmp' + Math.random(), f: tf });
     write({ kind: 'upsert', table: 'Ticks', mergeField: 'Key', fields: tf });
   }
+}
+
+// --------------------------------------------------------- day-long events
+// markers folded in from the old habits, plus period/wfh — booleans true
+// for the whole day, not appointments. lighting one still earns a seed
+// (through the existing Ticks economy) exactly as the old ledger word did,
+// so the wallet keeps a real pulse; DayMarks itself is the world-state
+// truth the oak's leaf mass reads.
+
+export const activeMarkers = () =>
+  S.data.Markers.filter(m => m.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+
+export function markFor(date, name) {
+  return S.data.DayMarks.find(d => d.f.Key === key(date, name));
+}
+
+export async function toggleMark(date, marker) {
+  const existing = markFor(date, marker.f.Name);
+  if (existing) {
+    const t = tickFor(date, marker.f.Name);
+    if (t && t.f.Status !== 'unclaimed') return true; // gathered/withered — can't undo, stays lit
+    S.data.DayMarks = S.data.DayMarks.filter(x => x !== existing);
+    write({ kind: 'destroyByKey', table: 'DayMarks', key: existing.f.Key });
+    if (t) await untick(date, marker.f.Name);
+    return false;
+  }
+  const fields = { Key: key(date, marker.f.Name), Date: date, Marker: marker.f.Name };
+  S.data.DayMarks.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'DayMarks', mergeField: 'Key', fields });
+  await tick(date, { f: { Name: marker.f.Name } });
+  return true;
+}
+
+export async function addMarker(name) {
+  const order = 1 + S.data.Markers.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  await upsertRow('Markers', 'Name', { Name: name, Order: order, Active: true });
+}
+
+// -------------------------------------------------------------- the timeline
+// instruments placed on the day's line — position = when, width = how
+// long. replaces Moments' Sure/Time model on the day page (Moments stays
+// in the schema, just unused here).
+
+export const activeInstruments = () =>
+  S.data.Instruments.filter(i => i.f.Active).sort((a, b) => (a.f.Order || 0) - (b.f.Order || 0));
+
+export function timelineFor(date) {
+  return S.data.Timeline.filter(t => t.f.Date === date).sort((a, b) => (a.f.Start || 0) - (b.f.Start || 0));
+}
+
+export async function placeInstrument({ instrument, date, start, end, note }) {
+  const now = new Date();
+  const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const fields = { Key: `${date} ${stamp} · ${instrument}`, Date: date, Instrument: instrument, Start: Math.round(start) };
+  if (end != null) fields.End = Math.round(end);
+  if (note) fields.Note = note;
+  S.data.Timeline.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Timeline', mergeField: 'Key', fields });
+  return fields.Key;
+}
+
+export async function adjustTimeline(tkey, patch) {
+  const t = S.data.Timeline.find(x => x.f.Key === tkey);
+  if (!t) return;
+  Object.assign(t.f, patch);
+  write({ kind: 'upsert', table: 'Timeline', mergeField: 'Key', fields: { Key: tkey, ...patch } });
+}
+
+export async function removeTimeline(tkey) {
+  S.data.Timeline = S.data.Timeline.filter(x => x.f.Key !== tkey);
+  write({ kind: 'destroyByKey', table: 'Timeline', key: tkey });
+}
+
+export async function addInstrument(name, glyph) {
+  const order = 1 + S.data.Instruments.reduce((m, r) => Math.max(m, r.f.Order || 0), 0);
+  await upsertRow('Instruments', 'Name', { Name: name, Glyph: glyph || 'dot', Order: order, Active: true, Spans: false });
+}
+
+// ------------------------------------------------------------------ ratings
+// personal | work, each with three 1-5 scales: alignment, novelty, agency.
+
+export function ratingFor(date, domain, axis) {
+  return S.data.Ratings.find(r => r.f.Key === `${date} · ${domain} · ${axis}`);
+}
+
+export async function setRating(date, domain, axis, value) {
+  const fields = { Key: `${date} · ${domain} · ${axis}`, Date: date, Domain: domain, Axis: axis, Value: value };
+  const existing = ratingFor(date, domain, axis);
+  if (existing) Object.assign(existing.f, fields);
+  else S.data.Ratings.push({ id: 'tmp' + Math.random(), f: fields });
+  write({ kind: 'upsert', table: 'Ratings', mergeField: 'Key', fields });
 }
 
 // simple in-app editors (needed for sandbox; harmless with airtable)
