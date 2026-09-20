@@ -202,6 +202,15 @@ old square on iPad or landscape on desktop); the lanes, sliders and notes
 below are all sized to it and centered, so the day reads as one column.
 
 ### Phase 2, chosen: the far side & the moon-turn (the double, first face)
+
+> **Superseded in part by "the far side, v2" below (current).** The *thesis*
+> in this section stands entirely — the double-machine, data crisp /
+> uncertainty in the render, resolution kills the numinous, sleep as the
+> crossing, the pink slippery moon as the threshold. What is retired is this
+> section's *render recipe*: "far side = same territory rendered as reverse,
+> lower-res, heavier grain." The same map at worse resolution is a photocopy,
+> not a double. v2 below replaces the mechanism and keeps the law.
+
 Grounded in the user's thesis *The Double as a Triangle or a Pink and
 Slippery Moon*: the app is a **double-machine** — the plate (d1) is the
 lit, logged face; the unloggable real day is the big-D Double behind it;
@@ -235,6 +244,116 @@ the log), **uncertainty in the render** (d2 = the world).
 This is the next build after the instrument day + restored plate (this
 round): the live plate above is exactly what the moon-turn will one day
 turn over.
+
+### the far side, v2 — a place you visit (current direction)
+
+The back of the card is not another rendering of the day. **The front is a
+still — committed, printable, hung in the gallery. The back is never still,
+never the same twice, and cannot be printed.** Same day, two states of
+matter. That difference *is* the double, and it does the work the old
+grain-and-blur recipe was trying to do.
+
+**The place is continuous.** It does not fork into one plate per day; it
+accumulates. What is per-day is the **specimen** — the thing found there,
+the souvenir carried back. `Days` keeps the front face; `Specimens` keeps
+the finds.
+
+**An inhabitant, not an avatar.** An avatar of her collapses the double into
+a mirror. What lives back there is an other, unsteerable; her logged day
+reaches it only as *climate*. She sets the weather by living. It decides
+what to do about it. (The Sims pleasure was never control — it was watching
+something choose inside conditions you built.)
+
+**The law: difference, never grade.** Every day-shape yields something. A
+bad night makes a *different* creature, not a dying one; insomnia is
+fertile; the rare conditions include the chaotic ones. The moment the world
+withers when she sleeps badly it becomes a guilt machine and the card stops
+getting flipped. *God is Change* — adaptation, not judgment. This is a hard
+law, not a preference.
+
+**Rarity is computed from her own statistics**, never a fixed table. A thing
+is rare because she has only done that twice.
+
+**Storage: Airtable, one soil.** *(Rejected: world state as JSON in the repo
+written by a nightly Action — a second source of truth for no gain, when the
+front face already proves the Airtable generation pattern and a `Specimens`
+table is already a specimen cabinet: sortable, filterable, hand-editable.
+Hand-editing **is** the canon loop — she renames a thing and the world is
+bound by it. If rolling narrative context later outgrows what an aiText
+field can see, an Action writes **into** Airtable; it never becomes a second
+store.)*
+
+**The split that keeps emergence real:** the simulation is deterministic
+code (`world.js`), the generator only renders. The sim decides what a
+specimen **is** — traits, form, coloration, provenance, rarity — and those
+words go into the prompt. **Determinism lives in the description, richness
+lives in the render.** A specimen can always be regenerated identically,
+because its identity is text, not pixels. If the model improvises the world
+it goes mushy and self-contradicting by week three; if rules produce the
+state and the model only renders it, the surprise is real and the voice
+stays consistent.
+
+**One style preamble in one field**, so the whole cabinet is restyleable
+from a single cell. Style drift across a year is the failure mode to design
+against — the collection must read as one collection.
+
+**Irresolution, enforced mechanically:** unlogged stretches render *masked*,
+not absent — the place has rooms she never sees. No legend, ever. The pink
+slippery moon stays the threshold.
+
+#### motion — the back breathes
+
+Airtable returns a still, so motion happens in the browser over it. The
+reference is *Sky: Children of the Light*, and what makes that world feel
+alive is **atmosphere**, not character animation. Build order:
+
+1. **Breathing.** Living atmosphere over the generated plate — fog banks
+   drifting at different rates, grain that pulses, a slow push, light
+   temperature shifting with the actual hour of viewing. Cheap; most of the
+   feeling.
+2. **Depth.** Generate in named layers (**sky / far / mid / near**) and
+   parallax them to device tilt (`deviceorientation` — she lives on iPad and
+   phone). The biggest felt jump for the effort. **The layer spec must be in
+   the image prompt from day one** — retrofitting depth onto a flat plate
+   means regenerating everything.
+3. **Inhabitants.** A canvas layer where things move and answer touch. Here
+   the automaton finally earns its place: the day's `Timeline` lanes are
+   already a bitmap (instrument × minute), so the day is an initial
+   condition. Run it forward in the browser and let its output drive the
+   motes and the figure — deterministic seed, live motion, never twice the
+   same. The automaton is the **genome, never the visual**; she is not
+   looking at cells.
+
+*Rejected: generated video.* Cost per day, slow, style-unstable, heavy on
+mobile, and it breaks both the no-build rule and the Airtable pipeline.
+Tiers 1–3 get closer to the reference than a four-second clip would.
+
+#### the tables (to build)
+
+- **`World`** — the continuous state, one snapshot row per day, each
+  inheriting from the last (the place drifts; it is not re-invented). A past
+  card turns to the world *as it stood*. Carries the layer prompt, the
+  dispatch, and the plate image.
+- **`Specimens`** — the cabinet. Name, date found, the conditions that made
+  it, traits, rarity, image, her notes. Hand-editable: this is the canon
+  loop.
+- **`Canon`** — accepted names and facts, concatenated into every prompt.
+  The generator may not contradict it.
+
+#### still open
+
+- **Does the plate regenerate nightly, or only when the world materially
+  changes?** *(Recommended: on change.* A place you visit is not repainted
+  every night. It is cheaper, it prevents drift, and it makes regeneration
+  an **event** — when the world visibly shifts, that shift means something.
+  Day to day, the motion, the inhabitant and the specimen carry the
+  difference.)
+- **What is the place?** Not yet named. (Ark/hold in transit, a deepening
+  stratum, something else.)
+- **Does the inhabitant have a voice**, or is the dispatch an impersonal
+  instrument log?
+- **Does the far side ever show her something she does not want to see?**
+  The double either has teeth or it does not.
 
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated
