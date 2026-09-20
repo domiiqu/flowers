@@ -858,6 +858,24 @@ export async function addInstrument(name, glyph) {
   await upsertRow('Instruments', 'Name', { Name: name, Glyph: glyph || 'dot', Order: order, Active: true, Spans: false });
 }
 
+// sun (wake) and moon (sleep) are pinned, permanent lanes — the day always
+// has exactly one of each. identified by Glyph (never by Name, so renaming
+// one stays safe), and self-healing: if either is missing from the active
+// roster — a fresh sandbox before DEFAULTS ever ran, or one somehow dropped
+// out — it's created here under its canonical name. upsertRow's merge-by-
+// Name is harmless if a row named "wake"/"sleep" already exists with a
+// different glyph — vanishingly unlikely, and not a case this app defends
+// against elsewhere either.
+export async function ensureSunMoon() {
+  const active = activeInstruments();
+  if (!active.some((i) => i.f.Glyph === 'sun')) {
+    await upsertRow('Instruments', 'Name', { Name: 'wake', Glyph: 'sun', Order: 0, Active: true, Spans: false });
+  }
+  if (!active.some((i) => i.f.Glyph === 'moon')) {
+    await upsertRow('Instruments', 'Name', { Name: 'sleep', Glyph: 'moon', Order: 0, Active: true, Spans: false });
+  }
+}
+
 // ------------------------------------------------------------ ratings (grafted)
 // personal | work, each with three 1-5 scales: alignment, novelty, agency.
 

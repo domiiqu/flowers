@@ -192,9 +192,6 @@
   .inline-add-ok { min-width: 32px; min-height: 32px; color: var(--gold); font-size: 1rem; }
   .inline-add-ok:hover { color: var(--ink-strong); }
   .inline-add-label { padding: 0 4px; }
-  .glyph-pick { min-width: 40px; min-height: 40px; font-size: 1.1rem; border: 1px solid var(--line);
-    border-radius: 50%; background: var(--panel); }
-  .glyph-pick:hover { border-color: var(--gold); color: var(--ink-strong); }
 
   /* ---- the timeline, as lanes: one row per active instrument, an hour
      ruler shared across all of them. its own drag surface, excluded from
@@ -212,16 +209,22 @@
   .tl-ruler-num { position: absolute; top: 12px; transform: translateX(-50%); font-size: 0.62rem;
     font-style: italic; color: var(--ink-dim); white-space: nowrap; }
 
-  .tl-lane-label { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; font-size: 0.78rem;
-    font-style: italic; color: var(--ink); min-width: 0; }
+  .tl-lane-label { display: flex; align-items: center; flex-wrap: nowrap; gap: 2px 4px; font-size: 0.78rem;
+    font-style: italic; color: var(--ink); min-width: 0; overflow: hidden; }
   .tl-lane-glyph { color: var(--gold); font-style: normal; flex: 0 0 auto; }
-  .tl-lane-name { overflow-wrap: anywhere; line-height: 1.22; }
-  .tl-lane-now { flex: 0 0 auto; font-size: 0.62rem; font-style: italic; color: var(--gold); opacity: 0.75;
-    min-height: 32px; min-width: 32px; padding: 0 2px; }
+  /* the name is the one flexible piece — it shrinks and truncates first,
+     so glyph · now · edit (all fixed-width) never wrap onto a second line
+     or spill past the label column. */
+  .tl-lane-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; line-height: 1.22; }
+  /* inline, right after the name — quiet on purpose (small, dim, italic)
+     so it reads as a soft affordance, not a primary action. */
+  .tl-lane-now { flex: 0 0 auto; font-size: 0.6rem; font-style: italic; color: var(--gold); opacity: 0.62;
+    min-height: 22px; min-width: 0; padding: 0 2px; }
   .tl-lane-now:hover { opacity: 1; }
   /* a tiny edit affordance on the lane label, opening rename+delete inline
      — the same rename/delete infrastructure the edit sheet also carries */
-  .tl-lane-edit { flex: 0 0 auto; font-size: 0.6rem; opacity: 0.4; min-height: 28px; min-width: 22px; }
+  .tl-lane-edit { flex: 0 0 auto; font-size: 0.6rem; opacity: 0.4; min-height: 22px; min-width: 20px; }
   .tl-lane-edit:hover { opacity: 0.9; }
   .tl-lane-edit-field { width: 8em; font-size: 0.78rem; }
   .mini-x { flex: 0 0 auto; color: var(--ink-dim); font-size: 0.68rem; min-height: 28px; min-width: 22px; }
@@ -411,6 +414,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=15"></script>
+  <script type="module" src="src/main.js?v=16"></script>
 </body>
 </html>
