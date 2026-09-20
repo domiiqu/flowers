@@ -369,6 +369,17 @@
   @media (max-width: 520px) {
     .hour-clock { font-size: 3.4rem; }
   }
+
+  /* the day page is long — its hints ride at the end of the column instead
+     of floating over the content. fixed-position they landed on top of the
+     work ratings, stealing taps meant for the right-hand dots. */
+  body[data-room="day"] .hints {
+    position: static; right: auto; bottom: auto; text-align: center;
+    margin: 34px auto 10px; opacity: 0.5; line-height: 1.9;
+  }
+  body[data-room="day"] .hints a, body[data-room="day"] .hints button {
+    display: inline-block; margin: 0 9px; padding: 8px 2px;
+  }
 </style>
 </head>
 <body data-room="day">
