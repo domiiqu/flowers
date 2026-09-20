@@ -135,15 +135,6 @@
     max-width: 220px; text-align: right; line-height: 1.5; }
   .wallet .dot { color: var(--gold); }
 
-  /* the day's points, top-right — the number, and a filling-dot beneath:
-     light blue past 75%, ultramarine at 100% (same dot as the timeline) */
-  .day-tally { position: fixed; top: 14px; right: 20px; z-index: 6;
-    display: flex; flex-direction: column; align-items: center; gap: 5px; }
-  .tally-num { font-size: 1.35rem; color: var(--ink-strong); font-variant-numeric: tabular-nums; line-height: 1; }
-  .tally-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .tally-dot.near { background: #8fbce6; box-shadow: 0 0 5px #8fbce6; }
-  .tally-dot.full { background: #2f43c9; box-shadow: 0 0 7px #2f43c9; }
-
   /* ---- the day, now: a prominent date over soft schedule blocks ----- */
   .day-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
   .day-arrow { font-size: 1.4rem; min-width: 44px; min-height: 44px; opacity: 0.6; }
@@ -194,16 +185,6 @@
   .print-done { display: block; text-align: center; font-size: 0.82rem; opacity: 0.8; }
   .print-done:hover { opacity: 1; }
 
-  /* ---- day-long events: one calm, uniform pill row — the union of
-     active habits (the tick economy) and active markers ------------- */
-  .day-events { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 4px; margin: 6px auto 16px; }
-  .day-event { font-size: 0.9rem; color: var(--ink-dim); padding: 9px 10px; min-height: 40px; line-height: 1.5; }
-  .day-event.lit { color: var(--ink-strong); }
-  .day-event.add { opacity: 0.6; }
-  /* a bonus habit wears a small star — outside the day's total, points on top */
-  .day-event.bonus::after { content: '✦'; font-size: 0.62em; vertical-align: super;
-    margin-left: 2px; color: var(--gold); opacity: 0.8; }
-
   /* ---- a shared inline "+ add" idiom: never window.prompt() (an iOS
      standalone web app can silently swallow it) ------------------------ */
   .inline-add { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; vertical-align: middle; }
@@ -215,49 +196,70 @@
     border-radius: 50%; background: var(--panel); }
   .glyph-pick:hover { border-color: var(--gold); color: var(--ink-strong); }
 
-  /* ---- the timeline: instruments placed on a line, midnight to
-     midnight — its own drag surface, excluded from swipe-to-change-day
-     (see bindSwipe's interactive() check in views.js) ------------------ */
+  /* ---- the timeline, as lanes: one row per active instrument, an hour
+     ruler shared across all of them. its own drag surface, excluded from
+     swipe-to-change-day (see bindSwipe's interactive() check in views.js).
+     a two-column grid (label | track) is what makes the ruler and every
+     lane's track line up exactly — they're all the SAME grid column. --- */
   .timeline-section { margin: 0 0 26px; -webkit-touch-callout: none; user-select: none; }
-  .instrument-rail { display: flex; align-items: center; gap: 8px 10px; overflow-x: auto; padding: 4px 2px 12px;
-    -webkit-overflow-scrolling: touch; }
-  .instrument-chip { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-  .instrument-chip-body { display: flex; align-items: center; gap: 5px; border: 1px solid var(--line);
-    border-radius: 20px; padding: 8px 12px; min-height: 44px; background: var(--panel); color: var(--ink);
-    font-style: italic; touch-action: manipulation; }
-  .instrument-chip-body .glyph { color: var(--gold); font-style: normal; }
-  .instrument-chip.add { min-height: 44px; }
-  .now-tap { font-size: 0.68rem; font-style: italic; color: var(--gold); opacity: 0.75; min-height: 32px; padding: 0 4px; }
-  .now-tap:hover { opacity: 1; }
+  .tl-grid { display: grid; grid-template-columns: 84px 1fr; align-items: center;
+    row-gap: 4px; column-gap: 8px; }
 
-  .timeline-track { position: relative; height: 80px; margin: 10px 4px 6px; touch-action: pan-y; }
-  .tl-ticks .tick-col { position: absolute; top: 0; bottom: 0; width: 0; }
-  /* these two were hardcoded near-white in the original (dusk-only) build
-     — retokenized to var(--ink-dim) so they still read cleanly against
-     main's light-paper day room, not just the old dark ground. */
-  .tl-ticks .tick { position: absolute; top: 42px; height: 16px; width: 1px; background: var(--ink-dim); }
-  .tl-ticks .tick-label { position: absolute; top: 60px; left: 0; transform: translateX(-50%); font-size: 0.64rem;
+  .tl-ruler-label { min-height: 1px; }
+  .tl-ruler-track { position: relative; height: 26px; }
+  .tl-ruler-tick { position: absolute; top: 0; width: 1px; height: 7px; background: var(--ink-dim); }
+  .tl-ruler-tick.major { height: 11px; background: var(--ink-dim); opacity: 0.9; }
+  .tl-ruler-num { position: absolute; top: 12px; transform: translateX(-50%); font-size: 0.62rem;
     font-style: italic; color: var(--ink-dim); white-space: nowrap; }
-  .tl-line { position: absolute; left: 0; right: 0; top: 50px; height: 2px; background: var(--ink-dim); }
-  .tl-marks { position: absolute; inset: 0; }
-  .tl-mark { position: absolute; top: 2px; width: 44px; height: 44px; margin-left: -22px; border-radius: 50%;
-    background: none; color: var(--gold); font-size: 1rem; display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-end; padding-bottom: 4px; touch-action: none; -webkit-touch-callout: none; }
-  .tl-span { position: absolute; top: 26px; height: 18px; border-radius: 9px; background: var(--panel);
-    border: 1px solid var(--line); min-width: 18px; touch-action: none; -webkit-touch-callout: none; }
-  .tl-span-glyph { position: absolute; left: -2px; top: 50%; transform: translate(-50%, -50%); font-size: 0.86rem;
-    color: var(--gold); background: var(--bg); border-radius: 50%; width: 20px; height: 20px; display: flex;
-    align-items: center; justify-content: center; }
-  /* sits entirely to the right of the span's own body (left:100%, not a
-     negative offset that would creep back over it) so a tap on even a
-     minimum-width span still reaches the span, never the handle */
-  .tl-handle { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); width: 40px; height: 44px;
+
+  .tl-lane-label { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; font-style: italic;
+    color: var(--ink); min-width: 0; }
+  .tl-lane-glyph { color: var(--gold); font-style: normal; flex: 0 0 auto; }
+  .tl-lane-name { overflow-wrap: anywhere; line-height: 1.22; }
+  .tl-lane-now { flex: 0 0 auto; font-size: 0.62rem; font-style: italic; color: var(--gold); opacity: 0.75;
+    min-height: 32px; min-width: 32px; padding: 0 2px; }
+  .tl-lane-now:hover { opacity: 1; }
+
+  /* the lane track: a thin baseline plus generous vertical room for a
+     44px tap target, even though the placed mark itself reads smaller */
+  .tl-lane-track { position: relative; height: 44px; touch-action: pan-y; }
+  /* pointer-events:none is load-bearing: an absolutely-positioned pseudo
+     is ordered AFTER real children in paint order, so without this the
+     baseline — thin as it is — sits on top of a span/handle at exactly
+     the track's vertical center, which is exactly where every tap and
+     drag naturally lands, and would swallow the click. */
+  .tl-lane-track::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px;
+    background: var(--line); transform: translateY(-50%); pointer-events: none; }
+
+  /* larger, tonal, legible against the light-paper day room — the tone is
+     a hash of the instrument's own name (no schema field for it), used
+     through hsl() rather than any hardcoded dusk color. */
+  .tl-span { position: absolute; top: 50%; height: 24px; transform: translateY(-50%); border-radius: 12px;
+    background: hsl(var(--hue) 55% 82%); border: 1px solid hsl(var(--hue) 45% 60%);
+    min-width: 30px; touch-action: none; -webkit-touch-callout: none; }
+  .tl-span-glyph { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); font-size: 0.72rem;
+    color: var(--ink-strong); background: hsl(var(--hue) 55% 88%); border: 1px solid hsl(var(--hue) 45% 60%);
+    border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; }
+  /* both handles sit entirely OUTSIDE the span's own body (never a
+     negative offset creeping back over it), so a tap on even a
+     minimum-width span still reaches the span, never a handle — a 44px
+     hit zone on each side, with only a small visible bar inside it */
+  .tl-handle { position: absolute; top: 50%; transform: translateY(-50%); width: 26px; height: 44px;
     background: none; border: none; }
-  .tl-handle::after { content: ''; position: absolute; left: 6px; top: 50%; width: 3px; height: 14px;
-    transform: translateY(-50%); border-radius: 2px; background: var(--gold); opacity: 0.7; }
-  .tl-ghost { position: fixed; z-index: 15; transform: translate(-50%, -50%); font-size: 1.3rem; color: var(--gold);
-    opacity: 0.85; pointer-events: none; }
-  .tl-ghost[hidden] { display: none; }
+  .tl-handle-right { left: 100%; }
+  .tl-handle-left { right: 100%; }
+  .tl-handle::after { content: ''; position: absolute; top: 50%; width: 3px; height: 14px;
+    transform: translateY(-50%); border-radius: 2px; background: hsl(var(--hue) 45% 55%); opacity: 0.85; }
+  .tl-handle-right::after { left: 0; }
+  /* pulled toward the OUTER edge of its own hit zone rather than the
+     boundary — the glyph badge already sits right on the span's start
+     edge, and centering both marks there made them collide visually */
+  .tl-handle-left::after { left: auto; right: 0; }
+
+  .tl-add-row { grid-column: 1 / -1; margin-top: 4px; }
+  .tl-add-btn { opacity: 0.6; min-height: 40px; }
+  .tl-add-btn:hover { opacity: 1; }
 
   /* ---- the instrument sheet: time, a note, delete. its own capture
      surface — kept as a night layer even on the light day room, same
@@ -285,16 +287,29 @@
     font-size: 0.9rem; color: var(--ink-dim); }
   .sheet-close:hover { color: var(--ink-strong); }
 
-  /* ---- personal | work: six 1-5 scales ------------------------------- */
-  .domains { display: flex; flex-wrap: wrap; gap: 20px 28px; margin: 4px 0 26px; }
-  .domain-col { flex: 1 1 240px; min-width: 200px; }
+  /* ---- personal | work: side by side at every width, each axis a
+     delicate slider — a thin track with 5 stops, label riding above it
+     so the track gets the column's full width. ------------------------ */
+  .domains { display: flex; flex-direction: row; gap: 14px; margin: 4px 0 26px; }
+  .domain-col { flex: 1 1 0; min-width: 0; }
   .domain-col h3 { font-weight: normal; text-align: center; margin-bottom: 10px; letter-spacing: 0.05em; }
-  .rating-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
-  .rating-label { font-size: 0.78rem; flex: 0 0 auto; }
-  .rating-dots { display: flex; gap: 6px; }
-  .rating-dot { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
-    background: transparent; min-width: 34px; min-height: 34px; }
-  .rating-dot.on { background: var(--accent); border-color: var(--accent); }
+  .rating-row { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; }
+  .rating-label { font-size: 0.72rem; }
+  /* the visible track is thin (1-2px); the hit area around it is a full
+     44px tall so a thumb never needs to land exactly on the hairline */
+  .rating-hit { position: relative; height: 44px; touch-action: none; -webkit-touch-callout: none;
+    user-select: none; cursor: pointer; }
+  .rating-track { position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; background: var(--line);
+    transform: translateY(-50%); }
+  .rating-tick { position: absolute; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px;
+    border-radius: 50%; background: var(--ink-dim); opacity: 0.6; }
+  /* unset = no handle at all, just the ghosted ticks above — a real value
+     must look visibly different from "nothing chosen yet" */
+  .rating-handle { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+    border-radius: 50%; background: var(--accent); border: 1px solid var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+  .rating-handle.preview { opacity: 0.6; }
+  .rating-handle[hidden] { display: none; }
 
   /* ---- notes ---------------------------------------------------------- */
   .notes-block { margin: 4px 0 30px; }
@@ -390,6 +405,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=13"></script>
+  <script type="module" src="src/main.js?v=14"></script>
 </body>
 </html>

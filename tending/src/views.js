@@ -2,10 +2,10 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=13';
-import { dayPrint } from './print.js?v=13';
-import { computeWorldState, dayStateFields } from './world.js?v=13';
-import * as gcal from './gcal.js?v=13';
+import * as store from './store.js?v=14';
+import { dayPrint } from './print.js?v=14';
+import { computeWorldState, dayStateFields } from './world.js?v=14';
+import * as gcal from './gcal.js?v=14';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -106,11 +106,13 @@ export function holdToAct(el, { ms = 900, onComplete, onStart, onCancel } = {}) 
 export function bindSwipe(root, { onLeft, onRight, threshold = 56 }) {
   let active = false, sx = 0, sy = 0, pid = null;
   function interactive(t) {
-    // the timeline is its own horizontal-drag surface (sliding a placed
-    // instrument, stretching a span's handle) — it must never also read
-    // as a swipe-to-change-day gesture, so the whole region is excluded
-    // here on top of each drag using setPointerCapture.
-    return t.closest && t.closest('button, a, input, textarea, select, .timeline-section');
+    // the timeline (dragging a placed instrument, stretching a handle) and
+    // a rating slider (dragging its handle end to end easily exceeds the
+    // swipe threshold) are their own horizontal-drag surfaces — neither
+    // must ever also read as a swipe-to-change-day gesture, so both are
+    // excluded here on top of each one's own drag using setPointerCapture
+    // (or, for the slider, stopPropagation on its own pointerdown).
+    return t.closest && t.closest('button, a, input, textarea, select, .timeline-section, .rating-hit');
   }
   function down(e) {
     if (interactive(e.target)) { active = false; return; }
@@ -160,59 +162,23 @@ function nowMinutes() {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-// a small reusable inline "+ add" control: a button that swaps to a text
-// field (house .field style) with Enter/✓ to commit, Esc/blur to cancel.
-// She runs this as an iOS standalone web app, where window.prompt() can
-// be silently suppressed — so this never uses it.
-function buildInlineTextAdd(btnClass, btnLabel, placeholder, onSubmit) {
-  const wrap = h('div', { class: 'inline-add' });
-  function showButton() {
-    clear(wrap);
-    const btn = h('button', { class: 'plain italic ' + btnClass }, btnLabel);
-    btn.addEventListener('click', showField);
-    wrap.appendChild(btn);
-  }
-  function showField() {
-    clear(wrap);
-    let done = false;
-    const input = h('input', { class: 'field inline-add-field', placeholder });
-    function commit() {
-      const name = input.value.trim();
-      if (!name) return cancel();
-      done = true;
-      onSubmit(name);
-      showButton();
-    }
-    function cancel() {
-      if (done) return;
-      done = true;
-      showButton();
-    }
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); commit(); }
-      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-    });
-    // the blur-vs-click race: tapping ✓ blurs the input first: defer the
-    // cancel so a synchronous click on ✓ (which sets `done`) wins.
-    input.addEventListener('blur', () => setTimeout(cancel, 120));
-    const ok = h('button', { class: 'plain inline-add-ok' }, '✓');
-    ok.addEventListener('pointerdown', (e) => e.preventDefault());
-    ok.addEventListener('click', commit);
-    wrap.appendChild(input);
-    wrap.appendChild(ok);
-    setTimeout(() => input.focus(), 0);
-  }
-  showButton();
-  return wrap;
+// a deterministic tone per instrument name (its lane and marks' fill) — no
+// schema field for this, so it's derived, same spirit as habit identity
+// being a hash of the name elsewhere in this app.
+function hueFor(name) {
+  let hh = 0;
+  const s = String(name || '');
+  for (let i = 0; i < s.length; i++) hh = (hh * 31 + s.charCodeAt(i)) >>> 0;
+  return hh % 360;
 }
 
-// same idea, for a new instrument: name, then a tiny glyph pick (☀/☾/·)
+// for a new instrument: name, then a tiny glyph pick (☀/☾/·)
 // in place of the "+" chip — no window.prompt() anywhere in this flow.
 function buildInstrumentAdd(onSubmit) {
   const wrap = h('div', { class: 'inline-add' });
   function showButton() {
     clear(wrap);
-    const btn = h('button', { class: 'plain italic instrument-chip add' }, '+ instrument');
+    const btn = h('button', { class: 'plain italic tl-add-btn' }, '+ instrument');
     btn.addEventListener('click', showField);
     wrap.appendChild(btn);
   }
@@ -261,15 +227,9 @@ export function mountDay(app, date) {
   const root = h('div', { class: 'room' });
   app.appendChild(root);
 
-  // top-right: the day's points — the sum of the point values of the habits
-  // done today (each habit's worth is set in tend). A dot appears under the
-  // number as the day fills: light blue past 75%, ultramarine at 100%.
-  // (The seed economy — waiting, gathering, the shop — is hidden for now.)
-  const tally = h('div', { class: 'day-tally', 'aria-label': 'points today' });
-  app.appendChild(tally);
-
   // the date itself is the page's face now — big and quiet, the arrows
-  // small beside it.
+  // small beside it. (seeds/shop are retired from this page — see the
+  // hints below — so there's no point counter riding the corner any more.)
   const header = h('div', { class: 'day-head' });
   header.appendChild(h('button', { class: 'plain day-arrow', 'aria-label': 'previous day',
     onclick: () => (location.hash = `#/day/${store.addDays(date, -1)}`) }, '‹'));
@@ -301,38 +261,18 @@ export function mountDay(app, date) {
   const schedule = h('div', { class: 'schedule' });
   root.appendChild(schedule);
 
-  // the timeline — instruments placed on a line, midnight to midnight.
-  // its own drag surface: excluded from swipe-to-change-day (see
-  // bindSwipe's interactive() check) and every drag inside it captures
-  // the pointer, so a horizontal slide never bubbles into that handler.
-  // REPLACES the old ledger/hours-line/moments-capture apparatus.
+  // the timeline, rebuilt as LANES — one lane per active instrument, an
+  // hour ruler shared across all of them via one CSS grid (so the ruler
+  // and every lane's track share the exact same x-axis). its own drag
+  // surface: excluded from swipe-to-change-day (see bindSwipe's
+  // interactive() check) and every drag inside it captures the pointer,
+  // so a horizontal slide never bubbles into that handler.
   const timelineSection = h('div', { class: 'timeline-section day-col' });
   root.appendChild(timelineSection);
-  const rail = h('div', { class: 'instrument-rail' });
-  const track = h('div', { class: 'timeline-track' });
-  const ticksLayer = h('div', { class: 'tl-ticks' });
-  const line = h('div', { class: 'tl-line' });
-  const marksLayer = h('div', { class: 'tl-marks' });
-  track.appendChild(ticksLayer);
-  track.appendChild(line);
-  track.appendChild(marksLayer);
-  timelineSection.appendChild(rail);
-  timelineSection.appendChild(track);
-  for (let hr = 0; hr <= 24; hr += 6) {
-    const pct = (hr / 24) * 100;
-    const col = h('div', { class: 'tick-col', style: `left:${pct}%` });
-    col.appendChild(h('div', { class: 'tick' }));
-    if (hr === 6 || hr === 12 || hr === 18) col.appendChild(h('span', { class: 'tick-label' }, String(hr)));
-    ticksLayer.appendChild(col);
-  }
+  const lanesGrid = h('div', { class: 'tl-grid' });
+  timelineSection.appendChild(lanesGrid);
 
-  // day-long events — the union of active habits (the existing tick
-  // economy) and active markers (Period, WFH, anything added inline).
-  // REPLACES the old provenance ledger; drives the oak's leaf mass.
-  const dayEvents = h('div', { class: 'day-events day-col' });
-  root.appendChild(dayEvents);
-
-  // personal | work — six 1-5 scales
+  // personal | work — side by side at every width, each a delicate slider
   const domains = h('div', { class: 'domains day-col' });
   root.appendChild(domains);
 
@@ -341,12 +281,11 @@ export function mountDay(app, date) {
   root.appendChild(notesBlock);
 
   const hints = h('div', { class: 'hints' }, [
-    h('a', { href: '#/shop' }, 'the shop'),
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/gallery' }, 'the gallery'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
-  app.appendChild(hints);
+  root.appendChild(hints);
 
   function plateSize() {
     const w = Math.round(root.clientWidth || plate.clientWidth || window.innerWidth - 40);
@@ -368,25 +307,6 @@ export function mountDay(app, date) {
   }
   function onResize() { renderPlate(); }
   window.addEventListener('resize', onResize);
-
-  function dayPointsInfo() {
-    const habits = store.activeHabits();
-    let earned = 0, total = 0;
-    for (const hb of habits) {
-      const pts = hb.f.Seeds || 0;
-      const done = !!store.tickFor(date, hb.f.Name);
-      if (hb.f.Bonus) { if (done) earned += pts; }   // bonus: adds when done, never in the total
-      else { total += pts; if (done) earned += pts; } // required: counts both ways
-    }
-    return { earned, total, ratio: total ? earned / total : (earned > 0 ? 1 : 0) };
-  }
-  function renderTally() {
-    clear(tally);
-    const { earned, ratio } = dayPointsInfo();
-    tally.appendChild(h('div', { class: 'tally-num' }, String(earned)));
-    if (ratio >= 1) tally.appendChild(h('span', { class: 'tally-dot full' }));
-    else if (ratio >= 0.75) tally.appendChild(h('span', { class: 'tally-dot near' }));
-  }
 
   // ---- the schedule ---------------------------------------------------
   // soft blocks, not a poem. Google Calendar when it's connected;
@@ -529,130 +449,69 @@ export function mountDay(app, date) {
     store.saveDayState(date, dayStateFields(date, store.S.data));
   }
 
-  // ---------------------------------------------------------- day-long events
-  // one calm, uniform pill row: the union of active habits (the existing
-  // tick economy) and active markers (Period, WFH, anything added inline).
-  // a bonus habit still wears its ✦; markers and habits otherwise look
-  // exactly alike, on purpose — this is one idea (a day-event), not two.
-
-  function renderDayEvents() {
-    clear(dayEvents);
-    const items = [...store.activeHabits(), ...store.activeMarkers()];
-    if (!items.length) {
-      dayEvents.appendChild(h('div', { class: 'dim italic' }, 'no day-events yet — tend the garden.'));
-    }
-    for (const item of items) {
-      const isHabit = store.S.data.Habits.includes(item);
-      const lit = isHabit ? !!store.tickFor(date, item.f.Name) : !!store.markFor(date, item.f.Name);
-      const btn = h('button', { class: 'plain italic day-event' + (lit ? ' lit' : '') + (isHabit && item.f.Bonus ? ' bonus' : '') },
-        item.f.Name || '');
-      btn.addEventListener('click', async () => {
-        await store.toggleDayEvent(date, item);
-        renderDayEvents();
-        renderTally();
-        renderPlate(true);
-        scheduleDaySync();
-      });
-      dayEvents.appendChild(btn);
-    }
-    dayEvents.appendChild(buildInlineTextAdd('day-event add', '+ add', 'a new day-event…', async (name) => {
-      await store.addMarker(name);
-      renderDayEvents();
-    }));
-  }
-
   // ------------------------------------------------------------- the timeline
+  // one lane per active instrument, all sharing one x-axis (0..1440
+  // minutes) with the ruler above. no more rail/drag-a-chip — the lane
+  // itself IS the instrument, so a tap on its own empty track places it.
+  // every mark stretches from both edges (the Spans flag is ignored).
 
   function minutesToPct(min) { return Math.max(0, Math.min(100, (min / 1440) * 100)); }
 
-  function glyphFor(instrumentName) {
-    const inst = store.S.data.Instruments.find((i) => i.f.Name === instrumentName);
-    return glyphChar(inst && inst.f.Glyph);
+  function positionMarkEl(el, row) {
+    el.style.left = `${minutesToPct(row.f.Start)}%`;
+    el.style.width = `${minutesToPct((row.f.End != null ? row.f.End : row.f.Start + 30) - row.f.Start)}%`;
   }
 
-  async function dropInstrument(instrument, start) {
-    const end = instrument.f.Spans ? Math.min(1439, start + 30) : undefined;
-    await store.placeInstrument({ instrument: instrument.f.Name, date, start, end });
+  async function placeOn(inst, start) {
+    const s = Math.max(0, Math.min(1409, Math.round(start)));
+    const end = Math.min(1439, s + 30);
+    await store.placeInstrument({ instrument: inst.f.Name, date, start: s, end });
     renderMarks();
     renderPlate(true);
     scheduleDaySync();
   }
 
-  // dragging a rail chip: pointerdown arms a "pending drag" watch, not a
-  // drag. moving mostly DOWN first (or a short hold with no sideways
-  // movement) engages it — capture the pointer, show a floating glyph
-  // ghost, suppress the rail's own scroll for this gesture. moving
-  // mostly SIDEWAYS first instead does nothing further (no capture, no
-  // preventDefault), so the rail's native horizontal scroll just
-  // happens, untouched. dropping while dragging, with the pointer over
-  // (or near) the track, places the instrument at that x's time.
-  function bindChipDrag(chipBody, instrument) {
-    let pid = null, sx = 0, sy = 0, dragging = false, holdTimer = null;
-    function reset() {
-      clearTimeout(holdTimer);
-      pid = null; dragging = false;
-      ghost.hidden = true;
-    }
-    function moveGhost(x, y) {
-      ghost.style.left = `${x}px`;
-      ghost.style.top = `${y}px`;
-    }
-    function engage(e) {
-      if (dragging) return;
-      dragging = true;
-      try { chipBody.setPointerCapture(pid); } catch {}
-      ghost.hidden = false;
-      ghost.textContent = glyphChar(instrument.f.Glyph);
-      moveGhost(e.clientX, e.clientY);
-    }
+  // tap-to-place: pointerdown arms a watch, not a drag; if the pointer
+  // lifts again without real movement (a tap, not the start of a page
+  // scroll — the whole .timeline-section is excluded from bindSwipe and
+  // every mark's own drag stopPropagates, so a plain tap here always
+  // means "empty track"), place the lane's instrument at that x's time.
+  function bindLaneTap(trackEl, inst) {
+    let pid = null, sx = 0, sy = 0, moved = false;
     function down(e) {
       if (pid != null) return;
-      pid = e.pointerId; sx = e.clientX; sy = e.clientY; dragging = false;
-      holdTimer = setTimeout(() => engage(e), 150);
+      pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false;
     }
     function move(e) {
       if (pid !== e.pointerId) return;
-      const dx = e.clientX - sx, dy = e.clientY - sy;
-      if (!dragging) {
-        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) engage(e);
-        else if (Math.abs(dx) > 10) { reset(); return; }
-        else return;
-      }
-      e.preventDefault();
-      moveGhost(e.clientX, e.clientY);
+      if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) moved = true;
     }
     function up(e) {
       if (pid !== e.pointerId) return;
-      const wasDragging = dragging;
-      const trackRect = track.getBoundingClientRect();
-      reset();
-      if (!wasDragging) return;
-      const withinX = e.clientX >= trackRect.left - 20 && e.clientX <= trackRect.right + 20;
-      const withinY = e.clientY >= trackRect.top - 40 && e.clientY <= trackRect.bottom + 60;
-      if (!withinX || !withinY) return; // dropped away from the line — cancelled
-      const frac = Math.max(0, Math.min(1, (e.clientX - trackRect.left) / trackRect.width));
-      dropInstrument(instrument, Math.round(frac * 1439));
+      const wasMoved = moved;
+      pid = null; moved = false;
+      if (wasMoved) return;
+      const r = trackEl.getBoundingClientRect();
+      if (!r.width) return;
+      const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      placeOn(inst, frac * 1440);
     }
-    chipBody.addEventListener('pointerdown', down);
-    chipBody.addEventListener('pointermove', move);
-    chipBody.addEventListener('pointerup', up);
-    chipBody.addEventListener('pointercancel', reset);
+    trackEl.addEventListener('pointerdown', down);
+    trackEl.addEventListener('pointermove', move);
+    trackEl.addEventListener('pointerup', up);
+    trackEl.addEventListener('pointercancel', () => { pid = null; moved = false; });
   }
 
-  function positionMarkEl(el, row) {
-    el.style.left = `${minutesToPct(row.f.Start)}%`;
-    if (row.f.End != null) el.style.width = `${minutesToPct(row.f.End - row.f.Start)}%`;
-  }
-
-  // a placed mark: dragging its body slides Start (and End, preserving
-  // duration); dragging its handle (spans only) adjusts End alone. a tap
-  // (near-zero movement) opens the edit sheet instead. setPointerCapture
+  // a placed mark: dragging its body retimes it (Start and End shift
+  // together, preserving duration); dragging the left handle moves Start
+  // alone; dragging the right handle moves End alone. a tap (near-zero
+  // movement on the body) opens the edit sheet instead. setPointerCapture
   // + stopPropagation on every one of these so a horizontal slide never
   // reaches bindSwipe — belt & suspenders alongside .timeline-section
   // already being excluded from swipe's own interactive() check.
-  function bindMarkDrag(el, row, handle) {
+  function bindMarkDrag(el, row, trackEl, leftHandle, rightHandle) {
     const WOBBLE = 8;
-    let pid = null, sx = 0, sy = 0, moved = false, startStart = 0, startEnd = null;
+    let pid = null, sx = 0, sy = 0, moved = false, startStart = 0, startEnd = 0;
     function down(e) {
       if (pid != null) return;
       pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false;
@@ -666,104 +525,130 @@ export function mountDay(app, date) {
       if (!moved && (Math.abs(dx) > WOBBLE || Math.abs(dy) > WOBBLE)) moved = true;
       if (!moved) return;
       e.preventDefault();
-      const trackRect = track.getBoundingClientRect();
-      const deltaMin = (dx / trackRect.width) * 1440;
-      const newStart = Math.max(0, Math.min(1439, Math.round(startStart + deltaMin)));
+      const r = trackEl.getBoundingClientRect();
+      const deltaMin = (dx / r.width) * 1440;
+      const dur = startEnd - startStart;
+      const newStart = Math.max(0, Math.min(1440 - dur, Math.round(startStart + deltaMin)));
       row.f.Start = newStart;
-      if (startEnd != null) row.f.End = newStart + (startEnd - startStart);
+      row.f.End = newStart + dur;
       positionMarkEl(el, row);
     }
     function up(e) {
       if (pid !== e.pointerId) return;
       pid = null;
       if (!moved) { openInstrumentSheet(row); return; }
-      const patch = { Start: row.f.Start };
-      if (row.f.End != null) patch.End = row.f.End;
-      store.adjustTimeline(row.f.Key, patch);
+      store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
       renderPlate(true);
       scheduleDaySync();
     }
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', () => { pid = null; });
+    el.addEventListener('pointercancel', () => { pid = null; moved = false; });
 
-    if (!handle) return;
-    let hpid = null, hsx = 0, hStartEnd = 0;
-    function hdown(e) {
-      if (hpid != null) return;
-      hpid = e.pointerId; hsx = e.clientX; hStartEnd = row.f.End;
-      try { handle.setPointerCapture(hpid); } catch {}
-      e.stopPropagation();
+    bindHandle(leftHandle, 'left');
+    bindHandle(rightHandle, 'right');
+
+    function bindHandle(handle, side) {
+      let hpid = null, hsx = 0, hStart = 0, hEnd = 0;
+      function hdown(e) {
+        if (hpid != null) return;
+        hpid = e.pointerId; hsx = e.clientX; hStart = row.f.Start; hEnd = row.f.End;
+        try { handle.setPointerCapture(hpid); } catch {}
+        e.stopPropagation();
+      }
+      function hmove(e) {
+        if (hpid !== e.pointerId) return;
+        e.preventDefault();
+        const r = trackEl.getBoundingClientRect();
+        const deltaMin = ((e.clientX - hsx) / r.width) * 1440;
+        if (side === 'right') {
+          row.f.End = Math.max(hStart + 5, Math.min(1439, Math.round(hEnd + deltaMin)));
+        } else {
+          row.f.Start = Math.min(hEnd - 5, Math.max(0, Math.round(hStart + deltaMin)));
+        }
+        positionMarkEl(el, row);
+      }
+      function hup(e) {
+        if (hpid !== e.pointerId) return;
+        hpid = null;
+        store.adjustTimeline(row.f.Key, { Start: row.f.Start, End: row.f.End });
+        renderPlate(true);
+        scheduleDaySync();
+      }
+      handle.addEventListener('pointerdown', hdown);
+      handle.addEventListener('pointermove', hmove);
+      handle.addEventListener('pointerup', hup);
+      handle.addEventListener('pointercancel', () => { hpid = null; });
     }
-    function hmove(e) {
-      if (hpid !== e.pointerId) return;
-      e.preventDefault();
-      const trackRect = track.getBoundingClientRect();
-      const deltaMin = ((e.clientX - hsx) / trackRect.width) * 1440;
-      row.f.End = Math.max(row.f.Start + 5, Math.min(1439, Math.round(hStartEnd + deltaMin)));
-      positionMarkEl(el, row);
-    }
-    function hup(e) {
-      if (hpid !== e.pointerId) return;
-      hpid = null;
-      store.adjustTimeline(row.f.Key, { End: row.f.End });
-      renderPlate(true);
-      scheduleDaySync();
-    }
-    handle.addEventListener('pointerdown', hdown);
-    handle.addEventListener('pointermove', hmove);
-    handle.addEventListener('pointerup', hup);
-    handle.addEventListener('pointercancel', () => { hpid = null; });
   }
+
+  // name -> that lane's track element, rebuilt whenever the instrument
+  // roster changes (renderLanes); marks alone re-render far more often
+  // (any drag/place/delete), so they're a separate, cheaper pass.
+  const laneTracks = new Map();
 
   function renderMarks() {
-    clear(marksLayer);
+    for (const trackEl of laneTracks.values()) clear(trackEl);
     for (const row of store.timelineFor(date)) {
-      const glyph = glyphFor(row.f.Instrument);
-      if (row.f.End != null) {
-        const span = h('div', { class: 'tl-span' });
-        positionMarkEl(span, row);
-        span.appendChild(h('span', { class: 'tl-span-glyph' }, glyph));
-        const handle = h('button', { class: 'plain tl-handle', 'aria-label': 'adjust duration' });
-        span.appendChild(handle);
-        bindMarkDrag(span, row, handle);
-        marksLayer.appendChild(span);
-      } else {
-        const mark = h('button', { class: 'plain tl-mark' }, glyph);
-        positionMarkEl(mark, row);
-        bindMarkDrag(mark, row, null);
-        marksLayer.appendChild(mark);
-      }
+      const trackEl = laneTracks.get(row.f.Instrument);
+      const inst = store.S.data.Instruments.find((i) => i.f.Name === row.f.Instrument);
+      if (!trackEl || !inst) continue; // its instrument was deactivated/renamed since — no lane to host it
+      const span = h('div', { class: 'tl-span' });
+      span.style.setProperty('--hue', hueFor(inst.f.Name));
+      positionMarkEl(span, row);
+      span.appendChild(h('span', { class: 'tl-span-glyph' }, glyphChar(inst.f.Glyph)));
+      const leftHandle = h('button', { class: 'plain tl-handle tl-handle-left', 'aria-label': 'adjust start' });
+      const rightHandle = h('button', { class: 'plain tl-handle tl-handle-right', 'aria-label': 'adjust end' });
+      span.appendChild(leftHandle);
+      span.appendChild(rightHandle);
+      bindMarkDrag(span, row, trackEl, leftHandle, rightHandle);
+      trackEl.appendChild(span);
     }
   }
 
-  function renderRail() {
-    clear(rail);
+  function renderLanes() {
+    clear(lanesGrid);
+    laneTracks.clear();
+
+    // the hour ruler — a tick every hour, a number every 3 — sharing the
+    // grid's track column so it lines up exactly with every lane below it.
+    lanesGrid.appendChild(h('div', { class: 'tl-ruler-label' }));
+    const ruler = h('div', { class: 'tl-ruler-track' });
+    for (let hr = 0; hr <= 24; hr++) {
+      const pct = (hr / 24) * 100;
+      ruler.appendChild(h('div', { class: 'tl-ruler-tick' + (hr % 3 === 0 ? ' major' : ''), style: `left:${pct}%` }));
+      if (hr % 3 === 0 && hr < 24) ruler.appendChild(h('span', { class: 'tl-ruler-num', style: `left:${pct}%` }, String(hr)));
+    }
+    lanesGrid.appendChild(ruler);
+
     for (const inst of store.activeInstruments()) {
-      const chip = h('div', { class: 'instrument-chip' });
-      const body = h('button', { class: 'plain instrument-chip-body' }, [
-        h('span', { class: 'glyph' }, glyphChar(inst.f.Glyph)),
-        h('span', { class: 'name' }, inst.f.Name),
+      const label = h('div', { class: 'tl-lane-label' }, [
+        h('span', { class: 'tl-lane-glyph' }, glyphChar(inst.f.Glyph)),
+        h('span', { class: 'tl-lane-name' }, inst.f.Name),
       ]);
-      chip.appendChild(body);
       if (date === today) {
-        const nowTap = h('button', { class: 'plain now-tap' }, 'now');
-        nowTap.addEventListener('click', (e) => { e.stopPropagation(); dropInstrument(inst, nowMinutes()); });
-        chip.appendChild(nowTap);
+        const nowBtn = h('button', { class: 'plain tl-lane-now' }, 'now');
+        nowBtn.addEventListener('click', () => placeOn(inst, nowMinutes()));
+        label.appendChild(nowBtn);
       }
-      bindChipDrag(body, inst);
-      rail.appendChild(chip);
+      const laneTrack = h('div', { class: 'tl-lane-track' });
+      laneTrack.style.setProperty('--hue', hueFor(inst.f.Name));
+      bindLaneTap(laneTrack, inst);
+      laneTracks.set(inst.f.Name, laneTrack);
+      lanesGrid.appendChild(label);
+      lanesGrid.appendChild(laneTrack);
     }
-    rail.appendChild(buildInstrumentAdd(async (name, glyph) => {
-      await store.addInstrument(name, glyph);
-      renderRail();
-    }));
-  }
 
-  // the floating drag ghost — fixed to the viewport, follows the pointer
-  const ghost = h('div', { class: 'tl-ghost', hidden: true });
-  app.appendChild(ghost);
+    const addRow = h('div', { class: 'tl-add-row' });
+    addRow.appendChild(buildInstrumentAdd(async (name, glyph) => {
+      await store.addInstrument(name, glyph);
+      renderLanes();
+    }));
+    lanesGrid.appendChild(addRow);
+
+    renderMarks();
+  }
 
   // the instrument edit sheet — time (+ duration for a span), a note,
   // delete. Start/End are edited by re-dragging on the line itself.
@@ -812,8 +697,70 @@ export function mountDay(app, date) {
   }
 
   // ------------------------------------------------------- personal | work
+  // a delicate 1-5 slider: a thin track, 5 tick stops, a handle that only
+  // appears once a value is set (unset reads as visibly bare, not "3-ish").
+  // tap anywhere to jump to the nearest stop; drag continuously with
+  // snapping; both paths end at the same commit, so there's no special
+  // casing between "a tap" and "a drag that didn't move".
 
   const AXES = ['alignment', 'novelty', 'agency'];
+
+  function buildRatingSlider(domain, axis) {
+    const hit = h('div', { class: 'rating-hit', role: 'slider', 'aria-label': `${domain} ${axis}` });
+    const track = h('div', { class: 'rating-track' });
+    for (let n = 1; n <= 5; n++) track.appendChild(h('span', { class: 'rating-tick', style: `left:${(n - 1) / 4 * 100}%` }));
+    const handle = h('div', { class: 'rating-handle', hidden: true });
+    track.appendChild(handle);
+    hit.appendChild(track);
+
+    function stopPct(n) { return `${(n - 1) / 4 * 100}%`; }
+    function nearestStop(clientX) {
+      const r = track.getBoundingClientRect();
+      if (!r.width) return 1;
+      const pct = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      return Math.round(pct * 4) + 1;
+    }
+    function paint() {
+      const rec = store.ratingFor(date, domain, axis);
+      const val = rec ? rec.f.Value : null;
+      handle.hidden = !val;
+      if (val) { handle.style.left = stopPct(val); handle.classList.remove('preview'); }
+    }
+    let pid = null;
+    function down(e) {
+      pid = e.pointerId;
+      try { hit.setPointerCapture(pid); } catch {}
+      const n = nearestStop(e.clientX);
+      handle.hidden = false;
+      handle.classList.add('preview');
+      handle.style.left = stopPct(n);
+      e.preventDefault();
+      // belt & suspenders alongside .rating-hit already being excluded
+      // from bindSwipe's own interactive() check: dragging end to end
+      // easily exceeds the swipe threshold, and must never change the day.
+      e.stopPropagation();
+    }
+    function move(e) {
+      if (pid !== e.pointerId) return;
+      handle.style.left = stopPct(nearestStop(e.clientX));
+    }
+    async function up(e) {
+      if (pid !== e.pointerId) return;
+      pid = null;
+      const n = nearestStop(e.clientX);
+      handle.classList.remove('preview');
+      await store.setRating(date, domain, axis, n);
+      paint();
+      scheduleDaySync();
+    }
+    hit.addEventListener('pointerdown', down);
+    hit.addEventListener('pointermove', move);
+    hit.addEventListener('pointerup', up);
+    hit.addEventListener('pointercancel', () => { pid = null; paint(); });
+    paint();
+    return hit;
+  }
+
   function renderDomains() {
     clear(domains);
     for (const domain of ['personal', 'work']) {
@@ -821,24 +768,8 @@ export function mountDay(app, date) {
       col.appendChild(h('h3', { class: 'italic' }, domain));
       for (const axis of AXES) {
         const rowEl = h('div', { class: 'rating-row' });
-        rowEl.appendChild(h('span', { class: 'rating-label italic dim' }, axis));
-        const dotsWrap = h('div', { class: 'rating-dots' });
-        rowEl.appendChild(dotsWrap);
-        function paintDots() {
-          clear(dotsWrap);
-          const rec = store.ratingFor(date, domain, axis);
-          const val = rec ? rec.f.Value || 0 : 0;
-          for (let n = 1; n <= 5; n++) {
-            const dot = h('button', { class: 'rating-dot' + (n <= val ? ' on' : ''), 'aria-label': `${axis} ${n}` });
-            dot.addEventListener('click', async () => {
-              await store.setRating(date, domain, axis, n);
-              paintDots();
-              scheduleDaySync();
-            });
-            dotsWrap.appendChild(dot);
-          }
-        }
-        paintDots();
+        rowEl.appendChild(h('div', { class: 'rating-label italic dim' }, axis));
+        rowEl.appendChild(buildRatingSlider(domain, axis));
         col.appendChild(rowEl);
       }
       domains.appendChild(col);
@@ -864,13 +795,10 @@ export function mountDay(app, date) {
     notesBlock.appendChild(ta);
   }
 
-  renderTally();
   renderPlate();
   renderPrint();
   renderSchedule();
-  renderRail();
-  renderMarks();
-  renderDayEvents();
+  renderLanes();
   renderDomains();
   renderNotes();
 
