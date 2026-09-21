@@ -2,11 +2,11 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=17';
-import { dayStateFields, computeWorldState } from './world.js?v=17';
-import { farSideFor } from './farside.js?v=17';
-import * as farview from './farview.js?v=17';
-import * as gcal from './gcal.js?v=17';
+import * as store from './store.js?v=18';
+import { dayStateFields, computeWorldState } from './world.js?v=18';
+import { farSideFor } from './farside.js?v=18';
+import * as farview from './farview.js?v=18';
+import * as gcal from './gcal.js?v=18';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -14,15 +14,10 @@ import * as gcal from './gcal.js?v=17';
 const PLATE_FIELD = 'Plate generator';
 function plateImageUrl(row) {
   if (!row) return '';
-  const v = row.f[PLATE_FIELD];
-  // attachment field: Airtable appends, so the last item is the newest plate.
-  // across repeated test runs a day accumulates many — show the most recent.
-  if (Array.isArray(v) && v.length) {
-    const a = v[v.length - 1];
-    if (a && a.url) return a.url;
-  }
-  if (typeof v === 'string' && /^https?:\/\//.test(v)) return v; // url/text shape
-  return '';
+  // a regenerated day accumulates every version it has ever had; always the
+  // newest. store.latestImageUrl reads the generator's own filename stamp
+  // rather than trusting position — see the note there.
+  return store.latestImageUrl(row.f[PLATE_FIELD]);
 }
 
 // ------------------------------------------------------------------ dom

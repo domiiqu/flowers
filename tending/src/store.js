@@ -312,6 +312,52 @@ export function connected() {
   return !!(s.pat && s.baseId);
 }
 
+// ------------------------------------------------------ generated images
+// Airtable's generative image fields UNION-MERGE: regenerating adds a new
+// image to the field instead of replacing what was there, so any record
+// that has been regenerated carries every version it has ever had. (The
+// aiText fields overwrite themselves; the image fields do not.)
+//
+// The observed order in this base is NEWEST FIRST — the opposite of the
+// append order you would assume — which is how "take the last one" quietly
+// pinned the far side to its very first render forever. So don't guess by
+// position: the generator stamps the time into the filename
+// (Image_September_21_2026_12_06_AM.jpeg), so read that and take the real
+// maximum, falling back to position 0 only when nothing parses.
+
+const MONTHS = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+};
+
+function stampOf(filename) {
+  const m = /_([A-Za-z]+)_(\d{1,2})_(\d{4})_(\d{1,2})_(\d{2})_(AM|PM)\./i.exec(String(filename || ''));
+  if (!m) return null;
+  const mon = MONTHS[m[1].toLowerCase()];
+  if (mon === undefined) return null;
+  let hour = Number(m[4]) % 12;
+  if (/pm/i.test(m[6])) hour += 12;
+  return Date.UTC(Number(m[3]), mon, Number(m[2]), hour, Number(m[5]));
+}
+
+// the newest image in an attachment field, as a url. Also accepts the
+// url/text shape, so a field swapped to a plain url keeps working.
+export function latestImageUrl(value) {
+  if (Array.isArray(value) && value.length) {
+    let best = null, bestAt = -Infinity;
+    for (const a of value) {
+      if (!a || !a.url) continue;
+      const at = stampOf(a.filename);
+      if (at != null && at > bestAt) { bestAt = at; best = a; }
+    }
+    if (best) return best.url;
+    const any = value.find((a) => a && a.url); // newest-first is the observed order
+    return any ? any.url : '';
+  }
+  if (typeof value === 'string' && /^https?:\/\//.test(value)) return value;
+  return '';
+}
+
 // ------------------------------------------------------- airtable client
 
 const API = 'https://api.airtable.com/v0';
