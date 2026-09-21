@@ -13,7 +13,7 @@
 // plate generated in separable layers, which is why the layer spec is in
 // the image prompt from the first day.
 
-import * as store from './store.js?v=17';
+import * as store from './store.js?v=18';
 
 const PLATE_FIELD = 'Plate';
 
@@ -40,12 +40,14 @@ function plateFor(dateISO) {
     .filter((w) => w.f.Key && w.f.Key <= dateISO)
     .sort((a, b) => (a.f.Key < b.f.Key ? 1 : -1));
   for (const row of rows) {
-    const v = row.f[PLATE_FIELD];
-    if (Array.isArray(v) && v.length) {
-      const a = v[v.length - 1];
-      if (a && a.url) return { url: a.url, from: row.f.Key, row };
-    }
-    if (typeof v === 'string' && /^https?:\/\//.test(v)) return { url: v, from: row.f.Key, row };
+    // the far side is impermanent by design: any edit regenerates it, and the
+    // image field union-merges rather than replacing, so a day carries every
+    // plate it has ever had. Always the newest — that impermanence is the
+    // point, and showing a stale one quietly freezes the place in its first
+    // render. store.latestImageUrl reads the generator's filename stamp
+    // rather than trusting array position.
+    const url = store.latestImageUrl(row.f[PLATE_FIELD]);
+    if (url) return { url, from: row.f.Key, row };
   }
   return null;
 }
