@@ -375,7 +375,6 @@
   }
   .day-object-img { object-fit: cover; }
   .day-object-sigil svg { display: block; width: 100%; height: 100%; }
-  .day-object-verb { font-size: 0.62rem; margin-top: 3px; letter-spacing: 0.06em; }
 
   /* ------------------------------------------------------ the cupboard ---
      one shelf, two provenances: what the far side gave her and what she
@@ -385,8 +384,6 @@
   .shelf-url { flex: 2 1 14rem; }
   .shelf-title { flex: 1 1 10rem; }
   .shelf-add { white-space: nowrap; }
-  .shelf-section { margin-bottom: 26px; }
-  .shelf-heading { font-size: 0.8rem; letter-spacing: 0.08em; margin-bottom: 10px; }
   .shelf-grid {
     display: grid; gap: 16px;
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -397,6 +394,12 @@
   .shelf-card {
     perspective: 900px; cursor: pointer;
     -webkit-touch-callout: none; user-select: none; touch-action: manipulation;
+  }
+  /* the card carries the hold now, so the progress mark has to be visible
+     at card scale — the hairline that suited a text line disappears here */
+  .shelf-card.hold::after {
+    left: 0; bottom: 0; height: 3px; border-radius: 0 2px 2px 0;
+    background: rgba(232, 160, 200, 0.9); z-index: 4;
   }
   .shelf-faces {
     position: relative; width: 100%; aspect-ratio: 4 / 5;
@@ -424,10 +427,8 @@
   .shelf-lt-hint {
     font-size: 0.64rem; letter-spacing: 0.1em; margin-top: 6px; opacity: 0.55;
   }
-  .shelf-mark {
-    align-self: flex-start; margin-top: 6px; font-size: 0.72rem; opacity: 0.6;
-    -webkit-touch-callout: none; user-select: none; touch-action: manipulation;
-  }
+  /* a hint, not a control — the card is the target */
+  .shelf-hint { margin-top: 6px; font-size: 0.7rem; opacity: 0.5; }
   /* an unread thing is still waiting on her, so it is the one that breathes */
   .shelf-cell:not(.is-read) .shelf-sigil { animation: far-breathe 7s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce) {
@@ -598,6 +599,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=21"></script>
+  <script type="module" src="src/main.js?v=22"></script>
 </body>
 </html>
