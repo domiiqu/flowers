@@ -213,6 +213,21 @@ export const SCHEMA = [
     { name: 'Canon', type: 'multilineText' },
     { name: 'Regenerate?', type: 'checkbox', options: { icon: 'check', color: 'purpleBright' } },
   ]},
+  // what she BROUGHT, as against Specimens which is what the far side gave
+  // her. A link dropped in from this world, which materialises there as an
+  // artifact of unclear purpose. Two states only: unread and read.
+  { name: 'Readings', fields: [
+    { name: 'Title', type: 'singleLineText' },
+    // an ISO timestamp, never the URL — the same piece can be shelved twice
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'URL', type: 'url' },
+    { name: 'Submitted', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Read', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Read on', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Notes', type: 'multilineText' },
+    { name: 'Style', type: 'multilineText' },
+    { name: 'Planet', type: 'multilineText' },
+  ]},
   { name: 'Specimens', fields: [
     // Key is the date, never the Name — Name is hers to overwrite, and
     // upserting on Name would fork a duplicate every time she renamed one.
@@ -570,7 +585,7 @@ export const S = {
   data: {
     Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [],
     Markers: [], DayMarks: [], Instruments: [], Timeline: [], Ratings: [],
-    Canon: [], World: [], Specimens: [],
+    Canon: [], World: [], Specimens: [], Readings: [],
   },
   loaded: false,
   problem: null,
@@ -1001,6 +1016,59 @@ export function canonText(kind) {
 
 export async function saveWorld(date, fields) {
   return upsertRow('World', 'Key', { Key: date, Date: date, ...fields });
+}
+
+// ------------------------------------------------------------- the cupboard
+// Specimens are given; readings are brought. Same shelf, different provenance,
+// so they stay different tables and are only joined at the glass.
+
+export function readings() {
+  return S.data.Readings
+    .filter((r) => r.f.Key)
+    .sort((a, b) => String(b.f.Key).localeCompare(String(a.f.Key)));
+}
+
+// shelve a link. The Key is the moment it was shelved, not the URL, so the
+// same piece can be put up twice — re-reading something is a real event and
+// must not overwrite the first time she read it.
+export async function shelveReading({ url, title }) {
+  const href = String(url || '').trim();
+  if (!href) return null;
+  const withScheme = /^https?:\/\//i.test(href) ? href : `https://${href}`;
+  let name = String(title || '').trim();
+  if (!name) {
+    // no title given: fall back to the host, which is at least recognisable
+    try { name = new URL(withScheme).hostname.replace(/^www\./, ''); }
+    catch { name = withScheme; }
+  }
+  const key = new Date().toISOString();
+  const fields = {
+    Key: key,
+    Title: name,
+    URL: withScheme,
+    Submitted: todayISO(),
+    Read: false,
+    // canon copied forward at shelving, exactly as World and Specimens do,
+    // so an artifact keeps the register it was made under
+    Style: canonText('style'),
+    Planet: canonText('planet'),
+  };
+  await upsertRow('Readings', 'Key', fields);
+  return key;
+}
+
+// the read date is stamped at the moment she says so — never inferred from
+// when it was opened, because opening a thing is not reading it.
+export async function markRead(key, read = true) {
+  const fields = read
+    ? { Key: key, Read: true, 'Read on': todayISO() }
+    : { Key: key, Read: false, 'Read on': null };
+  await upsertRow('Readings', 'Key', fields);
+}
+
+export async function forgetReading(key) {
+  S.data.Readings = S.data.Readings.filter((r) => r.f.Key !== key);
+  write({ kind: 'destroyByKey', table: 'Readings', key });
 }
 
 export function specimenFor(date) {
