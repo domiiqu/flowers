@@ -392,14 +392,30 @@ light side, specimens are the dark side, and reading a thing is how you find
 one.** The double stops being a property of days alone and becomes a property
 of every object in the system.
 
-**One card, two faces, everywhere.**
-- **light face** — the record: what it is, where it came from, when it came,
-  and one word for how (`unread` / `read` / `given`).
+**One card, three gestures, everywhere.**
+- **light face** — the record: what it is, where it came from, when.
 - **dark face** — the image: its form on the planet.
-- **click turns it. double-click follows it** (a reading opens its link; a
-  specimen goes back to the day it came up). The same two gestures on the
-  cupboard and on the day page, so a thing behaves identically wherever it
-  is met.
+- **click turns it · double-click follows it · press-and-hold marks it read.**
+
+**The card is the hold target, not a line of text under it.** The first
+version put "hold to mark read" on a caption measuring **82×12px at 0.6
+opacity** — the mechanism worked (verified on mouse and emulated touch) but
+the target was unhittable with a finger, and a plain violation of this
+file's own law that every target is ≥44px. The card is ~179×224px and
+carries the hold underline at card scale.
+
+Three gestures on one element need two pieces of care, both load-bearing:
+a double-click's first click must not turn the card (the turn is held
+`230ms` and cancelled if a second lands), and **a completed hold fires a
+click on release** — but the hold also re-renders the shelf, so that click
+arrives at a brand-new card. A per-card flag cannot survive the re-render,
+so the suppression is module-scoped and time-boxed.
+
+**One shelf, no sections, no taxonomy.** Everything sits together newest
+first, dated by when it arrived: a reading by when it was brought in, a
+specimen by when it came up. The words *waiting*, *found*, *given* and
+*brought* are gone from the interface — the card's own face says what a
+thing is, and sorting them together is the whole point of a shelf.
 
 **Reading is what earns the form.** An unread reading has no dark face yet —
 that is the whole point of reading it. Marking it read is what makes the
@@ -417,10 +433,8 @@ self-calibrating: once a 4am wake is ordinary for her it stops being a gift,
 which is the only honest definition of rare this app can hold. (Measured: a
 habitual early riser gets one gift in sixty days.)
 
-Once read, a reading **is** a find, so it sits under `found` beside the given
-things, sorted by when it arrived. Brought and given share a shelf; the light
-face says which is which, so the distinction is legible without being
-segregated.
+Once read, a reading **is** a find. Brought and given share one shelf with
+nothing separating them.
 
 **The sigil — `src/sigil.js`.** An unread thing must not be a blank, but a
 real thumbnail is not available to us: a link preview needs the page, which a

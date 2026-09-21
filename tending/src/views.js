@@ -2,12 +2,12 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=21';
-import { dayStateFields, computeWorldState } from './world.js?v=21';
-import { farSideFor } from './farside.js?v=21';
-import * as farview from './farview.js?v=21';
-import { sigilSVG } from './sigil.js?v=21';
-import * as gcal from './gcal.js?v=21';
+import * as store from './store.js?v=22';
+import { dayStateFields, computeWorldState } from './world.js?v=22';
+import { farSideFor } from './farside.js?v=22';
+import * as farview from './farview.js?v=22';
+import { sigilSVG } from './sigil.js?v=22';
+import * as gcal from './gcal.js?v=22';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -420,12 +420,12 @@ export function mountDay(app, date) {
     // a reading brought AND read on the same day should appear once, as a find
     const foundKeys = new Set(found.map((o) => o.f.Key));
     const rows = [
-      ...found.map((o) => ({ row: o, verb: o.f.Name ? 'given' : 'read' })),
-      ...brought.filter((r) => !foundKeys.has(r.f.Key)).map((r) => ({ row: r, verb: 'brought' })),
+      ...found.map((o) => ({ row: o })),
+      ...brought.filter((r) => !foundKeys.has(r.f.Key)).map((r) => ({ row: r })),
     ];
     if (!rows.length) return;
     const strip = h('div', { class: 'day-objects-strip' });
-    for (const { row, verb } of rows) {
+    for (const { row } of rows) {
       const isSpecimen = !!row.f.Name && !row.f.URL;
       const url = store.latestImageUrl(row.f.Image);
       const showDark = isSpecimen || row.f.Read;
@@ -434,10 +434,9 @@ export function mountDay(app, date) {
         : h('div', { class: 'day-object-sigil' }, [sigilSVG(row.f.URL || row.f.Name || row.f.Key || '')]);
       const cell = h('a', {
         class: 'day-object', href: '#/cupboard',
-        title: `${row.f.Title || row.f.Name || ''} — ${verb}`,
+        title: row.f.Title || row.f.Name || '',
       });
       cell.appendChild(art);
-      cell.appendChild(h('span', { class: 'day-object-verb dim italic' }, verb));
       strip.appendChild(cell);
     }
     dayObjects.appendChild(strip);
@@ -1104,19 +1103,32 @@ export function mountCupboard(app) {
   titleField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
 
   // ---- the shelf -------------------------------------------------------
-  // ---- one card, two faces -------------------------------------------
-  // LIGHT face = the record: what it is, when it came, where from.
-  // DARK face  = the image: its form on the planet.
-  // A click turns it. A double-click follows it. An unread reading has no
-  // dark face yet — that is exactly what reading it earns, so its dark side
-  // is a sigil drawn from its own url: formless, but unmistakably itself.
+  // ---- one card, three gestures --------------------------------------
+  // LIGHT face = the record. DARK face = its form on the planet.
+  //   click        turns it
+  //   double-click follows it
+  //   press & hold marks it read
   //
-  // Single- and double-click fight on the same element: the single fires
-  // first, so it is held back briefly and cancelled if a second comes. The
-  // delay is unnoticeable on a turn and is the price of the gesture pair.
+  // The hold used to live on a little text line under the card. That line
+  // measured 82x12px at 0.6 opacity — unhittable on a finger, and a plain
+  // violation of this app's own law that every target is >=44px. The
+  // mechanism was never broken; the target was. So the CARD is the target
+  // now: ~130x162px, impossible to miss, and it gets the hold underline.
+  //
+  // Single- and double-click fight on the same element (the single fires
+  // first), so the turn is held back briefly and cancelled if a second
+  // click lands. A completed hold also fires a click on release, so it
+  // raises a flag that swallows exactly one.
   const DOUBLE_MS = 230;
 
-  function twoFaced({ dark, lightNodes, onFollow, extraClass = '' }) {
+  // A completed hold fires a click on release — but the hold also re-renders
+  // the shelf, so by the time that click lands the card it started on is
+  // gone and a brand-new one receives it. A per-card flag cannot survive
+  // that, so the suppression is shared and time-boxed: any card built
+  // within this window ignores exactly the click that ends a hold.
+  let swallowClicksUntil = 0;
+
+  function twoFaced({ dark, lightNodes, onFollow, onHold, extraClass = '' }) {
     const cell = h('div', { class: `shelf-cell${extraClass}` });
     const card = h('div', { class: 'shelf-card' });
     const faces = h('div', { class: 'shelf-faces' });
@@ -1137,14 +1149,25 @@ export function mountCupboard(app) {
       faces.classList.toggle('turned', turned);
     }
     card.addEventListener('click', () => {
-      if (timer) return;                       // second half of a double
+      if (performance.now() < swallowClicksUntil) return;  // release after a hold
+      if (timer) return;                                   // second half of a double
       timer = setTimeout(() => { timer = null; turn(); }, DOUBLE_MS);
     });
     card.addEventListener('dblclick', (e) => {
       e.preventDefault();
-      if (timer) { clearTimeout(timer); timer = null; }   // cancel the turn
+      if (timer) { clearTimeout(timer); timer = null; }
       if (onFollow) onFollow();
     });
+    if (onHold) {
+      holdToAct(card, {
+        ms: 650,
+        onComplete: () => {
+          swallowClicksUntil = performance.now() + 600;
+          if (timer) { clearTimeout(timer); timer = null; }
+          onHold();
+        },
+      });
+    }
     return cell;
   }
 
@@ -1153,7 +1176,6 @@ export function mountCupboard(app) {
     const read = !!r.f.Read;
     const url = shelfImageUrl(r, 'Image');
 
-    // its form on the planet — but only once she has read it
     const dark = (read && url)
       ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
       : h('div', { class: 'shelf-sigil' }, [sigilSVG(r.f.URL || key)]);
@@ -1162,8 +1184,7 @@ export function mountCupboard(app) {
       h('div', { class: 'shelf-lt-name' }, r.f.Title || 'untitled'),
       h('div', { class: 'shelf-lt-line dim italic' }, hostOf(r.f.URL)),
       h('div', { class: 'shelf-lt-when dim italic' },
-        `brought ${shortDate(r.f.Submitted)}${read && r.f['Read on'] ? ` · read ${shortDate(r.f['Read on'])}` : ''}`),
-      h('div', { class: 'shelf-lt-hint dim italic' }, read ? 'read' : 'unread'),
+        `${shortDate(r.f.Submitted)}${read && r.f['Read on'] ? ` · read ${shortDate(r.f['Read on'])}` : ''}`),
     ];
 
     const cell = twoFaced({
@@ -1173,19 +1194,15 @@ export function mountCupboard(app) {
         if (!r.f.URL) return;
         window.open(r.f.URL, '_blank', 'noopener,noreferrer');
       },
-    });
-
-    const mark = h('button', { class: 'plain italic shelf-mark' },
-      read ? 'hold to unread' : 'hold to mark read');
-    holdToAct(mark, {
-      ms: 700,
-      onComplete: async () => {
+      onHold: async () => {
         await store.markRead(key, !read);
         render();
         whisper(read ? 'back on the shelf, unopened.' : 'read — it takes its form now.', 3400);
       },
     });
-    cell.appendChild(mark);
+    // a hint, not a control — the card itself is the target now
+    cell.appendChild(h('div', { class: 'shelf-hint dim italic' },
+      read ? 'read' : 'hold to mark read'));
     return cell;
   }
 
@@ -1196,55 +1213,36 @@ export function mountCupboard(app) {
       : h('div', { class: 'shelf-sigil' }, [sigilSVG(x.f.Name || x.f.Key || '')]);
     const light = [
       h('div', { class: 'shelf-lt-name' }, x.f.Name || 'unnamed'),
-      h('div', { class: 'shelf-lt-line dim italic' }, x.f.Kind || 'specimen'),
+      h('div', { class: 'shelf-lt-line dim italic' }, x.f.Kind || ''),
       h('div', { class: 'shelf-lt-when dim italic' },
-        x.f['Rarity note'] || `found ${shortDate(x.f.Found)}`),
-      h('div', { class: 'shelf-lt-hint dim italic' }, 'given'),
+        x.f['Rarity note'] || shortDate(x.f.Found)),
     ];
     return twoFaced({
       dark, lightNodes: light,
-      // a specimen has no link to follow — it goes back to the day it came up
       onFollow: () => { if (x.f.Found) location.hash = `#/day/${x.f.Found}`; },
     });
   }
 
-  function section(title, cells) {
-    if (!cells.length) return null;
-    const sec = h('div', { class: 'shelf-section' });
-    sec.appendChild(h('div', { class: 'shelf-heading italic dim' }, title));
-    const grid = h('div', { class: 'shelf-grid' });
-    for (const c of cells) grid.appendChild(c);
-    sec.appendChild(grid);
-    return sec;
-  }
-
   function render() {
     clear(wall);
-    const all = store.readings();
-    const unread = all.filter((r) => !r.f.Read).map(readingCard);
-
-    // once read, a reading IS a find — it has taken its form and belongs
-    // beside the things the world handed over. Brought and given sit on the
-    // same shelf, sorted by when they arrived; the light face says which is
-    // which, so the distinction is legible without being segregated.
-    const finds = [
-      ...all.filter((r) => r.f.Read)
-        .map((r) => ({ on: r.f['Read on'] || r.f.Submitted || '', node: () => readingCard(r) })),
+    // ONE shelf. Everything on it, newest first, dated by when it arrived:
+    // a reading by when it was brought in, a specimen by when it came up.
+    // No sections and no taxonomy — the card's own face says what it is, and
+    // sorting them together is the whole point of a shelf.
+    const items = [
+      ...store.readings().map((r) => ({ on: r.f.Submitted || '', node: () => readingCard(r) })),
       ...(store.S.data.Specimens || []).filter((x) => x.f.Name)
         .map((x) => ({ on: x.f.Found || '', node: () => specimenCard(x) })),
-    ].sort((a, b) => String(b.on).localeCompare(String(a.on))).map((o) => o.node());
+    ].sort((a, b) => String(b.on).localeCompare(String(a.on)));
 
-    const parts = [
-      section('waiting', unread),
-      section('found', finds),
-    ].filter(Boolean);
-
-    if (!parts.length) {
+    if (!items.length) {
       wall.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
-        'the cupboard is bare. drop a link above, or go and find something.'));
+        'the cupboard is bare. drop a link above to begin it.'));
       return;
     }
-    for (const p of parts) wall.appendChild(p);
+    const grid = h('div', { class: 'shelf-grid' });
+    for (const it of items) grid.appendChild(it.node());
+    wall.appendChild(grid);
   }
 
   render();
