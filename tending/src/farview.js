@@ -13,7 +13,7 @@
 // plate generated in separable layers, which is why the layer spec is in
 // the image prompt from the first day.
 
-import * as store from './store.js?v=18';
+import * as store from './store.js?v=19';
 
 const PLATE_FIELD = 'Plate';
 
@@ -97,7 +97,12 @@ export function open(dateISO, cardEl) {
   const say = h('div', { class: 'far-say' });
   if (dispatch) say.appendChild(h('p', { class: 'far-dispatch' }, dispatch));
   if (specimen && specimen.f.Name) {
-    say.appendChild(h('p', { class: 'far-found italic' }, `found — ${specimen.f.Name}`));
+    const found = h('p', { class: 'far-found italic' }, `found — ${specimen.f.Name}`);
+    // the moment of collecting. The whole layer closes on click, so this
+    // has to stop its own event or touching the find would turn the card
+    // back instead of opening what she carried out.
+    found.addEventListener('click', (e) => { e.stopPropagation(); openSpecimen(); });
+    say.appendChild(found);
   }
   // no legend, ever. The only affordance is how to leave.
   say.appendChild(h('p', { class: 'far-exit italic dim' }, 'touch to turn back'));
@@ -169,6 +174,45 @@ export function open(dateISO, cardEl) {
   window.addEventListener('deviceorientation', onTilt);
   window.addEventListener('pointermove', onMove);
 
+  // ---- the find --------------------------------------------------------
+  // A specimen is NOT the place. The place bleeds — cover, no edges, it
+  // cannot be held or printed. A specimen is a thing she carried back out,
+  // so it is contained: it has edges, it sits on the dimmed world rather
+  // than replacing it, and it can be put down again without leaving.
+  function openSpecimen() {
+    if (!specimen || back.querySelector('.spec-layer')) return;
+    const url = store.latestImageUrl(specimen.f.Image);
+    const spec = h('div', { class: 'spec-layer' });
+    const card = h('div', { class: 'spec-card' });
+    if (url) card.appendChild(h('img', { class: 'spec-img', src: url, alt: '' }));
+    card.appendChild(h('p', { class: 'spec-name' }, specimen.f.Name || ''));
+    // provenance, never a stat block: what the day was, in the far side's
+    // own terms, and how rare that is against her own history.
+    if (specimen.f.Conditions) {
+      card.appendChild(h('p', { class: 'spec-cond italic' }, specimen.f.Conditions));
+    }
+    if (specimen.f['Rarity note']) {
+      card.appendChild(h('p', { class: 'spec-rare italic' }, specimen.f['Rarity note']));
+    }
+    spec.appendChild(card);
+    spec.addEventListener('click', (e) => { e.stopPropagation(); closeSpecimen(); });
+    back.appendChild(spec);
+    spec.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: 'ease' });
+    card.animate(
+      [{ transform: 'translateY(20px) scale(0.97)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+      { duration: 420, easing: EASE },
+    );
+  }
+
+  function closeSpecimen() {
+    const spec = back.querySelector('.spec-layer');
+    if (!spec || spec.dataset.closing) return;
+    spec.dataset.closing = '1';
+    const a = spec.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease' });
+    a.onfinish = () => spec.remove();
+    setTimeout(() => spec.remove(), 420);
+  }
+
   // ---- leaving ---------------------------------------------------------
   let closing = false;
   function close() {
@@ -198,7 +242,13 @@ export function open(dateISO, cardEl) {
     // over the whole screen with no way back.
     setTimeout(done, 700);
   }
-  function onKey(e) { if (e.key === 'Escape') close(); }
+  // Escape unwinds one layer at a time — put the specimen down first, and
+  // only then turn the card back.
+  function onKey(e) {
+    if (e.key !== 'Escape') return;
+    if (back.querySelector('.spec-layer')) { closeSpecimen(); return; }
+    close();
+  }
   window.addEventListener('keydown', onKey);
   layer.addEventListener('click', close);
 
