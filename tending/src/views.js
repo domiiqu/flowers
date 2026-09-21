@@ -2,11 +2,11 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=18';
-import { dayStateFields, computeWorldState } from './world.js?v=18';
-import { farSideFor } from './farside.js?v=18';
-import * as farview from './farview.js?v=18';
-import * as gcal from './gcal.js?v=18';
+import * as store from './store.js?v=20';
+import { dayStateFields, computeWorldState } from './world.js?v=20';
+import { farSideFor } from './farside.js?v=20';
+import * as farview from './farview.js?v=20';
+import * as gcal from './gcal.js?v=20';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -257,6 +257,7 @@ export function mountDay(app, date) {
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: '#/cupboard' }, 'the cupboard'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   root.appendChild(hints);
@@ -991,6 +992,180 @@ export function mountDay(app, date) {
   };
 }
 
+
+// =============================================================== the cupboard
+// One shelf, two provenances. SPECIMENS are what the far side gave her —
+// she cannot ask for one; they come up on rare day-shapes or not at all.
+// READINGS are what she brought: a link dropped in from this world, which
+// materialises there as an artifact of unclear purpose. Keeping them as
+// separate tables and joining them only at the glass is the point — the
+// shelf holds what you were given beside what you went and got.
+
+function shelfImageUrl(row, field) {
+  return store.latestImageUrl(row && row.f[field]);
+}
+
+// the app's usual date ("saturday · september 19") is too long for a shelf
+// card — a read one carries two of them and wrapped to two lines. Same
+// lowercase register, tighter: "19 sep".
+const SHELF_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function shortDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return '';
+  return `${Number(m[3])} ${SHELF_MONTHS[Number(m[2]) - 1] || ''}`.trim();
+}
+
+export function mountCupboard(app) {
+  const root = h('div', { class: 'room' });
+  app.appendChild(root);
+  root.appendChild(h('div', { class: 'meadow-title italic' }, 'the cupboard'));
+
+  // ---- putting something on the shelf ---------------------------------
+  // never window.prompt() — this can run as a home-screen web app, where
+  // it is silently suppressed (see the touch rules in DESIGN).
+  const put = h('div', { class: 'shelf-put' });
+  const urlField = h('input', {
+    class: 'field shelf-url', type: 'url', inputmode: 'url',
+    placeholder: 'drop a link', 'aria-label': 'link to shelve',
+  });
+  const titleField = h('input', {
+    class: 'field shelf-title', type: 'text',
+    placeholder: 'what to call it (optional)', 'aria-label': 'title',
+  });
+  const putBtn = h('button', { class: 'plain italic shelf-add' }, 'put it on the shelf');
+  put.appendChild(urlField);
+  put.appendChild(titleField);
+  put.appendChild(putBtn);
+  root.appendChild(put);
+
+  const wall = h('div', { class: 'shelf-wall' });
+  root.appendChild(wall);
+
+  async function shelve() {
+    const url = urlField.value.trim();
+    if (!url) { urlField.focus(); return; }
+    putBtn.setAttribute('disabled', '');
+    await store.shelveReading({ url, title: titleField.value });
+    urlField.value = ''; titleField.value = '';
+    putBtn.removeAttribute('disabled');
+    render();
+    whisper('on the shelf. it will take its form shortly.', 3600);
+  }
+  putBtn.addEventListener('click', shelve);
+  urlField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
+  titleField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
+
+  // ---- the shelf -------------------------------------------------------
+  function readingCard(r) {
+    const key = r.f.Key;
+    const read = !!r.f.Read;
+    const url = shelfImageUrl(r, 'Image');
+    const cell = h('div', { class: `shelf-cell${read ? ' is-read' : ''}` });
+
+    // the object itself opens the thing it stands for
+    const open = h('a', {
+      class: 'shelf-face', href: r.f.URL || '#', target: '_blank', rel: 'noopener noreferrer',
+    });
+    open.appendChild(url
+      ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
+      : h('div', { class: 'shelf-unformed' }));
+    cell.appendChild(open);
+
+    cell.appendChild(h('div', { class: 'shelf-name' }, r.f.Title || 'untitled'));
+    // both dates, always — she asked to see when it arrived and when it was
+    // finished, and an unread thing showing only its arrival is the point.
+    const when = h('div', { class: 'shelf-when dim italic' });
+    when.appendChild(h('span', {}, `brought ${shortDate(r.f.Submitted)}`));
+    if (read && r.f['Read on']) {
+      when.appendChild(h('span', { class: 'shelf-readon' }, ` · read ${shortDate(r.f['Read on'])}`));
+    }
+    cell.appendChild(when);
+
+    // marking read is ceremonial, like every other committing act here
+    const mark = h('button', { class: 'plain italic shelf-mark' },
+      read ? 'hold to unread' : 'hold to mark read');
+    holdToAct(mark, {
+      ms: 700,
+      onComplete: async () => {
+        await store.markRead(key, !read);
+        render();
+        whisper(read ? 'back on the shelf, unopened.' : 'read. it changes shape now.', 3200);
+      },
+    });
+    cell.appendChild(mark);
+    return cell;
+  }
+
+  function specimenCard(x) {
+    const url = shelfImageUrl(x, 'Image');
+    const cell = h('div', { class: 'shelf-cell' });
+    const face = h('div', { class: 'shelf-face' });
+    face.appendChild(url
+      ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
+      : h('div', { class: 'shelf-unformed' }));
+    cell.appendChild(face);
+    cell.appendChild(h('div', { class: 'shelf-name' }, x.f.Name || 'unnamed'));
+    const when = h('div', { class: 'shelf-when dim italic' });
+    // provenance, never a tier: a thing is rare because she has only done
+    // that twice, and the sentence says so in plain words.
+    when.appendChild(h('span', {}, x.f['Rarity note'] || `found ${shortDate(x.f.Found)}`));
+    cell.appendChild(when);
+    if (x.f.Found) {
+      cell.appendChild(h('a', { class: 'plain italic shelf-mark', href: `#/day/${x.f.Found}` }, 'the day it came up ↗'));
+    }
+    return cell;
+  }
+
+  function section(title, cells) {
+    if (!cells.length) return null;
+    const sec = h('div', { class: 'shelf-section' });
+    sec.appendChild(h('div', { class: 'shelf-heading italic dim' }, title));
+    const grid = h('div', { class: 'shelf-grid' });
+    for (const c of cells) grid.appendChild(c);
+    sec.appendChild(grid);
+    return sec;
+  }
+
+  function render() {
+    clear(wall);
+    const all = store.readings();
+    const unread = all.filter((r) => !r.f.Read).map(readingCard);
+    const done = all.filter((r) => r.f.Read).map(readingCard);
+    const found = [...(store.S.data.Specimens || [])]
+      .filter((x) => x.f.Name)
+      .sort((a, b) => String(b.f.Found || '').localeCompare(String(a.f.Found || '')))
+      .map(specimenCard);
+
+    const parts = [
+      section('waiting', unread),
+      section('found', found),
+      section('read', done),
+    ].filter(Boolean);
+
+    if (!parts.length) {
+      wall.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
+        'the cupboard is bare. drop a link above, or go and find something.'));
+      return;
+    }
+    for (const p of parts) wall.appendChild(p);
+  }
+
+  render();
+  let alive = true;
+  // pull the freshest rows on entry, so a just-painted artifact appears
+  if (store.connected()) {
+    Promise.all([store.reloadTable('Readings'), store.reloadTable('Specimens')])
+      .then(() => { if (alive) render(); });
+  }
+
+  const hints = h('div', { class: 'hints' }, [
+    h('a', { href: '#/day/' }, 'the day'),
+    h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: '#/tend' }, 'tend'),
+  ]);
+  app.appendChild(hints);
+  return () => { alive = false; };
+}
 
 // ================================================================ gallery
 // the wall of prints — every day that's been painted, newest first. as

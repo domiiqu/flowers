@@ -24,7 +24,7 @@
 // cost, never punishment. A place that withered when she slept badly
 // would be a guilt machine, and she would stop turning the card.
 
-import { addDays, DAYS_BACK } from './store.js?v=18';
+import { addDays, DAYS_BACK } from './store.js?v=20';
 
 const MINUTES = 1440;
 

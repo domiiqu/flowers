@@ -366,6 +366,40 @@
   .redemptions .r { color: var(--ink-dim); line-height: 2; font-style: italic; }
 
   /* ===================== the hour ===================== */
+  /* ------------------------------------------------------ the cupboard ---
+     one shelf, two provenances: what the far side gave her and what she
+     brought. Cards read the same on purpose — the difference is in the
+     heading above them and the provenance line below. */
+  .shelf-put { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; align-items: center; }
+  .shelf-url { flex: 2 1 14rem; }
+  .shelf-title { flex: 1 1 10rem; }
+  .shelf-add { white-space: nowrap; }
+  .shelf-section { margin-bottom: 26px; }
+  .shelf-heading { font-size: 0.8rem; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .shelf-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+  .shelf-cell { display: flex; flex-direction: column; }
+  .shelf-face { display: block; border-radius: 3px; overflow: hidden; }
+  .shelf-img { display: block; width: 100%; height: auto; border-radius: 3px; }
+  /* shelved but not yet painted — a place is held for it rather than a gap */
+  .shelf-unformed {
+    width: 100%; aspect-ratio: 4 / 5; border-radius: 3px;
+    background: linear-gradient(160deg, rgba(120,100,130,0.16), rgba(40,60,58,0.22));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .shelf-name { margin-top: 8px; font-size: 0.86rem; line-height: 1.35; }
+  .shelf-when { font-size: 0.72rem; margin-top: 2px; }
+  .shelf-readon { opacity: 0.85; }
+  .shelf-mark {
+    align-self: flex-start; margin-top: 6px; font-size: 0.72rem; opacity: 0.6;
+    -webkit-touch-callout: none; user-select: none; touch-action: manipulation;
+  }
+  /* read things step back — still there, no longer waiting on her */
+  .shelf-cell.is-read .shelf-face { opacity: 0.55; }
+  .shelf-cell.is-read .shelf-name { opacity: 0.72; }
+
   /* ---------------------------------------------------- the far side ---
      the turn. The front is a bounded card; the back has no edges. The
      bleed is the argument: a thing that fills the screen and never holds
@@ -437,6 +471,37 @@
     margin: 0 0 10px; font-size: 0.88rem; color: rgba(226, 178, 202, 0.92);
     text-shadow: 0 1px 12px rgba(0,0,0,0.9);
   }
+  /* the find. The place has no edges; a specimen does — it is a thing she
+     carried back out, so it is contained (object-fit: contain, deliberately
+     against the plate's cover) and laid over the dimmed world rather than
+     replacing it. Putting it down returns to the far side, not out. */
+  .far-found { cursor: pointer; }
+  .spec-layer {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    padding: 28px 22px calc(28px + env(safe-area-inset-bottom, 0px));
+    background: rgba(5, 6, 10, 0.84);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  }
+  .spec-card {
+    max-width: min(80vw, 22rem);
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  .spec-img {
+    display: block; width: 100%; height: auto; max-height: 60vh;
+    object-fit: contain; border-radius: 3px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
+  }
+  .spec-name {
+    margin: 16px 0 8px; font-size: 1.02rem;
+    color: rgba(238, 230, 236, 0.95); text-shadow: 0 1px 12px rgba(0,0,0,0.9);
+  }
+  .spec-cond {
+    margin: 0 0 10px; font-size: 0.86rem; line-height: 1.55;
+    color: rgba(226, 178, 202, 0.84);
+  }
+  .spec-rare { margin: 0; font-size: 0.76rem; opacity: 0.62; }
+
   .far-exit {
     margin: 0; font-size: 0.74rem; opacity: 0.6;
     text-shadow: 0 1px 10px rgba(0,0,0,0.95);
@@ -498,6 +563,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=18"></script>
+  <script type="module" src="src/main.js?v=20"></script>
 </body>
 </html>

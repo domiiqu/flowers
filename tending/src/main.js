@@ -1,13 +1,13 @@
 // main.js — hash router and glue. boots the sandbox, loads the soil,
 // and hands each room off to its view.
 
-import * as store from './store.js?v=18';
-import * as views from './views.js?v=18';
-import * as scary from './scary.js?v=18';
+import * as store from './store.js?v=20';
+import * as views from './views.js?v=20';
+import * as scary from './scary.js?v=20';
 
 const app = document.getElementById('app');
 const queuedot = document.getElementById('queuedot');
-const VALID = ['day', 'shop', 'hour', 'tend', 'gallery'];
+const VALID = ['day', 'shop', 'hour', 'tend', 'gallery', 'cupboard'];
 const REDIRECT_TO_DAY = ['meadow', 'unwind'];
 const WITHER_SEEN_KEY = 'tending.witherSeenUntil';
 
@@ -38,6 +38,7 @@ function route() {
   else if (room === 'hour') cleanup = scary.mount(app);
   else if (room === 'tend') cleanup = views.mountTend(app);
   else if (room === 'gallery') cleanup = views.mountGallery(app);
+  else if (room === 'cupboard') cleanup = views.mountCupboard(app);
   else cleanup = views.mountDay(app, date);
   updateQueueDot();
 }
