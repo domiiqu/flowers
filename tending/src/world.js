@@ -8,7 +8,7 @@
 // A viewed day never sees records dated after itself — a past plate is
 // drawn exactly as that day's world stood, not with hindsight.
 
-import { addDays, todayISO, DAYS_BACK } from './store.js?v=16';
+import { addDays, todayISO, DAYS_BACK } from './store.js?v=17';
 
 const MEAL_TAGS = new Set(['b', 'l', 'd', 'snack']);
 
@@ -164,8 +164,15 @@ function overallMood(dateISO, data) {
 // timeline at all) never goes dark.
 function computeTwoSuns(dateISO, data) {
   const todays = (data.Timeline || []).filter((t) => t.f.Date === dateISO);
-  const woke = todays.find((t) => t.f.Instrument === 'woke');
-  const slept = todays.find((t) => t.f.Instrument === 'slept');
+  // identified by GLYPH, never by Name — store.js is explicit that renaming
+  // a lane must keep it working, and the seeded names ('woke'/'slept') and
+  // the ones ensureSunMoon creates ('wake'/'sleep') have never matched, so
+  // matching on Name meant this silently never fired from the timeline.
+  const active = (data.Instruments || []).filter((i) => i.f.Active);
+  const sunName = (active.find((i) => i.f.Glyph === 'sun') || {}).f;
+  const moonName = (active.find((i) => i.f.Glyph === 'moon') || {}).f;
+  const woke = sunName ? todays.find((t) => t.f.Instrument === sunName.Name) : null;
+  const slept = moonName ? todays.find((t) => t.f.Instrument === moonName.Name) : null;
   if (woke && slept) {
     const dur = woke.f.Start <= slept.f.Start
       ? (woke.f.Start + 1440 - slept.f.Start)

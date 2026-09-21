@@ -2,9 +2,11 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=16';
-import { dayStateFields } from './world.js?v=16';
-import * as gcal from './gcal.js?v=16';
+import * as store from './store.js?v=17';
+import { dayStateFields, computeWorldState } from './world.js?v=17';
+import { farSideFor } from './farside.js?v=17';
+import * as farview from './farview.js?v=17';
+import * as gcal from './gcal.js?v=17';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -367,7 +369,16 @@ export function mountDay(app, date) {
       // idle again (and re-printable later); harmless if already clear.
       if (row && row.f['Print?']) store.saveDay(date, { 'Print?': false });
       const shown = h('div', { class: 'print-shown' });
-      shown.appendChild(h('img', { class: 'print-img', src: url, alt: `the day's plate — ${store.fmtDate(date)}` }));
+      const plate = h('img', {
+        class: 'print-img', src: url,
+        alt: `the day's plate — ${store.fmtDate(date)}`,
+      });
+      // the card is a portal. Touching it turns it over, and the far side
+      // takes the whole screen — the front is bounded and printable, the
+      // back has no edges and cannot be. No label says so; the only hint
+      // is the slow breath at the card's edge (see .print-shown::after).
+      plate.addEventListener('click', () => farview.open(date, plate));
+      shown.appendChild(plate);
       shown.appendChild(h('a', { class: 'plain italic print-done', href: '#/gallery' }, 'printed — in the gallery ↗'));
       printBox.appendChild(shown);
       return;
@@ -406,6 +417,23 @@ export function mountDay(app, date) {
     clearTimeout(syncTimer);
     syncTimer = null;
     store.saveDayState(date, dayStateFields(date, store.S.data));
+    syncFarSide();
+  }
+
+  // the far side rides the same debounce. The land's slow memory is taken
+  // straight from the front face's own world-state rather than recomputed:
+  // the two faces remember one life and differ only in how they render it.
+  function syncFarSide() {
+    try {
+      const w = computeWorldState(date, store.S.data);
+      const slow = { aridity: w.aridity, path: w.path, sea: w.sea, towerFloors: w.towerFloors };
+      const { world, specimen } = farSideFor(date, store.S.data, slow);
+      store.saveWorld(date, world);
+      if (specimen) store.saveSpecimen(date, specimen);
+    } catch (e) {
+      // the far side must never be able to take the day page down with it
+      console.warn('far side sync skipped:', e.message);
+    }
   }
 
   // ------------------------------------------------------------- the timeline

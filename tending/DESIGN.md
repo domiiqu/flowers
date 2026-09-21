@@ -202,6 +202,15 @@ old square on iPad or landscape on desktop); the lanes, sliders and notes
 below are all sized to it and centered, so the day reads as one column.
 
 ### Phase 2, chosen: the far side & the moon-turn (the double, first face)
+
+> **Superseded in part by "the far side, v2" below (current).** The *thesis*
+> in this section stands entirely — the double-machine, data crisp /
+> uncertainty in the render, resolution kills the numinous, sleep as the
+> crossing, the pink slippery moon as the threshold. What is retired is this
+> section's *render recipe*: "far side = same territory rendered as reverse,
+> lower-res, heavier grain." The same map at worse resolution is a photocopy,
+> not a double. v2 below replaces the mechanism and keeps the law.
+
 Grounded in the user's thesis *The Double as a Triangle or a Pink and
 Slippery Moon*: the app is a **double-machine** — the plate (d1) is the
 lit, logged face; the unloggable real day is the big-D Double behind it;
@@ -235,6 +244,245 @@ the log), **uncertainty in the render** (d2 = the world).
 This is the next build after the instrument day + restored plate (this
 round): the live plate above is exactly what the moon-turn will one day
 turn over.
+
+### the far side, v2 — a place you visit (current direction)
+
+The back of the card is not another rendering of the day. **The front is a
+still — committed, printable, hung in the gallery. The back is never still,
+never the same twice, and cannot be printed.** Same day, two states of
+matter. That difference *is* the double, and it does the work the old
+grain-and-blur recipe was trying to do.
+
+**The place is continuous.** It does not fork into one plate per day; it
+accumulates. What is per-day is the **specimen** — the thing found there,
+the souvenir carried back. `Days` keeps the front face; `Specimens` keeps
+the finds.
+
+**An inhabitant, not an avatar.** An avatar of her collapses the double into
+a mirror. What lives back there is an other, unsteerable; her logged day
+reaches it only as *climate*. She sets the weather by living. It decides
+what to do about it. (The Sims pleasure was never control — it was watching
+something choose inside conditions you built.)
+
+**The law: difference, never grade.** Every day-shape yields something. A
+bad night makes a *different* creature, not a dying one; insomnia is
+fertile; the rare conditions include the chaotic ones. The moment the world
+withers when she sleeps badly it becomes a guilt machine and the card stops
+getting flipped. *God is Change* — adaptation, not judgment. This is a hard
+law, not a preference.
+
+**Rarity is computed from her own statistics**, never a fixed table. A thing
+is rare because she has only done that twice.
+
+**Storage: Airtable, one soil.** *(Rejected: world state as JSON in the repo
+written by a nightly Action — a second source of truth for no gain, when the
+front face already proves the Airtable generation pattern and a `Specimens`
+table is already a specimen cabinet: sortable, filterable, hand-editable.
+Hand-editing **is** the canon loop — she renames a thing and the world is
+bound by it. If rolling narrative context later outgrows what an aiText
+field can see, an Action writes **into** Airtable; it never becomes a second
+store.)*
+
+**The split that keeps emergence real:** the simulation is deterministic
+code (`world.js`), the generator only renders. The sim decides what a
+specimen **is** — traits, form, coloration, provenance, rarity — and those
+words go into the prompt. **Determinism lives in the description, richness
+lives in the render.** A specimen can always be regenerated identically,
+because its identity is text, not pixels. If the model improvises the world
+it goes mushy and self-contradicting by week three; if rules produce the
+state and the model only renders it, the surprise is real and the voice
+stays consistent.
+
+**One style preamble in one field**, so the whole cabinet is restyleable
+from a single cell. Style drift across a year is the failure mode to design
+against — the collection must read as one collection.
+
+**Irresolution, enforced mechanically:** unlogged stretches render *masked*,
+not absent — the place has rooms she never sees. No legend, ever. The pink
+slippery moon stays the threshold.
+
+#### motion — the back breathes
+
+Airtable returns a still, so motion happens in the browser over it. The
+reference is *Sky: Children of the Light*, and what makes that world feel
+alive is **atmosphere**, not character animation. Build order:
+
+1. **Breathing.** Living atmosphere over the generated plate — fog banks
+   drifting at different rates, grain that pulses, a slow push, light
+   temperature shifting with the actual hour of viewing. Cheap; most of the
+   feeling.
+2. **Depth.** Generate in named layers (**sky / far / mid / near**) and
+   parallax them to device tilt (`deviceorientation` — she lives on iPad and
+   phone). The biggest felt jump for the effort. **The layer spec must be in
+   the image prompt from day one** — retrofitting depth onto a flat plate
+   means regenerating everything.
+3. **Inhabitants.** A canvas layer where things move and answer touch. Here
+   the automaton finally earns its place: the day's `Timeline` lanes are
+   already a bitmap (instrument × minute), so the day is an initial
+   condition. Run it forward in the browser and let its output drive the
+   motes and the figure — deterministic seed, live motion, never twice the
+   same. The automaton is the **genome, never the visual**; she is not
+   looking at cells.
+
+*Rejected: generated video.* Cost per day, slow, style-unstable, heavy on
+mobile, and it breaks both the no-build rule and the Airtable pipeline.
+Tiers 1–3 get closer to the reference than a four-second clip would.
+
+#### the place, decided
+
+**Another planet.** Alien vegetation, strange physics, creatures. The
+inhabitant **has a voice**, and the far side **has teeth** — but teeth as
+*cost*, not punishment: canon's opening line for the planet is "the place is
+indifferent, and it is expensive." A planet that punished her for a bad night
+would be the guilt machine the law above forbids; a planet that *charges* her
+is a world.
+
+#### the tables (built — base `life_emergent`)
+
+Three tables, following this base's existing contract: **no linked records,
+everything denormalized on text keys, `Key` is the upsert key.**
+
+- **`Canon`** — the law. `Name / Kind / Text / Active / Added / Notes`.
+  `Kind` = style · voice · planet · law · being · place · name · event. The
+  three pinned rows (style, voice, planet) are copied forward as text onto
+  every new `World` and `Specimens` row, so a past plate keeps the canon it
+  was made under and later edits never rewrite history. Editing a row by
+  hand **is** the ratification loop.
+- **`World`** — the continuous place, one snapshot row per day inheriting
+  from the last. `Key / Date / Era / Region / Sky / Far / Mid / Near / Light
+  / Weather / Inhabitant / Teeth / Masked / Changed / Found / Drift / Style /
+  Voice / Planet / Dispatch / Regenerate? / Plate` + two formulas.
+  **`Sky / Far / Mid / Near` are the four parallax planes** and must always
+  be filled — the browser lifts them for depth-on-tilt, so a flat plate is a
+  bug, not a style choice.
+- **`Specimens`** — the cabinet. `Name / Found / Kind / Conditions / Traits /
+  Rarity / Rarity note / Style / Planet / Image / Notes` + `Prompt`. Rarity
+  runs 0→1 with 1 rarest, computed against her own history. The sim writes
+  `Conditions` and `Traits`; she overwrites `Name`, and her name is what gets
+  promoted into `Canon`.
+
+**The prompts live in formula fields, never inside an AI field's config.**
+An AI field's prompt cannot be edited through the API once created, so
+holding both prompts in formulas (`World."Plate prompt"`,
+`World."Dispatch prompt"`, `Specimens."Prompt"`) keeps them tunable forever
+and versioned in one place. They are siblings of `Days."Day's prompt"` and
+follow its conventions exactly: field **IDs** not names, an `&` chain of
+`IF`/`SWITCH`, and the style coda last.
+
+The image fields themselves are hand-made in the Airtable UI (the API
+exposes no generative-image field type), generating from those formulas into
+`World.Plate` and `Specimens.Image` — mirroring `Days."Plate generator"`.
+
+#### still open
+
+- **Does the plate regenerate nightly, or only when the world materially
+  changes?** *(Recommended: on change.* A place you visit is not repainted
+  every night. It is cheaper, it prevents drift, and it makes regeneration
+  an **event** — when the world visibly shifts, that shift means something.
+  Day to day, the motion, the inhabitant and the specimen carry the
+  difference.)
+- **What is the planet called, and what are its laws?** The `Canon` rows
+  seeded so far are drafts in my hand, deliberately thin. This is the part
+  that is hers to build, day after day.
+
+#### the turn — `src/farview.js`
+
+**The print makes the card; the card is the portal.** Touching the printed
+plate turns it over and the far side takes the whole screen. The turn starts
+from the card's own rect, so the plate appears to rotate where it sits and
+then swell to fill the viewport — it is the same object seen from behind,
+not a link to another room.
+
+**The bleed is the argument, not decoration.** The front is bounded,
+committed, printable, hangs in the gallery. The back has no edges, is never
+twice the same, and cannot be printed. `object-fit: cover`, so the far side
+is never letterboxed — a thing with no edges must not be given any. The
+words sit *on* the world, never in a panel beside it. No legend, ever; the
+only affordance is how to leave.
+
+**Driven by the Web Animations API, never a CSS transition.** A transition
+depends on the browser resolving style between the start and end writes, and
+it does not reliably do that for an element inserted in the same task — the
+two writes coalesce, no `transitionstart` fires, and the card silently
+teleports open instead of turning. `animate()` takes its keyframes literally
+and cannot be coalesced away. Verified by sampling the computed matrix
+through the turn rather than by looking at it.
+
+**Tier 1 of motion lives here:** the plate breathes — a slow push and drift
+on periods (37s, 53s, 61s) that never visibly loop, grain, and a light wash
+— and it answers `deviceorientation`, with pointer as the desktop fallback.
+A single flat plate cannot give true parallax; this is the honest version,
+and it is the hook tiers 2 and 3 attach to once the plate arrives in
+separable layers. That is why the sky/far/mid/near spec is in the image
+prompt from the first day.
+
+**The far side rides the day's own debounce.** `views.syncFarSide()` runs
+beside `saveDayState`, taking the land's slow memory straight from
+`computeWorldState` rather than recomputing it, and is wrapped so the far
+side can never take the day page down with it.
+
+#### ratification — how a thing that turns up becomes a resident
+
+The generator adds things nobody specified. That is the co-authored d2 the
+thesis asks for, and it is not noise to be suppressed: **if something turns
+up twice and she likes it, she writes it into `Canon` as a `being`** (or a
+`law`, `place`, `name`, `event`), and from then on every plate is bound by
+it. `farSideFor` joins every Active accrued row into `World.Canon`, both
+prompts carry it under *"what is already true here, and may not be
+contradicted"*, and it is copied forward once at row creation so canon
+accepted later never rewrites a plate already made. Without that wiring the
+loop would be decorative — she could bless a creature and the generator
+would never hear about it.
+
+**Creatures are not people.** The prompt now welcomes creatures explicitly,
+at any number and any distance, and separately holds the *person* count at
+exactly one (the inhabitant) — nothing bipedal-and-clothed, in a suit or
+mask, holding a tool, or reading as a small human at work. The first plate
+produced a suited humanoid crouching at a fallen disc, which quietly invents
+a society and tool-users; banning "a second figure" outright would have
+banned the creatures the canon explicitly promises. The distinction is the
+fix.
+- ~~What writes `World` each day?~~ **Built: `src/farside.js`.** Pure
+  functions beside `world.js` — `computeFarSide(dateISO, data, prev, slow)`
+  returns the whole `World` row, `germinate(dateISO, data)` returns the day's
+  specimen or null. Three laws are written at the head of that file and are
+  the reason it is code rather than a prompt: the sim decides what is there
+  and the generator only renders it; nothing in its output may speak her log
+  (an instrument becomes a species by the hash of its name, never by being
+  named); and difference, never grade. The sun/moon lanes are read by
+  **Glyph**, never by Name.
+  `Masked` is the day's literal largest unlogged stretch, turned into
+  occluded ground — the unknown shown *as* unknown, straight out of the
+  thesis. The `FAR` plane deliberately reuses the front face's own slow
+  memory (`aridity / path / sea / towerFloors`) rather than recomputing it:
+  the two faces remember one life and only render it differently.
+  Rarity is measured against days *strictly before* today, so a first-ever
+  shape is rarest; counting today in its own denominator inverted it.
+  **The write path is wired too:** `Canon`/`World`/`Specimens` are in
+  `store.SCHEMA` (so `plant the base` grows them and `loadAll` reads them),
+  with `worldFor` / `worldBefore` / `canonText` / `saveWorld` / `specimenFor`
+  / `saveSpecimen` beside the other domain acts. `farside.farSideFor(date,
+  data, slow)` does a day in one call — inherits the place, carries canon
+  forward, germinates, and decides whether to repaint — and the caller just
+  writes what it returns. `Specimens` is keyed on the **date**, never the
+  Name, because Name is hers to overwrite and upserting on it would fork a
+  duplicate on every rename; a Name she has already rewritten is never
+  clobbered by a re-run.
+  **The flip is built too** — `src/farview.js`. See below.
+
+- **When the plate repaints.** Not nightly. `Drift` is measured against the
+  last **painted** plate, and the planes are weighted — `Far` (the land's
+  slow memory) 0.40 and `Sky` (the night) 0.25 are structural; `Mid` and
+  `Near` are the day's furniture and shuffle constantly. An ordinary day
+  scores ~0.1 and holds; a day where the slow memory moves crosses 0.5 and
+  repaints. **A day with no plate of its own is not a gap** — the card shows
+  the most recent painted plate until the place has actually moved. That is
+  what "a place you visit" means, and it is why the repaint test asks how far
+  the place has drifted rather than whether this date has an image.
+  `Regenerate?` is only ever written `true`, never `false`, so it cannot
+  clear a box she checked by hand.
+- **What trips `Regenerate?`** — a `Drift` threshold, an `Era` turn, or her
+  hand.
 
 ### the meadow — `#/meadow`
 The emergence payoff. The last ~90 days as one strip of generated

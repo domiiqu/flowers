@@ -167,6 +167,69 @@ export const SCHEMA = [
     { name: 'End', type: 'number', options: { precision: 0 } },
     { name: 'Note', type: 'multilineText' },
   ]},
+  // ---------------------------------------------------------- the far side
+  // The back of the card. Only the fields the APP writes or reads are listed
+  // here: the generative ones (World.Plate, World.Dispatch, Specimens.Image)
+  // and the formula ones that compose their prompts are made by hand in the
+  // Airtable UI, because the meta API exposes no generative-image field type
+  // and an AI field's prompt cannot be edited through the API once created.
+  // plantBase therefore grows the data fields and leaves the painting alone.
+  { name: 'Canon', fields: [
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Kind', type: 'singleSelect', options: { choices: [
+      { name: 'style' }, { name: 'voice' }, { name: 'planet' }, { name: 'law' },
+      { name: 'being' }, { name: 'place' }, { name: 'name' }, { name: 'event' } ] } },
+    { name: 'Text', type: 'multilineText' },
+    { name: 'Active', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+    { name: 'Added', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Notes', type: 'multilineText' },
+  ]},
+  { name: 'World', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Era', type: 'singleLineText' },
+    { name: 'Region', type: 'singleLineText' },
+    // the four parallax planes. always all four — the browser lifts them
+    // for depth-on-tilt, so a flat plate is a bug, not a style choice.
+    { name: 'Sky', type: 'multilineText' },
+    { name: 'Far', type: 'multilineText' },
+    { name: 'Mid', type: 'multilineText' },
+    { name: 'Near', type: 'multilineText' },
+    { name: 'Light', type: 'singleLineText' },
+    { name: 'Weather', type: 'singleLineText' },
+    { name: 'Inhabitant', type: 'multilineText' },
+    { name: 'Teeth', type: 'multilineText' },
+    { name: 'Masked', type: 'multilineText' },
+    { name: 'Changed', type: 'multilineText' },
+    { name: 'Found', type: 'singleLineText' },
+    { name: 'Drift', type: 'number', options: { precision: 2 } },
+    // canon copied forward at row creation and never rewritten after, so a
+    // past plate keeps the canon it was made under
+    { name: 'Style', type: 'multilineText' },
+    { name: 'Voice', type: 'multilineText' },
+    { name: 'Planet', type: 'multilineText' },
+    // every Active Canon row of kind being/law/place/name/event, joined —
+    // the accrued world, and the reason ratifying a creature has teeth
+    { name: 'Canon', type: 'multilineText' },
+    { name: 'Regenerate?', type: 'checkbox', options: { icon: 'check', color: 'purpleBright' } },
+  ]},
+  { name: 'Specimens', fields: [
+    // Key is the date, never the Name — Name is hers to overwrite, and
+    // upserting on Name would fork a duplicate every time she renamed one.
+    { name: 'Name', type: 'singleLineText' },
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'Found', type: 'date', options: { dateFormat: { name: 'iso' } } },
+    { name: 'Kind', type: 'singleSelect', options: { choices: [
+      { name: 'vegetation' }, { name: 'creature' }, { name: 'mineral' },
+      { name: 'weather' }, { name: 'artifact' }, { name: 'trace' } ] } },
+    { name: 'Conditions', type: 'multilineText' },
+    { name: 'Traits', type: 'multilineText' },
+    { name: 'Rarity', type: 'number', options: { precision: 2 } },
+    { name: 'Rarity note', type: 'singleLineText' },
+    { name: 'Style', type: 'multilineText' },
+    { name: 'Planet', type: 'multilineText' },
+    { name: 'Notes', type: 'multilineText' },
+  ]},
   { name: 'Ratings', fields: [
     { name: 'Key', type: 'singleLineText' },
     { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
@@ -461,6 +524,7 @@ export const S = {
   data: {
     Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [],
     Markers: [], DayMarks: [], Instruments: [], Timeline: [], Ratings: [],
+    Canon: [], World: [], Specimens: [],
   },
   loaded: false,
   problem: null,
@@ -866,6 +930,46 @@ export async function addInstrument(name, glyph) {
 // Name is harmless if a row named "wake"/"sleep" already exists with a
 // different glyph — vanishingly unlikely, and not a case this app defends
 // against elsewhere either.
+// ------------------------------------------------------------ the far side
+// The back of the card. Same contract as everything else here: upsert on a
+// text Key, idempotent, safe for the offline queue to replay.
+
+export function worldFor(date) {
+  return S.data.World.find((w) => w.f.Key === date);
+}
+
+// the most recent World row STRICTLY BEFORE this date — the place the day
+// inherits from. The planet is continuous: it drifts, it is never re-invented.
+export function worldBefore(date) {
+  return S.data.World
+    .filter((w) => w.f.Key && w.f.Key < date)
+    .sort((a, b) => (a.f.Key < b.f.Key ? 1 : -1))[0] || null;
+}
+
+// canon by kind — the pinned style/voice/planet rows, copied forward onto
+// each new row so later edits never rewrite an existing plate's provenance.
+export function canonText(kind) {
+  const row = S.data.Canon.find((c) => c.f.Active && c.f.Kind === kind);
+  return row ? String(row.f.Text || '') : '';
+}
+
+export async function saveWorld(date, fields) {
+  return upsertRow('World', 'Key', { Key: date, Date: date, ...fields });
+}
+
+export function specimenFor(date) {
+  return S.data.Specimens.find((x) => x.f.Key === date);
+}
+
+// keyed on the date, so re-running a day never forks a second specimen —
+// and never clobbers a Name she has already rewritten.
+export async function saveSpecimen(date, fields) {
+  const existing = specimenFor(date);
+  const patch = { ...fields };
+  if (existing && existing.f.Name) delete patch.Name;
+  return upsertRow('Specimens', 'Key', { Key: date, Found: date, ...patch });
+}
+
 export async function ensureSunMoon() {
   const active = activeInstruments();
   if (!active.some((i) => i.f.Glyph === 'sun')) {
