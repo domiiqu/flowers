@@ -366,6 +366,17 @@
   .redemptions .r { color: var(--ink-dim); line-height: 2; font-style: italic; }
 
   /* ===================== the hour ===================== */
+  /* what arrived on this day — the shelf, on the calendar */
+  .day-objects { margin: 2px 0 14px; }
+  .day-objects-strip { display: flex; gap: 10px; flex-wrap: wrap; }
+  .day-object { display: flex; flex-direction: column; width: 62px; text-decoration: none; }
+  .day-object-img, .day-object-sigil {
+    width: 62px; height: 78px; border-radius: 3px; overflow: hidden; display: block;
+  }
+  .day-object-img { object-fit: cover; }
+  .day-object-sigil svg { display: block; width: 100%; height: 100%; }
+  .day-object-verb { font-size: 0.62rem; margin-top: 3px; letter-spacing: 0.06em; }
+
   /* ------------------------------------------------------ the cupboard ---
      one shelf, two provenances: what the far side gave her and what she
      brought. Cards read the same on purpose — the difference is in the
@@ -381,24 +392,48 @@
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
   .shelf-cell { display: flex; flex-direction: column; }
-  .shelf-face { display: block; border-radius: 3px; overflow: hidden; }
-  .shelf-img { display: block; width: 100%; height: auto; border-radius: 3px; }
-  /* shelved but not yet painted — a place is held for it rather than a gap */
-  .shelf-unformed {
-    width: 100%; aspect-ratio: 4 / 5; border-radius: 3px;
-    background: linear-gradient(160deg, rgba(120,100,130,0.16), rgba(40,60,58,0.22));
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  /* one card, two faces. Light = the record, dark = its form on the planet.
+     Click turns it, double-click follows it. */
+  .shelf-card {
+    perspective: 900px; cursor: pointer;
+    -webkit-touch-callout: none; user-select: none; touch-action: manipulation;
   }
-  .shelf-name { margin-top: 8px; font-size: 0.86rem; line-height: 1.35; }
-  .shelf-when { font-size: 0.72rem; margin-top: 2px; }
-  .shelf-readon { opacity: 0.85; }
+  .shelf-faces {
+    position: relative; width: 100%; aspect-ratio: 4 / 5;
+    transform-style: preserve-3d;
+    transition: transform 520ms cubic-bezier(.22,.68,.28,1);
+  }
+  .shelf-faces.turned { transform: rotateY(180deg); }
+  .shelf-face {
+    position: absolute; inset: 0; border-radius: 3px; overflow: hidden;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .shelf-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .shelf-sigil { width: 100%; height: 100%; display: block; }
+  .shelf-sigil svg { display: block; width: 100%; height: 100%; }
+  /* the record. Deliberately plainer than the dark face — this is the thing
+     as it is here, not as the planet has it. */
+  .shelf-light {
+    transform: rotateY(180deg);
+    background: #16161c; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    padding: 12px; display: flex; flex-direction: column; justify-content: center;
+    gap: 4px; text-align: left;
+  }
+  .shelf-lt-name { font-size: 0.84rem; line-height: 1.3; }
+  .shelf-lt-line, .shelf-lt-when { font-size: 0.7rem; line-height: 1.35; }
+  .shelf-lt-hint {
+    font-size: 0.64rem; letter-spacing: 0.1em; margin-top: 6px; opacity: 0.55;
+  }
   .shelf-mark {
     align-self: flex-start; margin-top: 6px; font-size: 0.72rem; opacity: 0.6;
     -webkit-touch-callout: none; user-select: none; touch-action: manipulation;
   }
-  /* read things step back — still there, no longer waiting on her */
-  .shelf-cell.is-read .shelf-face { opacity: 0.55; }
-  .shelf-cell.is-read .shelf-name { opacity: 0.72; }
+  /* an unread thing is still waiting on her, so it is the one that breathes */
+  .shelf-cell:not(.is-read) .shelf-sigil { animation: far-breathe 7s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .shelf-faces { transition: none; }
+    .shelf-cell:not(.is-read) .shelf-sigil { animation: none; }
+  }
 
   /* ---------------------------------------------------- the far side ---
      the turn. The front is a bounded card; the back has no edges. The
@@ -563,6 +598,6 @@
   <div id="queuedot" title="writes waiting to sync"></div>
 
   <!-- cache-buster: when shipping changes, bump ?v= here AND in every import inside src/ (one find-and-replace on the old value) — browsers otherwise keep stale modules after a deploy -->
-  <script type="module" src="src/main.js?v=20"></script>
+  <script type="module" src="src/main.js?v=21"></script>
 </body>
 </html>
