@@ -2,11 +2,12 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=20';
-import { dayStateFields, computeWorldState } from './world.js?v=20';
-import { farSideFor } from './farside.js?v=20';
-import * as farview from './farview.js?v=20';
-import * as gcal from './gcal.js?v=20';
+import * as store from './store.js?v=21';
+import { dayStateFields, computeWorldState } from './world.js?v=21';
+import { farSideFor } from './farside.js?v=21';
+import * as farview from './farview.js?v=21';
+import { sigilSVG } from './sigil.js?v=21';
+import * as gcal from './gcal.js?v=21';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -229,6 +230,12 @@ export function mountDay(app, date) {
   // quiet "print this day" action, never a big empty box.
   const printBox = h('div', { class: 'print-ritual' });
   root.appendChild(printBox);
+  // what arrived on this day — a reading on the day she brought it, a find
+  // on the day it came. Puts the shelf on the calendar instead of only in
+  // its own room: a day is not just what she logged, it is also what turned
+  // up.
+  const dayObjects = h('div', { class: 'day-objects' });
+  root.appendChild(dayObjects);
 
   // the day's shape — schedule as soft blocks (Google Calendar when
   // connected, otherwise editable blocks kept in Days.Schedule)
@@ -356,6 +363,7 @@ export function mountDay(app, date) {
   // shown large and portrait at the top; a small line under it points at
   // the gallery, where every keepsake collects.
   function renderPrint() {
+    renderDayObjects();
     clear(printBox);
     const row = store.dayFor(date);
     const url = plateImageUrl(row);
@@ -397,6 +405,42 @@ export function mountDay(app, date) {
       }
     });
     printBox.appendChild(btn);
+  }
+
+  // the same two-faced card as the cupboard, at a smaller size: click turns
+  // it, double-click follows it. Deliberately the same gesture everywhere —
+  // a thing on the shelf and the same thing on its day behave identically.
+  function renderDayObjects() {
+    clear(dayObjects);
+    const brought = (store.S.data.Readings || []).filter((r) => r.f.Submitted === date);
+    const found = [
+      ...(store.S.data.Readings || []).filter((r) => r.f.Read && r.f['Read on'] === date),
+      ...(store.S.data.Specimens || []).filter((x) => x.f.Name && x.f.Found === date),
+    ];
+    // a reading brought AND read on the same day should appear once, as a find
+    const foundKeys = new Set(found.map((o) => o.f.Key));
+    const rows = [
+      ...found.map((o) => ({ row: o, verb: o.f.Name ? 'given' : 'read' })),
+      ...brought.filter((r) => !foundKeys.has(r.f.Key)).map((r) => ({ row: r, verb: 'brought' })),
+    ];
+    if (!rows.length) return;
+    const strip = h('div', { class: 'day-objects-strip' });
+    for (const { row, verb } of rows) {
+      const isSpecimen = !!row.f.Name && !row.f.URL;
+      const url = store.latestImageUrl(row.f.Image);
+      const showDark = isSpecimen || row.f.Read;
+      const art = (showDark && url)
+        ? h('img', { class: 'day-object-img', src: url, alt: '', loading: 'lazy' })
+        : h('div', { class: 'day-object-sigil' }, [sigilSVG(row.f.URL || row.f.Name || row.f.Key || '')]);
+      const cell = h('a', {
+        class: 'day-object', href: '#/cupboard',
+        title: `${row.f.Title || row.f.Name || ''} — ${verb}`,
+      });
+      cell.appendChild(art);
+      cell.appendChild(h('span', { class: 'day-object-verb dim italic' }, verb));
+      strip.appendChild(cell);
+    }
+    dayObjects.appendChild(strip);
   }
 
   // after anything changes the day, its flattened world-state is written
@@ -1008,6 +1052,10 @@ function shelfImageUrl(row, field) {
 // the app's usual date ("saturday · september 19") is too long for a shelf
 // card — a read one carries two of them and wrapped to two lines. Same
 // lowercase register, tighter: "19 sep".
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+}
+
 const SHELF_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 function shortDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -1056,32 +1104,77 @@ export function mountCupboard(app) {
   titleField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
 
   // ---- the shelf -------------------------------------------------------
+  // ---- one card, two faces -------------------------------------------
+  // LIGHT face = the record: what it is, when it came, where from.
+  // DARK face  = the image: its form on the planet.
+  // A click turns it. A double-click follows it. An unread reading has no
+  // dark face yet — that is exactly what reading it earns, so its dark side
+  // is a sigil drawn from its own url: formless, but unmistakably itself.
+  //
+  // Single- and double-click fight on the same element: the single fires
+  // first, so it is held back briefly and cancelled if a second comes. The
+  // delay is unnoticeable on a turn and is the price of the gesture pair.
+  const DOUBLE_MS = 230;
+
+  function twoFaced({ dark, lightNodes, onFollow, extraClass = '' }) {
+    const cell = h('div', { class: `shelf-cell${extraClass}` });
+    const card = h('div', { class: 'shelf-card' });
+    const faces = h('div', { class: 'shelf-faces' });
+
+    const darkFace = h('div', { class: 'shelf-face shelf-dark' });
+    darkFace.appendChild(dark);
+    const lightFace = h('div', { class: 'shelf-face shelf-light' });
+    for (const n of lightNodes) lightFace.appendChild(n);
+
+    faces.appendChild(darkFace);
+    faces.appendChild(lightFace);
+    card.appendChild(faces);
+    cell.appendChild(card);
+
+    let turned = false, timer = null;
+    function turn() {
+      turned = !turned;
+      faces.classList.toggle('turned', turned);
+    }
+    card.addEventListener('click', () => {
+      if (timer) return;                       // second half of a double
+      timer = setTimeout(() => { timer = null; turn(); }, DOUBLE_MS);
+    });
+    card.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      if (timer) { clearTimeout(timer); timer = null; }   // cancel the turn
+      if (onFollow) onFollow();
+    });
+    return cell;
+  }
+
   function readingCard(r) {
     const key = r.f.Key;
     const read = !!r.f.Read;
     const url = shelfImageUrl(r, 'Image');
-    const cell = h('div', { class: `shelf-cell${read ? ' is-read' : ''}` });
 
-    // the object itself opens the thing it stands for
-    const open = h('a', {
-      class: 'shelf-face', href: r.f.URL || '#', target: '_blank', rel: 'noopener noreferrer',
-    });
-    open.appendChild(url
+    // its form on the planet — but only once she has read it
+    const dark = (read && url)
       ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
-      : h('div', { class: 'shelf-unformed' }));
-    cell.appendChild(open);
+      : h('div', { class: 'shelf-sigil' }, [sigilSVG(r.f.URL || key)]);
 
-    cell.appendChild(h('div', { class: 'shelf-name' }, r.f.Title || 'untitled'));
-    // both dates, always — she asked to see when it arrived and when it was
-    // finished, and an unread thing showing only its arrival is the point.
-    const when = h('div', { class: 'shelf-when dim italic' });
-    when.appendChild(h('span', {}, `brought ${shortDate(r.f.Submitted)}`));
-    if (read && r.f['Read on']) {
-      when.appendChild(h('span', { class: 'shelf-readon' }, ` · read ${shortDate(r.f['Read on'])}`));
-    }
-    cell.appendChild(when);
+    const light = [
+      h('div', { class: 'shelf-lt-name' }, r.f.Title || 'untitled'),
+      h('div', { class: 'shelf-lt-line dim italic' }, hostOf(r.f.URL)),
+      h('div', { class: 'shelf-lt-when dim italic' },
+        `brought ${shortDate(r.f.Submitted)}${read && r.f['Read on'] ? ` · read ${shortDate(r.f['Read on'])}` : ''}`),
+      h('div', { class: 'shelf-lt-hint dim italic' }, read ? 'read' : 'unread'),
+    ];
 
-    // marking read is ceremonial, like every other committing act here
+    const cell = twoFaced({
+      dark, lightNodes: light,
+      extraClass: read ? ' is-read' : '',
+      onFollow: () => {
+        if (!r.f.URL) return;
+        window.open(r.f.URL, '_blank', 'noopener,noreferrer');
+      },
+    });
+
     const mark = h('button', { class: 'plain italic shelf-mark' },
       read ? 'hold to unread' : 'hold to mark read');
     holdToAct(mark, {
@@ -1089,7 +1182,7 @@ export function mountCupboard(app) {
       onComplete: async () => {
         await store.markRead(key, !read);
         render();
-        whisper(read ? 'back on the shelf, unopened.' : 'read. it changes shape now.', 3200);
+        whisper(read ? 'back on the shelf, unopened.' : 'read — it takes its form now.', 3400);
       },
     });
     cell.appendChild(mark);
@@ -1098,22 +1191,21 @@ export function mountCupboard(app) {
 
   function specimenCard(x) {
     const url = shelfImageUrl(x, 'Image');
-    const cell = h('div', { class: 'shelf-cell' });
-    const face = h('div', { class: 'shelf-face' });
-    face.appendChild(url
+    const dark = url
       ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
-      : h('div', { class: 'shelf-unformed' }));
-    cell.appendChild(face);
-    cell.appendChild(h('div', { class: 'shelf-name' }, x.f.Name || 'unnamed'));
-    const when = h('div', { class: 'shelf-when dim italic' });
-    // provenance, never a tier: a thing is rare because she has only done
-    // that twice, and the sentence says so in plain words.
-    when.appendChild(h('span', {}, x.f['Rarity note'] || `found ${shortDate(x.f.Found)}`));
-    cell.appendChild(when);
-    if (x.f.Found) {
-      cell.appendChild(h('a', { class: 'plain italic shelf-mark', href: `#/day/${x.f.Found}` }, 'the day it came up ↗'));
-    }
-    return cell;
+      : h('div', { class: 'shelf-sigil' }, [sigilSVG(x.f.Name || x.f.Key || '')]);
+    const light = [
+      h('div', { class: 'shelf-lt-name' }, x.f.Name || 'unnamed'),
+      h('div', { class: 'shelf-lt-line dim italic' }, x.f.Kind || 'specimen'),
+      h('div', { class: 'shelf-lt-when dim italic' },
+        x.f['Rarity note'] || `found ${shortDate(x.f.Found)}`),
+      h('div', { class: 'shelf-lt-hint dim italic' }, 'given'),
+    ];
+    return twoFaced({
+      dark, lightNodes: light,
+      // a specimen has no link to follow — it goes back to the day it came up
+      onFollow: () => { if (x.f.Found) location.hash = `#/day/${x.f.Found}`; },
+    });
   }
 
   function section(title, cells) {
@@ -1130,16 +1222,21 @@ export function mountCupboard(app) {
     clear(wall);
     const all = store.readings();
     const unread = all.filter((r) => !r.f.Read).map(readingCard);
-    const done = all.filter((r) => r.f.Read).map(readingCard);
-    const found = [...(store.S.data.Specimens || [])]
-      .filter((x) => x.f.Name)
-      .sort((a, b) => String(b.f.Found || '').localeCompare(String(a.f.Found || '')))
-      .map(specimenCard);
+
+    // once read, a reading IS a find — it has taken its form and belongs
+    // beside the things the world handed over. Brought and given sit on the
+    // same shelf, sorted by when they arrived; the light face says which is
+    // which, so the distinction is legible without being segregated.
+    const finds = [
+      ...all.filter((r) => r.f.Read)
+        .map((r) => ({ on: r.f['Read on'] || r.f.Submitted || '', node: () => readingCard(r) })),
+      ...(store.S.data.Specimens || []).filter((x) => x.f.Name)
+        .map((x) => ({ on: x.f.Found || '', node: () => specimenCard(x) })),
+    ].sort((a, b) => String(b.on).localeCompare(String(a.on))).map((o) => o.node());
 
     const parts = [
       section('waiting', unread),
-      section('found', found),
-      section('read', done),
+      section('found', finds),
     ].filter(Boolean);
 
     if (!parts.length) {
