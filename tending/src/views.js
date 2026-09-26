@@ -367,6 +367,21 @@ export function mountDay(app, date) {
     clear(printBox);
     const row = store.dayFor(date);
     const url = plateImageUrl(row);
+    // the plates ride SMALL at the top: the few days before this one, then
+    // this day's at the end, a little larger. the front face is a keepsake,
+    // not the page's subject — the day's own work is the lanes below.
+    const strip = h('div', { class: 'plate-strip' });
+    const before = [...store.S.data.Days]
+      .map((d) => ({ date: d.f.Date || d.f.Key, url: plateImageUrl(d) }))
+      .filter((p) => p.url && p.date && p.date < date)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))   // newest first, to take the nearest few
+      .slice(0, 3)
+      .reverse();                                    // then left-to-right in time
+    for (const p of before) {
+      strip.appendChild(h('a', {
+        class: 'plate-thumb-wrap', href: `#/day/${p.date}`, title: store.fmtDate(p.date),
+      }, [h('img', { class: 'plate-thumb', src: p.url, alt: store.fmtDate(p.date), loading: 'lazy' })]));
+    }
     if (url) {
       stopPollPrint();
       // the print has landed — release the ritual flag so the press is
@@ -381,10 +396,15 @@ export function mountDay(app, date) {
       // takes the whole screen — the front is bounded and printable, the
       // back has no edges and cannot be. No label says so; the only hint
       // is the slow breath at the card's edge (see .print-shown::after).
+      // it swells from the thumbnail's own rect, so shrinking the card
+      // only makes the turn travel further.
       plate.addEventListener('click', () => farview.open(date, plate));
       shown.appendChild(plate);
-      shown.appendChild(h('a', { class: 'plain italic print-done', href: '#/gallery' }, 'printed — in the gallery ↗'));
-      printBox.appendChild(shown);
+      strip.appendChild(shown);
+    }
+    if (strip.childNodes.length) printBox.appendChild(strip);
+    if (url) {
+      printBox.appendChild(h('a', { class: 'plain italic print-done', href: '#/gallery' }, 'the gallery ↗'));
       return;
     }
     const requested = !!(row && row.f['Print?']);
