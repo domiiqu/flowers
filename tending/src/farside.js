@@ -24,7 +24,7 @@
 // cost, never punishment. A place that withered when she slept badly
 // would be a guilt machine, and she would stop turning the card.
 
-import { addDays, DAYS_BACK } from './store.js?v=18';
+import { addDays, DAYS_BACK } from './store.js?v=22';
 
 const MINUTES = 1440;
 
@@ -327,22 +327,36 @@ function driftOf(next, prev) {
 // A specimen comes up on a rare day-shape, and rarity is measured against
 // her own history — a thing is rare because she has only done that twice,
 // never because a table said so.
+// The world's own gifts. These are GIVEN — she cannot ask for one, and that
+// asymmetry is what keeps the far side a place rather than a vending
+// machine. Reading something earns an artifact; this is the other thing,
+// the one that arrives on a day she did not plan.
+//
+// Deliberately harder to trip than the first pass. A gift that came most
+// weeks would read as noise, and "found" would stop meaning anything next
+// to the things she went and got.
 const GERMS = [
-  { id: 'long-span', test: (s) => s.longestSpan >= 300,
+  { id: 'long-span', test: (s) => s.longestSpan >= 360,
     kind: 'vegetation', why: 'one thing held without a break from first light to well past the middle of the day' },
-  { id: 'early', test: (s) => s.wakeAt != null && s.wakeAt < 5 * 60,
+  { id: 'early', test: (s) => s.wakeAt != null && s.wakeAt < 4 * 60 + 30,
     kind: 'creature', why: 'the light came before anything should have been lighting anything' },
-  { id: 'short-night', test: (s) => s.sleepMinutes != null && s.sleepMinutes < 300,
+  { id: 'short-night', test: (s) => s.sleepMinutes != null && s.sleepMinutes < 270,
     kind: 'weather', why: 'a night that ended before it had finished' },
-  { id: 'long-night', test: (s) => s.sleepMinutes != null && s.sleepMinutes > 600,
+  { id: 'long-night', test: (s) => s.sleepMinutes != null && s.sleepMinutes > 660,
     kind: 'mineral', why: 'a night that went on past its own end' },
-  { id: 'dense', test: (s) => s.names.length >= 6,
+  { id: 'dense', test: (s) => s.names.length >= 8,
     kind: 'vegetation', why: 'more kinds standing at once than the ground here usually carries' },
   { id: 'novel', test: (s) => s.firstSeen.length > 0,
     kind: 'creature', why: 'a kind that had not been seen on this shelf before' },
   { id: 'empty', test: (s) => s.tracked && s.marks === 0,
     kind: 'trace', why: 'a day that left almost nothing standing, and left this instead' },
 ];
+
+// and a second gate on top of the thresholds: the shape must actually be
+// rare against HER OWN history, not merely unusual-looking in the abstract.
+// Self-calibrating — if a 4am wake becomes ordinary for her, it stops being
+// a gift, which is the only honest definition of rare this app can hold.
+const GIVEN_FLOOR = 0.85;
 
 // how often this shape has come up across the loaded window — the honest
 // denominator, and the reason rarity cannot be gamed.
@@ -372,8 +386,10 @@ export function germinate(dateISO, data) {
   const hit = GERMS.filter((g) => g.test(s));
   if (!hit.length) return null;
   const germ = pick(hit, s.seed);
-  const form = s.names.length ? formFor(pick(s.names, s.seed)) : FORMS[s.seed % FORMS.length];
   const { rarity, note } = rarityOf(germ, dateISO, data);
+  // the world gives only when the day is genuinely unlike her others
+  if (rarity < GIVEN_FLOOR) return null;
+  const form = s.names.length ? formFor(pick(s.names, s.seed)) : FORMS[s.seed % FORMS.length];
   return {
     Name: `${form.n.split(' ').slice(-1)[0].replace(/s$/, '')}, ${pick(['fallen', 'unopened', 'split', 'out of season', 'carried', 'left standing'], s.seed >> 3)}`,
     Found: dateISO,

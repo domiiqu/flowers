@@ -2,11 +2,12 @@
 // returns a cleanup function (timers, listeners) called before the router
 // moves on.
 
-import * as store from './store.js?v=18';
-import { dayStateFields, computeWorldState } from './world.js?v=18';
-import { farSideFor } from './farside.js?v=18';
-import * as farview from './farview.js?v=18';
-import * as gcal from './gcal.js?v=18';
+import * as store from './store.js?v=22';
+import { dayStateFields, computeWorldState } from './world.js?v=22';
+import { farSideFor } from './farside.js?v=22';
+import * as farview from './farview.js?v=22';
+import { sigilSVG } from './sigil.js?v=22';
+import * as gcal from './gcal.js?v=22';
 
 // the day's finished print lives in ONE field — the base's AI image field,
 // "Plate generator". Read only that (never scan every field), so a stray
@@ -229,6 +230,12 @@ export function mountDay(app, date) {
   // quiet "print this day" action, never a big empty box.
   const printBox = h('div', { class: 'print-ritual' });
   root.appendChild(printBox);
+  // what arrived on this day — a reading on the day she brought it, a find
+  // on the day it came. Puts the shelf on the calendar instead of only in
+  // its own room: a day is not just what she logged, it is also what turned
+  // up.
+  const dayObjects = h('div', { class: 'day-objects' });
+  root.appendChild(dayObjects);
 
   // the day's shape — schedule as soft blocks (Google Calendar when
   // connected, otherwise editable blocks kept in Days.Schedule)
@@ -257,6 +264,7 @@ export function mountDay(app, date) {
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: '#/cupboard' }, 'the cupboard'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   root.appendChild(hints);
@@ -355,6 +363,7 @@ export function mountDay(app, date) {
   // shown large and portrait at the top; a small line under it points at
   // the gallery, where every keepsake collects.
   function renderPrint() {
+    renderDayObjects();
     clear(printBox);
     const row = store.dayFor(date);
     const url = plateImageUrl(row);
@@ -416,6 +425,41 @@ export function mountDay(app, date) {
       }
     });
     printBox.appendChild(btn);
+  }
+
+  // the same two-faced card as the cupboard, at a smaller size: click turns
+  // it, double-click follows it. Deliberately the same gesture everywhere —
+  // a thing on the shelf and the same thing on its day behave identically.
+  function renderDayObjects() {
+    clear(dayObjects);
+    const brought = (store.S.data.Readings || []).filter((r) => r.f.Submitted === date);
+    const found = [
+      ...(store.S.data.Readings || []).filter((r) => r.f.Read && r.f['Read on'] === date),
+      ...(store.S.data.Specimens || []).filter((x) => x.f.Name && x.f.Found === date),
+    ];
+    // a reading brought AND read on the same day should appear once, as a find
+    const foundKeys = new Set(found.map((o) => o.f.Key));
+    const rows = [
+      ...found.map((o) => ({ row: o })),
+      ...brought.filter((r) => !foundKeys.has(r.f.Key)).map((r) => ({ row: r })),
+    ];
+    if (!rows.length) return;
+    const strip = h('div', { class: 'day-objects-strip' });
+    for (const { row } of rows) {
+      const isSpecimen = !!row.f.Name && !row.f.URL;
+      const url = store.latestImageUrl(row.f.Image);
+      const showDark = isSpecimen || row.f.Read;
+      const art = (showDark && url)
+        ? h('img', { class: 'day-object-img', src: url, alt: '', loading: 'lazy' })
+        : h('div', { class: 'day-object-sigil' }, [sigilSVG(row.f.URL || row.f.Name || row.f.Key || '')]);
+      const cell = h('a', {
+        class: 'day-object', href: '#/cupboard',
+        title: row.f.Title || row.f.Name || '',
+      });
+      cell.appendChild(art);
+      strip.appendChild(cell);
+    }
+    dayObjects.appendChild(strip);
   }
 
   // after anything changes the day, its flattened world-state is written
@@ -1011,6 +1055,232 @@ export function mountDay(app, date) {
   };
 }
 
+
+// =============================================================== the cupboard
+// One shelf, two provenances. SPECIMENS are what the far side gave her —
+// she cannot ask for one; they come up on rare day-shapes or not at all.
+// READINGS are what she brought: a link dropped in from this world, which
+// materialises there as an artifact of unclear purpose. Keeping them as
+// separate tables and joining them only at the glass is the point — the
+// shelf holds what you were given beside what you went and got.
+
+function shelfImageUrl(row, field) {
+  return store.latestImageUrl(row && row.f[field]);
+}
+
+// the app's usual date ("saturday · september 19") is too long for a shelf
+// card — a read one carries two of them and wrapped to two lines. Same
+// lowercase register, tighter: "19 sep".
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+}
+
+const SHELF_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function shortDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return '';
+  return `${Number(m[3])} ${SHELF_MONTHS[Number(m[2]) - 1] || ''}`.trim();
+}
+
+export function mountCupboard(app) {
+  const root = h('div', { class: 'room' });
+  app.appendChild(root);
+  root.appendChild(h('div', { class: 'meadow-title italic' }, 'the cupboard'));
+
+  // ---- putting something on the shelf ---------------------------------
+  // never window.prompt() — this can run as a home-screen web app, where
+  // it is silently suppressed (see the touch rules in DESIGN).
+  const put = h('div', { class: 'shelf-put' });
+  const urlField = h('input', {
+    class: 'field shelf-url', type: 'url', inputmode: 'url',
+    placeholder: 'drop a link', 'aria-label': 'link to shelve',
+  });
+  const titleField = h('input', {
+    class: 'field shelf-title', type: 'text',
+    placeholder: 'what to call it (optional)', 'aria-label': 'title',
+  });
+  const putBtn = h('button', { class: 'plain italic shelf-add' }, 'put it on the shelf');
+  put.appendChild(urlField);
+  put.appendChild(titleField);
+  put.appendChild(putBtn);
+  root.appendChild(put);
+
+  const wall = h('div', { class: 'shelf-wall' });
+  root.appendChild(wall);
+
+  async function shelve() {
+    const url = urlField.value.trim();
+    if (!url) { urlField.focus(); return; }
+    putBtn.setAttribute('disabled', '');
+    await store.shelveReading({ url, title: titleField.value });
+    urlField.value = ''; titleField.value = '';
+    putBtn.removeAttribute('disabled');
+    render();
+    whisper('on the shelf. it will take its form shortly.', 3600);
+  }
+  putBtn.addEventListener('click', shelve);
+  urlField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
+  titleField.addEventListener('keydown', (e) => { if (e.key === 'Enter') shelve(); });
+
+  // ---- the shelf -------------------------------------------------------
+  // ---- one card, three gestures --------------------------------------
+  // LIGHT face = the record. DARK face = its form on the planet.
+  //   click        turns it
+  //   double-click follows it
+  //   press & hold marks it read
+  //
+  // The hold used to live on a little text line under the card. That line
+  // measured 82x12px at 0.6 opacity — unhittable on a finger, and a plain
+  // violation of this app's own law that every target is >=44px. The
+  // mechanism was never broken; the target was. So the CARD is the target
+  // now: ~130x162px, impossible to miss, and it gets the hold underline.
+  //
+  // Single- and double-click fight on the same element (the single fires
+  // first), so the turn is held back briefly and cancelled if a second
+  // click lands. A completed hold also fires a click on release, so it
+  // raises a flag that swallows exactly one.
+  const DOUBLE_MS = 230;
+
+  // A completed hold fires a click on release — but the hold also re-renders
+  // the shelf, so by the time that click lands the card it started on is
+  // gone and a brand-new one receives it. A per-card flag cannot survive
+  // that, so the suppression is shared and time-boxed: any card built
+  // within this window ignores exactly the click that ends a hold.
+  let swallowClicksUntil = 0;
+
+  function twoFaced({ dark, lightNodes, onFollow, onHold, extraClass = '' }) {
+    const cell = h('div', { class: `shelf-cell${extraClass}` });
+    const card = h('div', { class: 'shelf-card' });
+    const faces = h('div', { class: 'shelf-faces' });
+
+    const darkFace = h('div', { class: 'shelf-face shelf-dark' });
+    darkFace.appendChild(dark);
+    const lightFace = h('div', { class: 'shelf-face shelf-light' });
+    for (const n of lightNodes) lightFace.appendChild(n);
+
+    faces.appendChild(darkFace);
+    faces.appendChild(lightFace);
+    card.appendChild(faces);
+    cell.appendChild(card);
+
+    let turned = false, timer = null;
+    function turn() {
+      turned = !turned;
+      faces.classList.toggle('turned', turned);
+    }
+    card.addEventListener('click', () => {
+      if (performance.now() < swallowClicksUntil) return;  // release after a hold
+      if (timer) return;                                   // second half of a double
+      timer = setTimeout(() => { timer = null; turn(); }, DOUBLE_MS);
+    });
+    card.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (onFollow) onFollow();
+    });
+    if (onHold) {
+      holdToAct(card, {
+        ms: 650,
+        onComplete: () => {
+          swallowClicksUntil = performance.now() + 600;
+          if (timer) { clearTimeout(timer); timer = null; }
+          onHold();
+        },
+      });
+    }
+    return cell;
+  }
+
+  function readingCard(r) {
+    const key = r.f.Key;
+    const read = !!r.f.Read;
+    const url = shelfImageUrl(r, 'Image');
+
+    const dark = (read && url)
+      ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
+      : h('div', { class: 'shelf-sigil' }, [sigilSVG(r.f.URL || key)]);
+
+    const light = [
+      h('div', { class: 'shelf-lt-name' }, r.f.Title || 'untitled'),
+      h('div', { class: 'shelf-lt-line dim italic' }, hostOf(r.f.URL)),
+      h('div', { class: 'shelf-lt-when dim italic' },
+        `${shortDate(r.f.Submitted)}${read && r.f['Read on'] ? ` · read ${shortDate(r.f['Read on'])}` : ''}`),
+    ];
+
+    const cell = twoFaced({
+      dark, lightNodes: light,
+      extraClass: read ? ' is-read' : '',
+      onFollow: () => {
+        if (!r.f.URL) return;
+        window.open(r.f.URL, '_blank', 'noopener,noreferrer');
+      },
+      onHold: async () => {
+        await store.markRead(key, !read);
+        render();
+        whisper(read ? 'back on the shelf, unopened.' : 'read — it takes its form now.', 3400);
+      },
+    });
+    // a hint, not a control — the card itself is the target now
+    cell.appendChild(h('div', { class: 'shelf-hint dim italic' },
+      read ? 'read' : 'hold to mark read'));
+    return cell;
+  }
+
+  function specimenCard(x) {
+    const url = shelfImageUrl(x, 'Image');
+    const dark = url
+      ? h('img', { class: 'shelf-img', src: url, alt: '', loading: 'lazy' })
+      : h('div', { class: 'shelf-sigil' }, [sigilSVG(x.f.Name || x.f.Key || '')]);
+    const light = [
+      h('div', { class: 'shelf-lt-name' }, x.f.Name || 'unnamed'),
+      h('div', { class: 'shelf-lt-line dim italic' }, x.f.Kind || ''),
+      h('div', { class: 'shelf-lt-when dim italic' },
+        x.f['Rarity note'] || shortDate(x.f.Found)),
+    ];
+    return twoFaced({
+      dark, lightNodes: light,
+      onFollow: () => { if (x.f.Found) location.hash = `#/day/${x.f.Found}`; },
+    });
+  }
+
+  function render() {
+    clear(wall);
+    // ONE shelf. Everything on it, newest first, dated by when it arrived:
+    // a reading by when it was brought in, a specimen by when it came up.
+    // No sections and no taxonomy — the card's own face says what it is, and
+    // sorting them together is the whole point of a shelf.
+    const items = [
+      ...store.readings().map((r) => ({ on: r.f.Submitted || '', node: () => readingCard(r) })),
+      ...(store.S.data.Specimens || []).filter((x) => x.f.Name)
+        .map((x) => ({ on: x.f.Found || '', node: () => specimenCard(x) })),
+    ].sort((a, b) => String(b.on).localeCompare(String(a.on)));
+
+    if (!items.length) {
+      wall.appendChild(h('div', { class: 'dim italic', style: 'text-align:center;margin-top:24px' },
+        'the cupboard is bare. drop a link above to begin it.'));
+      return;
+    }
+    const grid = h('div', { class: 'shelf-grid' });
+    for (const it of items) grid.appendChild(it.node());
+    wall.appendChild(grid);
+  }
+
+  render();
+  let alive = true;
+  // pull the freshest rows on entry, so a just-painted artifact appears
+  if (store.connected()) {
+    Promise.all([store.reloadTable('Readings'), store.reloadTable('Specimens')])
+      .then(() => { if (alive) render(); });
+  }
+
+  const hints = h('div', { class: 'hints' }, [
+    h('a', { href: '#/day/' }, 'the day'),
+    h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: '#/tend' }, 'tend'),
+  ]);
+  app.appendChild(hints);
+  return () => { alive = false; };
+}
 
 // ================================================================ gallery
 // the wall of prints — every day that's been painted, newest first. as

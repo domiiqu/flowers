@@ -385,6 +385,76 @@ exposes no generative-image field type), generating from those formulas into
   seeded so far are drafts in my hand, deliberately thin. This is the part
   that is hers to build, day after day.
 
+#### the cupboard, v2 — light face and dark face on everything
+
+Her unification, and it is better than what it replaced: **readings are the
+light side, specimens are the dark side, and reading a thing is how you find
+one.** The double stops being a property of days alone and becomes a property
+of every object in the system.
+
+**One card, three gestures, everywhere.**
+- **light face** — the record: what it is, where it came from, when.
+- **dark face** — the image: its form on the planet.
+- **click turns it · double-click follows it · press-and-hold marks it read.**
+
+**The card is the hold target, not a line of text under it.** The first
+version put "hold to mark read" on a caption measuring **82×12px at 0.6
+opacity** — the mechanism worked (verified on mouse and emulated touch) but
+the target was unhittable with a finger, and a plain violation of this
+file's own law that every target is ≥44px. The card is ~179×224px and
+carries the hold underline at card scale.
+
+Three gestures on one element need two pieces of care, both load-bearing:
+a double-click's first click must not turn the card (the turn is held
+`230ms` and cancelled if a second lands), and **a completed hold fires a
+click on release** — but the hold also re-renders the shelf, so that click
+arrives at a brand-new card. A per-card flag cannot survive the re-render,
+so the suppression is module-scoped and time-boxed.
+
+**One shelf, no sections, no taxonomy.** Everything sits together newest
+first, dated by when it arrived: a reading by when it was brought in, a
+specimen by when it came up. The words *waiting*, *found*, *given* and
+*brought* are gone from the interface — the card's own face says what a
+thing is, and sorting them together is the whole point of a shelf.
+
+**Reading is what earns the form.** An unread reading has no dark face yet —
+that is the whole point of reading it. Marking it read is what makes the
+artifact generate, so generation is the reward rather than a side effect of
+shelving.
+
+**Two ways a thing arrives, and both are kept.** *Brought*: she read it, and
+it took its form. *Given*: the world germinated it on a day she did not plan.
+Rejected: making every specimen come from a reading — the far side would stop
+giving her anything and become a vending machine (insert reading, receive
+artifact). The asymmetry is what keeps it a place. So world-germination
+stays, but **harder to trip**: thresholds raised, and a second gate on top —
+the day-shape must score `rarity >= 0.85` against her *own* history. It is
+self-calibrating: once a 4am wake is ordinary for her it stops being a gift,
+which is the only honest definition of rare this app can hold. (Measured: a
+habitual early riser gets one gift in sixty days.)
+
+Once read, a reading **is** a find. Brought and given share one shelf with
+nothing separating them.
+
+**The sigil — `src/sigil.js`.** An unread thing must not be a blank, but a
+real thumbnail is not available to us: a link preview needs the page, which a
+static browser app cannot request (CORS), and a favicon service is both an
+external dependency this repo does not take and a quiet leak of what she
+reads. So: **formless but specific** — a mark drawn deterministically from
+the url itself. No network, every link visibly its own, the same link always
+the same mark. It reads as something under the surface that has not
+surfaced, and only unread ones breathe.
+
+**The gesture pair has a real cost, stated rather than hidden.** Single- and
+double-click fight on the same element — the single fires first — so the turn
+is held back `230ms` and cancelled if a second click arrives. Unnoticeable on
+a turn, and the price of having both gestures on one card.
+
+**The day page carries it too.** A reading appears on the day it was brought
+and a find on the day it arrived, as a small strip under the print — so the
+shelf is on the calendar and a day is not only what she logged but also what
+turned up. A thing brought and read on the same day appears once, as a find.
+
 #### the turn — `src/farview.js`
 
 **The print makes the card; the card is the portal.** Touching the printed
