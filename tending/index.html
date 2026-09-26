@@ -180,6 +180,20 @@
   .print-img { display: block; width: 100%; margin: 0 auto; border-radius: 4px;
     box-shadow: 0 6px 24px rgba(40, 34, 22, 0.18); }
 
+  /* the plate strip: keepsakes ride small at the top, in time order, this
+     day's last and a little larger (it is the portal). the page's subject
+     is the day's own work below, not the picture of it. */
+  .plate-strip { display: flex; justify-content: center; align-items: flex-end;
+    gap: 8px; flex-wrap: wrap; margin: 2px 0 6px; }
+  .plate-strip .print-shown { margin: 0; }
+  .plate-strip .print-img { width: auto; height: 96px; border-radius: 3px;
+    box-shadow: 0 3px 12px rgba(40, 34, 22, 0.16); }
+  .plate-thumb-wrap { display: block; line-height: 0; }
+  .plate-thumb { display: block; height: 74px; width: auto; border-radius: 3px;
+    background: var(--panel); opacity: 0.6;
+    transition: opacity 0.25s ease, transform 0.25s ease; }
+  .plate-thumb-wrap:hover .plate-thumb { opacity: 1; transform: translateY(-2px); }
+
   /* once a print has landed, a small line under it points at the gallery,
      where every keepsake collects. */
   .print-done { display: block; text-align: center; font-size: 0.82rem; opacity: 0.8; margin-top: 8px; }
@@ -215,8 +229,10 @@
   /* the name is the one flexible piece — it shrinks and truncates first,
      so glyph · now · edit (all fixed-width) never wrap onto a second line
      or spill past the label column. */
-  .tl-lane-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; line-height: 1.22; }
+  /* wrap rather than clip: a truncated "despo…" costs her her own
+     vocabulary, and the lane row has vertical room to spare. */
+  .tl-lane-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
+    line-height: 1.18; }
   /* inline, right after the name — quiet on purpose (small, dim, italic)
      so it reads as a soft affordance, not a primary action. */
   .tl-lane-now { flex: 0 0 auto; font-size: 0.6rem; font-style: italic; color: var(--gold); opacity: 0.62;
@@ -488,6 +504,17 @@
   /* the day's nav sits in the same bottom-right corner as tend's, rather
      than riding at the end of its own long column — one consistent place
      for "the hour" / "the gallery" / "tend" across every room. */
+
+  /* the day page is long — its hints ride at the end of the column rather
+     than floating over the work sliders, where they stole the right-hand
+     dots' taps. */
+  body[data-room="day"] .hints {
+    position: static; right: auto; bottom: auto; text-align: center;
+    margin: 30px auto 10px; opacity: 0.5; line-height: 1.9;
+  }
+  body[data-room="day"] .hints a, body[data-room="day"] .hints button {
+    display: inline-block; margin: 0 9px; padding: 8px 2px;
+  }
 </style>
 </head>
 <body data-room="day">
