@@ -128,7 +128,7 @@
   .day-header { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 20px; }
   .day-header button { font-size: 1.1rem; min-width: 44px; min-height: 44px; }
   .day-header h1 { font-weight: normal; font-style: italic; font-size: 1.05rem; letter-spacing: 0.08em; text-align: center; }
-  .today-link { text-align: center; margin-top: -12px; margin-bottom: 14px; font-size: 0.74rem; }
+  .today-link { text-align: left; margin-top: -12px; margin-bottom: 14px; font-size: 0.74rem; }
 
   .wallet { position: fixed; top: 16px; right: 18px; z-index: 6; font-size: 0.8rem; font-style: italic;
     background: none; border: none; color: var(--ink); cursor: pointer; padding: 8px; min-height: 44px;
@@ -136,10 +136,10 @@
   .wallet .dot { color: var(--gold); }
 
   /* ---- the day, now: a prominent date over soft schedule blocks ----- */
-  .day-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; }
+  .day-head { display: flex; align-items: center; justify-content: flex-start; gap: 16px; margin: 8px 0 4px; }
   .day-arrow { font-size: 1.4rem; min-width: 44px; min-height: 44px; opacity: 0.6; }
   .day-arrow:hover { opacity: 1; }
-  .day-date { text-align: center; }
+  .day-date { text-align: left; }
   .day-weekday { font-size: 0.9rem; letter-spacing: 0.14em; opacity: 0.65; }
   .day-datum { font-size: 2.4rem; letter-spacing: 0.02em; line-height: 1.1; color: var(--ink-strong);
     text-transform: lowercase; }
@@ -150,15 +150,22 @@
   .day-col { max-width: 100%; margin-left: auto; margin-right: auto; }
 
   /* ---- the schedule: soft blocks ------------------------------------ */
-  .schedule { max-width: 100%; margin: 18px auto 6px; display: flex; flex-direction: column; gap: 8px; }
+  /* stretch rather than shrink-wrap: an auto margin on a shrink-wrapped
+     flex child re-centred the whole schedule even with its text left. */
+  .schedule { max-width: 100%; width: 100%; align-self: stretch; margin: 18px 0 6px;
+    display: flex; flex-direction: column; gap: 8px; }
   .sched-block { display: flex; align-items: baseline; gap: 14px; padding: 12px 16px; border-radius: 14px;
     background: var(--panel); border: 1px solid var(--line); min-height: 46px; }
   .sched-block.all-day { background: transparent; border-style: dashed; }
   .sched-time { font-variant-numeric: tabular-nums; font-size: 0.82rem; color: var(--ink-dim);
     min-width: 44px; }
   .sched-title { font-style: italic; color: var(--ink-strong); }
-  .sched-empty { text-align: center; padding: 8px; }
-  .sched-add { display: block; margin: 2px auto 0; opacity: 0.6; font-size: 0.85rem; min-height: 40px; }
+  .sched-empty { text-align: left; padding: 8px 0; }
+  /* a button centres its own label, and as a stretched flex child it spans
+     the row — so it read as centred even with the column left. shrink it
+     to its content at the left instead. */
+  .sched-add { display: block; align-self: flex-start; text-align: left; margin: 2px 0 0;
+    opacity: 0.6; font-size: 0.85rem; min-height: 40px; }
   .sched-add:hover { opacity: 1; }
   .sched-form { display: flex; gap: 8px; align-items: center; padding: 6px 0; flex-wrap: wrap; }
   .sched-in { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
@@ -171,7 +178,7 @@
      plate. once it exists it sits prominently at the top of the day, full
      width, portrait; until then this is a quiet action, never a big empty
      box. --------------------------------------------------------------- */
-  .print-ritual { text-align: center; margin: 10px auto 18px; max-width: 100%; }
+  .print-ritual { text-align: left; margin: 10px 0 18px; max-width: 100%; }
   .print-btn { border: 1px solid var(--line); border-radius: 20px; padding: 10px 22px; min-height: 44px;
     background: var(--panel); letter-spacing: 0.06em; }
   .print-btn:hover:not([disabled]) { border-color: var(--gold); color: var(--ink-strong); }
@@ -183,7 +190,7 @@
   /* the plate strip: keepsakes ride small at the top, in time order, this
      day's last and a little larger (it is the portal). the page's subject
      is the day's own work below, not the picture of it. */
-  .plate-strip { display: flex; justify-content: center; align-items: flex-end;
+  .plate-strip { display: flex; justify-content: flex-start; align-items: flex-end;
     gap: 8px; flex-wrap: wrap; margin: 2px 0 6px; }
   .plate-strip .print-shown { margin: 0; }
   .plate-strip .print-img { width: auto; height: 96px; border-radius: 3px;
@@ -196,7 +203,7 @@
 
   /* once a print has landed, a small line under it points at the gallery,
      where every keepsake collects. */
-  .print-done { display: block; text-align: center; font-size: 0.82rem; opacity: 0.8; margin-top: 8px; }
+  .print-done { display: block; text-align: left; font-size: 0.82rem; opacity: 0.8; margin-top: 8px; }
   .print-done:hover { opacity: 1; }
 
   /* ---- a shared inline "+ add" idiom: never window.prompt() (an iOS
@@ -327,11 +334,11 @@
      so the track gets the column's full width. ------------------------ */
   .domains { display: flex; flex-direction: row; flex-wrap: wrap; gap: 14px; margin: 4px 0 26px; }
   .domain-col { flex: 1 1 0; min-width: 0; }
-  .domain-col h3 { font-weight: normal; text-align: center; margin-bottom: 10px; letter-spacing: 0.05em; }
+  .domain-col h3 { font-weight: normal; text-align: left; margin-bottom: 10px; letter-spacing: 0.05em; }
   .rating-row { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; }
   .rating-label-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .rating-label { font-size: 0.72rem; }
-  .axis-add-row { flex-basis: 100%; text-align: center; margin-top: 4px; }
+  .axis-add-row { flex-basis: 100%; text-align: left; margin-top: 4px; }
   /* the visible track is thin (1-2px); the hit area around it is a full
      44px tall so a thumb never needs to land exactly on the hairline */
   .rating-hit { position: relative; height: 44px; touch-action: none; -webkit-touch-callout: none;
@@ -610,11 +617,11 @@
      than floating over the work sliders, where they stole the right-hand
      dots' taps. */
   body[data-room="day"] .hints {
-    position: static; right: auto; bottom: auto; text-align: center;
-    margin: 30px auto 10px; opacity: 0.5; line-height: 1.9;
+    position: static; right: auto; bottom: auto; text-align: left;
+    margin: 30px 0 10px; opacity: 0.5; line-height: 1.9;
   }
   body[data-room="day"] .hints a, body[data-room="day"] .hints button {
-    display: inline-block; margin: 0 9px; padding: 8px 2px;
+    display: inline-block; margin: 0 18px 0 0; padding: 8px 2px;
   }
 </style>
 </head>
