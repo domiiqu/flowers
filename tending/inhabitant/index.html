@@ -45,8 +45,17 @@
   }
 
   /* ---- the dials: the world's inputs, flipped by hand for now ------- */
+  .source {
+    margin: 18px auto 0; max-width: 760px; font-style: italic; font-size: 0.78rem;
+    color: var(--ink-dim); line-height: 1.6;
+  }
+  .source button {
+    background: none; border: none; padding: 0 0 0 4px; color: var(--gold);
+    font-family: inherit; font-style: italic; font-size: inherit; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
   .dials {
-    margin: 22px auto 0; max-width: 760px; display: grid;
+    margin: 14px auto 0; max-width: 760px; display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px 22px;
   }
   .dial label {
@@ -63,15 +72,14 @@
   .toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--ink-strong); }
   .toggle[aria-pressed="true"]::after { content: ' · on'; color: var(--gold); }
   .toggle.text { border-style: dashed; }
-  .source {
-    margin: 18px auto 0; max-width: 760px; font-style: italic; font-size: 0.78rem;
-    color: var(--ink-dim); line-height: 1.6;
+  details.furnish { margin: 18px auto 0; max-width: 760px; }
+  details.furnish summary {
+    cursor: pointer; font-style: italic; font-size: 0.8rem; color: var(--ink-dim); list-style: none;
   }
-  .source button {
-    background: none; border: none; padding: 0 0 0 4px; color: var(--gold);
-    font-family: inherit; font-style: italic; font-size: inherit; cursor: pointer;
-    text-decoration: underline; text-underline-offset: 3px;
-  }
+  details.furnish summary::-webkit-details-marker { display: none; }
+  details.furnish summary::before { content: '▸ '; }
+  details.furnish[open] summary::before { content: '▾ '; }
+  details.furnish .dials { margin-top: 12px; }
 
   /* ---- the reply desk: he drafts, you decide ------------------------ */
   .desk {
@@ -105,9 +113,9 @@
 </head>
 <body>
   <h1>the inhabitant</h1>
-  <p class="sub">he lives here. the world is the only thing you touch — turn the cold, bring the
-    night, let it rain, tell him you slept badly — and he decides what to do about it.
-    his world follows today's page in the day-book — or take the dials and set it by hand.</p>
+  <p class="sub">he lives here — a nook with a fire, a desk, a window on the field, and a door he
+    uses when he feels like it. the world is the only thing you touch, and it follows today's
+    page in the day-book; or take the dials and set it by hand. a text goes in the mailbox.</p>
 
   <div class="stage">
     <canvas id="world"></canvas>
@@ -126,6 +134,29 @@
     <div class="dial"><button class="toggle text" id="text">a text arrives</button></div>
   </div>
 
+  <details class="furnish">
+    <summary>the furnishings — what the rest of the book becomes</summary>
+    <div class="dials">
+      <div class="dial">
+        <label for="logs">logs by the fire · habits done <span class="val" id="logsVal"></span></label>
+        <input type="range" id="logs" min="0" max="8" step="1" value="3">
+      </div>
+      <div class="dial">
+        <label for="notes">notes above the desk · moments <span class="val" id="notesVal"></span></label>
+        <input type="range" id="notes" min="0" max="9" step="1" value="2">
+      </div>
+      <div class="dial">
+        <label for="books">books on the shelf · readings <span class="val" id="booksVal"></span></label>
+        <input type="range" id="books" min="0" max="12" step="1" value="3">
+      </div>
+      <div class="dial">
+        <label for="days">the sill plant · days tracked <span class="val" id="daysVal"></span></label>
+        <input type="range" id="days" min="0" max="120" step="1" value="12">
+      </div>
+      <div class="dial"><button class="toggle" id="season">season · autumn</button></div>
+    </div>
+  </details>
+
   <div class="desk" id="desk">
     <div class="from" id="deskFrom"></div>
     <div class="msg" id="deskMsg"></div>
@@ -140,18 +171,22 @@
 
   <footer>
     <strong>how he works.</strong> a brain and a body, kept apart. the <strong>body</strong> is a
-    fixed repertoire, drawn in code — wander, shiver, bundle up, open the umbrella, light the
-    lantern, yawn, sleep, read. the <strong>brain</strong> is one function, <em>decide(world, him)</em>,
-    that looks at the world every second or so and picks from the repertoire. today it is a
-    handful of rules; it is the one seam a model (jev, claude) would replace. the model never
-    draws — it only chooses.
+    fixed repertoire, drawn in code — wander, potter, sit by the fire, sit at the desk, look out
+    the window, fetch the post, go in, go out, shiver, yawn, sleep, read. the <strong>brain</strong>
+    is one function, <em>decide(world, him)</em>, that looks at the world every second or so and
+    picks from the repertoire. today it is a handful of rules; it is the one seam a model (jev,
+    claude) would replace. the model never draws — it only chooses.
   </footer>
 
 <script type="module">
 // ------------------------------------------------------------------ world
-// the inputs. in the real thing these come from the day-book (and the
-// texts from a relay); here the dials set them by hand.
-const world = { temp: 16, night: false, rain: false, tired: false, inbox: [] };
+// the inputs. the day-book sets them (below); the dials stand in by hand.
+// `mail` is the flag on the box — texts not yet fetched; `inbox` holds
+// them until they are answered.
+const world = {
+  temp: 16, night: false, rain: false, tired: false, inbox: [], mail: 0,
+  logs: 3, notes: 2, books: 3, days: 12, season: 'autumn',
+};
 
 const TEXTS = [
   { from: 'sam', text: 'are we still on for friday?', draft: 'yes! friday still works — 7 at the usual?' },
@@ -161,43 +196,98 @@ const TEXTS = [
 ];
 let textIx = 0;
 
+// the fire: lit when the house wants it, and the day's logs decide how
+// much of a fire it is. no logs is still embers — a bare day is not a
+// cold house.
+function fireLevel(w) {
+  const lit = w.night || w.temp < 14 || w.rain;
+  return lit ? 0.35 + 0.65 * Math.min(1, w.logs / 5) : 0;
+}
+
 // ------------------------------------------------------------------ brain
 // the seam. given the world and his current state, return what he wears,
 // what he does, and (only when something changed) what he says. a model
 // replaces this function and nothing else — it must answer from the same
 // fixed repertoire, so the body can always play it.
-const REPERTOIRE = ['wander', 'idle', 'shiver', 'fan', 'yawn', 'sleep', 'read'];
+const REPERTOIRE = {
+  out: ['wander', 'idle', 'shiver', 'fan', 'yawn', 'fetch', 'goIn'],
+  in: ['potter', 'idle', 'fire', 'desk', 'window', 'sleep', 'read', 'yawn', 'shiver', 'goOut'],
+};
+// how long he stays with a thing once he has chosen it (seconds, a range)
+const HOLD = {
+  fire: [8, 16], desk: [7, 14], window: [5, 10], sleep: [30, 60],
+  wander: [3, 7], potter: [3, 6], idle: [1.5, 4], shiver: [2, 4], fan: [2, 4], yawn: [2.8, 2.8],
+};
+const pick = (weights) => {
+  const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  let r = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
+  for (const [k, w] of entries) { r -= w; if (r <= 0) return k; }
+  return entries[entries.length - 1][0];
+};
 
 function decide(w, me) {
+  const indoors = me.place === 'in';
+  const feels = indoors ? w.temp + 4 + fireLevel(w) * 16 : w.temp;
   const wear = {
-    sweater: w.temp < 10,
-    scarf: w.temp < 2,
-    umbrella: w.rain,
-    lantern: w.night,
+    sweater: feels < 10,
+    scarf: feels < 2,
+    umbrella: !indoors && w.rain,
+    lantern: !indoors && w.night,
   };
 
+  const errand = ['read', 'fetch', 'goIn', 'goOut'].includes(me.act);
+  const busy = me.actT < me.hold;
   let act;
-  if (w.inbox.length || me.act === 'read') act = 'read';
-  else if (w.night && w.tired) act = 'sleep';
-  else if (w.temp < 0 && !(wear.sweater && wear.scarf && Math.random() < 0.5)) act = 'shiver';
-  else if (w.temp > 29) act = Math.random() < 0.6 ? 'fan' : 'idle';
-  else if (w.tired) act = Math.random() < 0.35 ? 'yawn' : 'idle';
-  else if (w.night) act = Math.random() < 0.3 ? 'wander' : 'idle';
-  else act = Math.random() < 0.55 ? 'wander' : 'idle';
+  if (me.carrying) act = indoors ? 'read' : 'goIn';
+  else if (w.mail) act = indoors ? 'goOut' : 'fetch';
+  else if (errand) act = 'idle';
+  else if (busy && !(indoors && w.night && w.tired && me.act !== 'sleep')) act = me.act;
+  else if (indoors) {
+    if (w.night && w.tired) act = 'sleep';
+    else {
+      const nice = !w.rain && w.temp >= 4 && w.temp <= 28;
+      act = pick({
+        goOut: w.night ? 0.06 : (nice ? 0.7 : 0.08) + Math.min(1, me.placeT / 90) * 0.6,
+        fire: 0.5 + (w.temp < 10 ? 0.9 : 0) + (w.night ? 0.6 : 0) + (w.rain ? 0.3 : 0),
+        desk: 0.6,
+        window: 0.4 + (w.rain ? 0.7 : 0) + (w.night ? 0.2 : 0),
+        potter: 0.5, idle: 0.3,
+        yawn: w.tired ? 0.6 : 0,
+        shiver: feels < 0 ? 0.6 : 0,
+      });
+    }
+  } else {
+    const harsh = w.rain || w.temp < 0 || w.temp > 31;
+    const wantIn = (w.night && w.tired) ? 3 : harsh ? 0.7 : w.night ? 0.35 : w.tired ? 0.3 : 0.08;
+    act = pick({
+      goIn: wantIn + Math.min(1, me.placeT / 60) * 0.4,
+      wander: 1, idle: 0.6,
+      shiver: w.temp < 0 ? 0.8 : 0,
+      fan: w.temp > 29 ? 0.8 : 0,
+      yawn: w.tired ? 0.4 : 0,
+    });
+  }
 
   // he only speaks when something changes — a running commentary is noise
   let say = null;
-  const was = me.wearing;
+  const was = me.wearing, fresh = act !== me.act;
   if (wear.sweater && !was.sweater) say = 'bit nippy.';
   else if (wear.scarf && !was.scarf) say = 'properly cold now.';
-  else if (wear.umbrella && !was.umbrella) say = 'ah. rain.';
-  else if (!wear.umbrella && was.umbrella) say = "that's passed.";
-  else if (wear.lantern && !was.lantern) say = 'getting dark.';
-  else if (!wear.lantern && was.lantern) say = 'morning.';
+  else if (!indoors && wear.umbrella && !was.umbrella) say = 'ah. rain.';
+  else if (!indoors && !wear.umbrella && was.umbrella) say = "that's passed.";
+  else if (!indoors && wear.lantern && !was.lantern) say = 'getting dark.';
   else if (!wear.sweater && was.sweater) say = 'better.';
-  else if (act === 'sleep' && me.act !== 'sleep') say = 'just resting my eyes.';
-  else if (act === 'fan' && me.act !== 'fan') say = 'too warm.';
-  else if (act === 'yawn' && me.act !== 'yawn' && Math.random() < 0.4) say = 'long night.';
+  else if (fresh && act === 'goOut') say = w.mail ? 'post.' : 'a bit of air.';
+  else if (fresh && act === 'goIn' && !me.carrying) {
+    say = w.night && w.tired ? 'bed.' : w.rain ? 'in, i think.' : w.temp < 0 ? 'enough of that.' : 'in we go.';
+  }
+  else if (fresh && act === 'sleep') say = 'just resting my eyes.';
+  else if (fresh && act === 'fire' && Math.random() < 0.5) say = "that's the stuff.";
+  else if (fresh && act === 'window' && w.rain) say = 'look at it come down.';
+  else if (fresh && act === 'window' && w.night && Math.random() < 0.6) say = 'the moons are out.';
+  else if (fresh && act === 'desk' && Math.random() < 0.3) say = 'hm.';
+  else if (fresh && act === 'fan') say = 'too warm.';
+  else if (fresh && act === 'yawn' && Math.random() < 0.4) say = 'long night.';
 
   return { wear, act, say };
 }
@@ -206,77 +296,108 @@ function decide(w, me) {
 // his state. `wear` values ease 0→1 so every change is a small motion —
 // the sweater pulls down, the umbrella opens — never a cut.
 const me = {
+  place: 'in', placeT: 0, fade: 1, passing: false,
   x: 0, targetX: 0, facing: 1, walking: 0,
-  act: 'idle', actT: 0,
+  act: 'idle', actT: 0, hold: 0, sitT: 0,
+  carrying: 0, taken: false,
   wearing: { sweater: false, scarf: false, umbrella: false, lantern: false },
   wear: { sweater: 0, scarf: 0, umbrella: 0, lantern: 0 },
   say: '', sayT: 0,
   blinkT: 2, phase: 0,
-  pose: { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, slate: 0, jitter: 0, head: 0 },
+  pose: { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, paper: 0, jitter: 0, head: 0 },
 };
+
+// where things stand. positions are fractions of the width so the room
+// fits a phone; sizes follow `u`, his own scale.
+function layout() {
+  const u = Math.max(7, Math.min(10, H / 38));
+  return {
+    u, floorY: H * 0.8,
+    doorOut: -W * 0.36, mail: -W * 0.2, outRange: [-W * 0.1, W * 0.4],
+    doorIn: W * 0.4, fire: -W * 0.36, chair: -W * 0.17, win: W * 0.01, desk: W * 0.21,
+    seat: W * 0.21 - u * 1.3, inRange: [-W * 0.05, W * 0.3],
+  };
+}
 
 function think() {
   const d = decide(world, me);
   for (const k of Object.keys(d.wear)) me.wearing[k] = d.wear[k];
-  if (d.act !== me.act) { me.act = d.act; me.actT = 0; }
-  if (d.say) { me.say = d.say; me.sayT = 3.2; }
-  if (me.act === 'wander' && Math.abs(me.targetX - me.x) < 4) {
-    me.targetX = (Math.random() * 2 - 1) * W * 0.32;
+  if (d.act !== me.act) {
+    me.act = d.act; me.actT = 0; me.sitT = 0;
+    const h = HOLD[d.act]; me.hold = h ? h[0] + Math.random() * (h[1] - h[0]) : 2;
+    const L = layout();
+    const at = {
+      fetch: L.mail, goIn: L.doorOut, goOut: L.doorIn, fire: L.chair, sleep: L.chair,
+      desk: L.seat, read: L.seat, window: L.win,
+    }[d.act];
+    if (at !== undefined) me.targetX = at;
+    else if (d.act !== 'wander' && d.act !== 'potter') me.targetX = me.x;
   }
-  if (me.act !== 'wander') me.targetX = me.act === 'read' ? 0 : me.x;
+  if (d.say) { me.say = d.say; me.sayT = 3.2; }
+  if ((me.act === 'wander' || me.act === 'potter') && Math.abs(me.targetX - me.x) < 4) {
+    const L = layout(), r = me.act === 'wander' ? L.outRange : L.inRange;
+    me.targetX = r[0] + Math.random() * (r[1] - r[0]);
+  }
   renderThinking();
 }
 
 function renderThinking() {
   const worn = Object.keys(me.wearing).filter(k => me.wearing[k]);
   const doing = {
-    wander: 'wandering', idle: 'standing about', shiver: 'shivering', fan: 'fanning himself',
-    yawn: 'yawning', sleep: 'asleep', read: 'reading a text',
+    wander: 'wandering', potter: 'pottering about', idle: 'standing about', shiver: 'shivering',
+    fan: 'fanning himself', yawn: 'yawning', sleep: 'asleep in the chair', read: 'reading a letter at the desk',
+    fetch: 'fetching the post', goIn: 'heading in', goOut: 'heading out', fire: 'by the fire',
+    desk: 'at the desk', window: 'at the window',
   }[me.act];
   document.getElementById('thinking').textContent =
-    `he is ${doing}` + (worn.length ? ` · wearing ${worn.join(', ')}` : '');
+    `he is ${doing} · ${me.place === 'in' ? 'inside' : 'out'}` + (worn.length ? ` · wearing ${worn.join(', ')}` : '');
 }
 
-// the reading sequence: walk to the middle, take out the slate, read,
-// then hand the draft to you. he waits until you decide.
+// the reading sequence: fetch the post, carry it in, sit at the desk and
+// read, then hand the draft to you. he waits until you decide.
 let deskShown = false;
 function readStep() {
-  if (me.act !== 'read') return;
-  if (Math.abs(me.x) > 6 || me.actT < 1.8 || deskShown || !world.inbox.length) return;
+  if (me.act !== 'read' || me.place !== 'in') return;
+  if (me.sitT < 1.5 || deskShown || !world.inbox.length) return;
   const t = world.inbox[0];
   document.getElementById('deskFrom').textContent = `from ${t.from}`;
   document.getElementById('deskMsg').textContent = t.text;
   document.getElementById('deskDraft').value = t.draft;
-  document.getElementById('deskNote').textContent = 'a prototype — nothing leaves this page. the drafts are canned.';
   document.getElementById('desk').classList.add('open');
   deskShown = true;
 }
 
 function finishText(sent) {
   world.inbox.shift();
+  me.carrying = Math.max(0, me.carrying - 1);
   deskShown = false;
   document.getElementById('desk').classList.remove('open');
   me.say = sent ? 'sent.' : 'later, then.';
   me.sayT = 2.4;
-  if (!world.inbox.length) { me.act = 'idle'; me.actT = 0; think(); }
-  else { me.actT = 0; }
+  if (me.carrying) me.sitT = 0;
+  else { me.act = 'idle'; me.actT = 0; me.hold = 1; thinkT = 1.2; }
 }
 
 // target pose for each act at time t. the drawn pose eases toward it.
 function targetPose(t) {
-  const p = { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, slate: 0, jitter: 0, head: 0 };
+  const p = { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, paper: 0, jitter: 0, head: 0 };
   const breathe = Math.sin(t * 1.6) * 0.04;
   p.armL += breathe; p.armR += breathe;
+  const there = Math.abs(me.targetX - me.x) < 6;
   switch (me.act) {
-    case 'wander': p.lean = 0.06 * me.facing; break;
+    case 'wander': case 'potter': p.lean = 0.06 * me.facing; break;
     case 'shiver': p.armL = 0.9; p.armR = 0.9; p.jitter = 1; p.mouth = -0.3; break;
     case 'fan': p.armR = 2.2 + Math.sin(t * 9) * 0.35; p.mouth = 0.15; p.head = 0.1; break;
     case 'yawn': {
       const y = Math.max(0, Math.sin(Math.min(me.actT, 2.6) / 2.6 * Math.PI));
       p.armL = 0.15 + y * 2.6; p.armR = 0.15 + y * 2.6; p.mouth = y; p.eyes = 1 - y * 0.8; break;
     }
-    case 'sleep': p.sit = 1; p.eyes = 0; p.head = 0.35; p.armL = 0.5; p.armR = 0.5; break;
-    case 'read': if (Math.abs(me.x) < 8) { p.armL = 0.55; p.armR = 0.55; p.slate = 1; p.head = 0.12; } break;
+    case 'sleep': if (there) { p.sit = 1; p.eyes = 0; p.head = 0.35; p.armL = 0.5; p.armR = 0.5; } break;
+    case 'fire': if (there) { p.sit = 1; p.armL = 1.3 + Math.sin(t * 1.2) * 0.1; p.armR = 0.9; p.head = -0.15; } break;
+    case 'desk': if (there) { p.sit = 1; p.armL = 0.9; p.armR = 0.95 + Math.sin(t * 11) * 0.08; p.head = 0.12; } break;
+    case 'read': if (there) { p.sit = 1; p.armL = 0.6; p.armR = 0.6; p.paper = 1; p.head = 0.12; } break;
+    case 'window': if (there) { p.armL = 0.25; p.armR = 0.25; p.head = -0.08; } break;
+    case 'fetch': if (there) { p.armR = 1.4; p.head = 0.1; } break;
   }
   // gear overrides a hand: the umbrella takes the right, the lantern the left
   if (me.wear.umbrella > 0.05 && me.act !== 'fan') p.armR = Math.max(p.armR, 2.0 * me.wear.umbrella);
@@ -297,16 +418,28 @@ window.addEventListener('resize', resize);
 resize();
 
 // the far side's flora: a few odd stalks with bulbs, rooted along the ground.
+// the season lends them its colours.
+const SEASON_HUES = {
+  spring: [[214, 150, 190], [150, 200, 160]],
+  summer: [[176, 120, 168], [120, 168, 150]],
+  autumn: [[210, 140, 80], [176, 110, 70]],
+  winter: [[190, 196, 210], [160, 170, 190]],
+};
 const flora = Array.from({ length: 11 }, (_, i) => ({
   u: (i + 0.5) / 11 + (Math.random() - 0.5) * 0.05,
   h: 30 + Math.random() * 46, bulb: 3 + Math.random() * 4, ph: Math.random() * 6,
-  hue: Math.random() < 0.5 ? [176, 120, 168] : [120, 168, 150],
+  pick: Math.random() < 0.5 ? 0 : 1,
 }));
 const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.6, s: Math.random() }));
 const drops = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), v: 0.6 + Math.random() * 0.6 }));
+const bookColours = Array.from({ length: 12 }, (_, i) => [
+  [[150, 70, 60], [80, 100, 130], [170, 140, 70], [90, 120, 90], [120, 80, 110]][i % 5],
+  0.7 + ((i * 7) % 5) / 10,
+]);
 
 // eased world values, so the sky turns rather than snaps
-const env = { night: 0, rain: 0, cold: 0, heat: 0 };
+const env = { night: 0, rain: 0, cold: 0, heat: 0, fire: 0, flag: 0, scene: 1, seasonHues: SEASON_HUES.autumn };
+let seasonFrom = SEASON_HUES.autumn, seasonTo = SEASON_HUES.autumn, seasonK = 1;
 
 const mix = (a, b, t) => a + (b - a) * t;
 const mixC = (a, b, t) => a.map((v, i) => Math.round(mix(v, b[i], t)));
@@ -316,8 +449,9 @@ function groundY(x) { // a gentle planetary curve
   const cx = W / 2, R = W * 2.2;
   return H * 0.78 + (R - Math.sqrt(Math.max(0, R * R - (x - cx) * (x - cx))));
 }
+const floorAt = (x) => me.place === 'in' ? layout().floorY : groundY(x);
 
-function drawSky(t) {
+function skyColours() {
   const dayTop = [214, 170, 140], dayBot = [236, 214, 180];
   const nightTop = [14, 16, 34], nightBot = [44, 38, 70];
   let top = mixC(dayTop, nightTop, env.night), bot = mixC(dayBot, nightBot, env.night);
@@ -326,6 +460,17 @@ function drawSky(t) {
   top = mixC(top, [232, 140, 88], env.heat * 0.45 * (1 - env.night));
   top = mixC(top, [110, 112, 120], env.rain * 0.55);
   bot = mixC(bot, [150, 150, 156], env.rain * 0.5);
+  return { top, bot };
+}
+function groundColour() {
+  const day = [86, 72, 62], night = [24, 22, 34];
+  let c = mixC(day, night, env.night);
+  c = mixC(c, [196, 204, 212], env.cold * 0.7 * (env.cold > 0.75 ? 1 : 0.4)); // frost, then snow
+  return c;
+}
+
+function drawSky(t) {
+  const { top, bot } = skyColours();
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, rgb(top)); g.addColorStop(1, rgb(bot));
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -348,45 +493,105 @@ function drawSky(t) {
   const moonA = env.night * (1 - env.rain * 0.7);
   if (moonA > 0.02) {
     ctx.fillStyle = `rgba(232,226,206,${0.9 * moonA})`;
-    ctx.beginPath(); ctx.arc(W * 0.2, H * 0.2, 14, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(W * 0.62, H * 0.2, 14, 0, 7); ctx.fill();
     ctx.fillStyle = `rgba(200,180,214,${0.7 * moonA})`;
-    ctx.beginPath(); ctx.arc(W * 0.27, H * 0.12, 6, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(W * 0.69, H * 0.12, 6, 0, 7); ctx.fill();
+  }
+}
+
+function drawFlora(t, x, y, f, scale = 1) {
+  const droop = env.heat * 0.5 + env.cold * 0.25;
+  const sway = Math.sin(t * 0.9 + f.ph) * (0.08 + env.rain * 0.12);
+  const ang = sway + droop * (f.u < 0.5 ? -1 : 1);
+  const h = f.h * scale;
+  const tx = x + Math.sin(ang) * h, ty = y - Math.cos(ang) * h * (1 - droop * 0.4);
+  ctx.strokeStyle = rgb(mixC([70, 90, 76], [40, 44, 60], env.night), 0.9);
+  ctx.lineWidth = 1.6 * scale;
+  ctx.beginPath(); ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + Math.sin(ang) * h * 0.2, y - h * 0.6, tx, ty); ctx.stroke();
+  // the bulbs glow faintly at night, frost white in the cold
+  const hue = env.seasonHues[f.pick];
+  const bc = mixC(hue, [236, 240, 246], Math.min(1, env.cold * 1.2));
+  ctx.fillStyle = rgb(bc, 0.9);
+  ctx.beginPath(); ctx.arc(tx, ty, f.bulb * scale, 0, 7); ctx.fill();
+  if (env.night > 0.1) {
+    const gg = ctx.createRadialGradient(tx, ty, 0, tx, ty, f.bulb * 4 * scale);
+    gg.addColorStop(0, rgb(hue, 0.35 * env.night)); gg.addColorStop(1, rgb(hue, 0));
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(tx, ty, f.bulb * 4 * scale, 0, 7); ctx.fill();
   }
 }
 
 function drawGround(t) {
-  const day = [86, 72, 62], night = [24, 22, 34];
-  let c = mixC(day, night, env.night);
-  c = mixC(c, [196, 204, 212], env.cold * 0.7 * (env.cold > 0.75 ? 1 : 0.4)); // frost, then snow
-  ctx.fillStyle = rgb(c);
+  ctx.fillStyle = rgb(groundColour());
   ctx.beginPath(); ctx.moveTo(0, H);
   for (let x = 0; x <= W; x += 8) ctx.lineTo(x, groundY(x));
   ctx.lineTo(W, groundY(W)); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
-
   for (const f of flora) {
-    const x = f.u * W, y = groundY(x);
-    const droop = env.heat * 0.5 + env.cold * 0.25;
-    const sway = Math.sin(t * 0.9 + f.ph) * (0.08 + env.rain * 0.12);
-    const ang = sway + droop * (f.u < 0.5 ? -1 : 1);
-    const tx = x + Math.sin(ang) * f.h, ty = y - Math.cos(ang) * f.h * (1 - droop * 0.4);
-    ctx.strokeStyle = rgb(mixC([70, 90, 76], [40, 44, 60], env.night), 0.9);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + Math.sin(ang) * f.h * 0.2, y - f.h * 0.6, tx, ty); ctx.stroke();
-    // the bulbs glow faintly at night, frost white in the cold
-    let bc = mixC(f.hue, [236, 240, 246], Math.min(1, env.cold * 1.2));
-    ctx.fillStyle = rgb(bc, 0.9);
-    ctx.beginPath(); ctx.arc(tx, ty, f.bulb, 0, 7); ctx.fill();
-    if (env.night > 0.1) {
-      const gg = ctx.createRadialGradient(tx, ty, 0, tx, ty, f.bulb * 4);
-      gg.addColorStop(0, rgb(f.hue, 0.35 * env.night)); gg.addColorStop(1, rgb(f.hue, 0));
-      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(tx, ty, f.bulb * 4, 0, 7); ctx.fill();
-    }
+    const x = f.u * W;
+    if (x > W * 0.03 && x < W * 0.36) continue; // the hut stands here
+    drawFlora(t, x, groundY(x), f);
   }
 }
 
+// the hut, from outside: a wall, a roof, the door, a window the fire
+// shows through — and the mailbox by the path.
+function drawHut(t) {
+  const L = layout(), u = L.u;
+  const dx = W / 2 + L.doorOut, dy = groundY(dx);
+  const left = dx - u * 7, right = dx + u * 4.5, top = dy - u * 12;
+  const dark = env.night;
+  ctx.fillStyle = rgb(mixC([168, 148, 122], [54, 50, 60], dark * 0.7));
+  ctx.fillRect(left, top, right - left, dy - top + 2);
+  // roof
+  ctx.fillStyle = rgb(mixC([104, 76, 62], [30, 26, 34], dark * 0.7));
+  ctx.beginPath(); ctx.moveTo(left - u * 1.2, top + u * 0.3); ctx.lineTo((left + right) / 2, top - u * 4.2);
+  ctx.lineTo(right + u * 1.2, top + u * 0.3); ctx.closePath(); ctx.fill();
+  if (env.cold > 0.75) { // snow on the roof
+    ctx.strokeStyle = 'rgba(240,244,250,0.9)'; ctx.lineWidth = u * 0.35;
+    ctx.beginPath(); ctx.moveTo(left - u, top + u * 0.2); ctx.lineTo((left + right) / 2, top - u * 4);
+    ctx.lineTo(right + u, top + u * 0.2); ctx.stroke();
+  }
+  // chimney, and smoke when the fire is going
+  ctx.fillStyle = rgb(mixC([120, 92, 80], [36, 30, 36], dark * 0.7));
+  ctx.fillRect(right - u * 2.2, top - u * 3.4, u * 1.1, u * 3.2);
+  if (env.fire > 0.05) {
+    for (let i = 0; i < 4; i++) {
+      const k = (t * 0.25 + i / 4) % 1;
+      ctx.fillStyle = `rgba(220,214,206,${(1 - k) * 0.35 * env.fire})`;
+      ctx.beginPath();
+      ctx.arc(right - u * 1.65 + Math.sin(k * 6 + i) * u * 0.8, top - u * 3.6 - k * u * 5, u * (0.4 + k * 0.9), 0, 7);
+      ctx.fill();
+    }
+  }
+  // window, lit from inside by the fire
+  const wx = left + u * 1.4, wy = top + u * 3.4;
+  const glow = Math.max(env.fire * 0.8, 0.15) * (0.6 + dark * 0.4);
+  ctx.fillStyle = rgb(mixC([150, 160, 170], [255, 214, 140], glow));
+  ctx.fillRect(wx, wy, u * 2.4, u * 2.6);
+  ctx.strokeStyle = rgb(mixC([104, 76, 62], [30, 26, 34], dark * 0.7)); ctx.lineWidth = 1.5;
+  ctx.strokeRect(wx, wy, u * 2.4, u * 2.6);
+  ctx.beginPath(); ctx.moveTo(wx + u * 1.2, wy); ctx.lineTo(wx + u * 1.2, wy + u * 2.6); ctx.stroke();
+  // the door
+  ctx.fillStyle = rgb(mixC([92, 68, 56], [26, 22, 30], dark * 0.7));
+  ctx.beginPath(); ctx.moveTo(dx - u * 2, dy); ctx.lineTo(dx - u * 2, top + u * 4.2);
+  ctx.arc(dx, top + u * 4.2, u * 2, Math.PI, 0); ctx.lineTo(dx + u * 2, dy); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(217,179,106,0.9)';
+  ctx.beginPath(); ctx.arc(dx + u * 1.3, dy - u * 4, u * 0.22, 0, 7); ctx.fill();
+
+  // the mailbox: a post, a box, a flag that goes up when a text is in
+  const mx = W / 2 + L.mail, my = groundY(mx);
+  ctx.strokeStyle = rgb(mixC([92, 68, 56], [30, 26, 30], dark * 0.6)); ctx.lineWidth = u * 0.3;
+  ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx, my - u * 4.6); ctx.stroke();
+  ctx.fillStyle = rgb(mixC([84, 104, 132], [34, 40, 56], dark * 0.6));
+  ctx.beginPath(); ctx.roundRect(mx - u * 1.4, my - u * 6.4, u * 2.8, u * 1.9, u * 0.5); ctx.fill();
+  const fa = -Math.PI / 2 * env.flag; // flag swings up
+  ctx.strokeStyle = `rgba(190,62,58,${0.6 + 0.4 * env.flag})`; ctx.lineWidth = u * 0.28;
+  ctx.beginPath(); ctx.moveTo(mx + u * 1.3, my - u * 5.4);
+  ctx.lineTo(mx + u * 1.3 + Math.cos(fa) * u * 1.6, my - u * 5.4 + Math.sin(fa) * u * 1.6); ctx.stroke();
+}
+
 function drawWeather(dt) {
-  if (env.rain < 0.02) return;
+  if (env.rain < 0.02 || me.place === 'in') return;
   const snow = env.cold > 0.75;
   for (const d of drops) {
     d.y += dt * (snow ? 0.08 : 1.1) * d.v;
@@ -403,6 +608,198 @@ function drawWeather(dt) {
   }
 }
 
+// ---- inside: the nook ----------------------------------------------
+function drawRoom(t) {
+  const L = layout(), u = L.u, fy = L.floorY, dark = env.night;
+  const fire = env.fire, flick = fire * (0.85 + 0.15 * Math.sin(t * 9.3) * Math.sin(t * 5.1));
+  // wall and floor
+  ctx.fillStyle = rgb(mixC([196, 176, 150], [40, 36, 46], dark * 0.65));
+  ctx.fillRect(0, 0, W, fy);
+  ctx.fillStyle = rgb(mixC([120, 92, 66], [34, 28, 30], dark * 0.65));
+  ctx.fillRect(0, fy, W, H - fy);
+  ctx.strokeStyle = 'rgba(40,30,26,0.18)'; ctx.lineWidth = 1;
+  for (let x = (W / 2) % (u * 3); x < W; x += u * 3) { ctx.beginPath(); ctx.moveTo(x, fy); ctx.lineTo(x, H); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(40,30,26,0.25)'; ctx.fillRect(0, fy - 1, W, 2);
+
+  // firelight on everything
+  const hx = W / 2 + L.fire, hy = fy - u * 1.5;
+  if (fire > 0.02) {
+    const g = ctx.createRadialGradient(hx, hy, u, hx, hy, W * 0.6);
+    g.addColorStop(0, `rgba(255,190,110,${0.42 * flick})`); g.addColorStop(1, 'rgba(255,190,110,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  // the window: the field, seen from in here
+  const wx = W / 2 + L.win, wy = fy - u * 9.5, ww = u * 5.2, wh = u * 5.6;
+  const { top, bot } = skyColours();
+  const sg = ctx.createLinearGradient(0, wy, 0, wy + wh);
+  sg.addColorStop(0, rgb(top)); sg.addColorStop(1, rgb(bot));
+  ctx.fillStyle = sg; ctx.fillRect(wx - ww / 2, wy, ww, wh);
+  ctx.save(); ctx.beginPath(); ctx.rect(wx - ww / 2, wy, ww, wh); ctx.clip();
+  if (env.night > 0.05) {
+    ctx.fillStyle = `rgba(232,226,206,${0.9 * env.night * (1 - env.rain * 0.7)})`;
+    ctx.beginPath(); ctx.arc(wx + ww * 0.25, wy + wh * 0.3, u * 0.7, 0, 7); ctx.fill();
+    for (const s of stars.slice(0, 14)) {
+      ctx.fillStyle = `rgba(240,236,220,${env.night * 0.7})`;
+      ctx.fillRect(wx - ww / 2 + s.x * ww, wy + s.y * wh, 1.2, 1.2);
+    }
+  }
+  const gy = wy + wh * 0.72;
+  ctx.fillStyle = rgb(groundColour()); ctx.fillRect(wx - ww / 2, gy, ww, wh);
+  drawFlora(t, wx - ww * 0.3, gy + 2, flora[2], 0.42);
+  drawFlora(t, wx + ww * 0.28, gy + 2, flora[7], 0.36);
+  if (env.rain > 0.05) { // on the glass
+    ctx.strokeStyle = `rgba(220,230,246,${0.5 * env.rain})`; ctx.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      const k = (t * 0.35 + i * 0.37) % 1;
+      const x = wx - ww / 2 + ((i * 0.618) % 1) * ww, y = wy + k * wh;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1, y + u * 0.8); ctx.stroke();
+    }
+  }
+  if (env.cold > 0.5) { // frost in the corners
+    ctx.fillStyle = `rgba(236,242,250,${(env.cold - 0.5) * 0.8})`;
+    for (const [cx, cy] of [[wx - ww / 2, wy + wh], [wx + ww / 2, wy + wh], [wx - ww / 2, wy], [wx + ww / 2, wy]]) {
+      ctx.beginPath(); ctx.arc(cx, cy, u * 1.1, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+  const frame = rgb(mixC([92, 68, 56], [30, 26, 34], dark * 0.6));
+  ctx.strokeStyle = frame; ctx.lineWidth = u * 0.3; ctx.strokeRect(wx - ww / 2, wy, ww, wh);
+  ctx.lineWidth = u * 0.14;
+  ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx, wy + wh); ctx.moveTo(wx - ww / 2, wy + wh / 2); ctx.lineTo(wx + ww / 2, wy + wh / 2); ctx.stroke();
+  ctx.fillStyle = frame; ctx.fillRect(wx - ww / 2 - u * 0.4, wy + wh, ww + u * 0.8, u * 0.4);
+  // the sill plant — it grows with the days kept
+  const grown = Math.min(1, world.days / 90);
+  const px = wx + ww * 0.3, py = wy + wh;
+  ctx.fillStyle = rgb(mixC([176, 101, 63], [60, 40, 36], dark * 0.5));
+  ctx.beginPath(); ctx.moveTo(px - u * 0.6, py); ctx.lineTo(px + u * 0.6, py); ctx.lineTo(px + u * 0.45, py - u * 0.9); ctx.lineTo(px - u * 0.45, py - u * 0.9); ctx.closePath(); ctx.fill();
+  const leaves = 1 + Math.round(grown * 6);
+  ctx.strokeStyle = 'rgba(92,120,88,0.95)'; ctx.lineWidth = u * 0.14;
+  ctx.beginPath(); ctx.moveTo(px, py - u * 0.9); ctx.lineTo(px, py - u * (0.9 + 1.4 + grown * 1.8)); ctx.stroke();
+  ctx.fillStyle = 'rgba(140,176,112,0.95)';
+  for (let i = 0; i < leaves; i++) {
+    const s = i % 2 ? 1 : -1, ly = py - u * (1.6 + i * 0.45);
+    ctx.beginPath(); ctx.ellipse(px + s * u * 0.5, ly, u * 0.55, u * 0.22, s * 0.5, 0, 7); ctx.fill();
+  }
+
+  // the fireplace: surround, hearth, fire, and the day's logs beside it
+  const fw = u * 5, fh = u * 5.4, fx0 = hx - fw / 2;
+  ctx.fillStyle = rgb(mixC([150, 136, 120], [50, 46, 52], dark * 0.6));
+  ctx.fillRect(fx0 - u * 0.6, fy - fh - u * 0.8, fw + u * 1.2, fh + u * 0.8);
+  ctx.fillStyle = rgb(mixC([104, 76, 62], [36, 30, 34], dark * 0.6)); // mantel
+  ctx.fillRect(fx0 - u * 1, fy - fh - u * 1.2, fw + u * 2, u * 0.5);
+  ctx.fillStyle = 'rgba(20,14,14,0.95)';
+  ctx.fillRect(fx0, fy - fh + u * 0.4, fw, fh - u * 0.4);
+  if (fire > 0.02) {
+    const base = fy - u * 0.3, cx = hx;
+    for (let i = 0; i < 5; i++) {
+      const ph = t * 7 + i * 1.3, k = i / 5;
+      const fl = (0.5 + 0.5 * Math.sin(ph)) * 0.3 + 0.7;
+      const h = u * (1.2 + 2.6 * fire) * fl * (1 - k * 0.5), w = u * (1.6 - k * 0.9) * fire;
+      const x = cx + Math.sin(ph * 0.7) * u * 0.4 * k + (i - 2) * u * 0.5;
+      ctx.fillStyle = [`rgba(255,120,40,`, `rgba(255,170,60,`, `rgba(255,220,120,`, `rgba(255,240,180,`, `rgba(255,200,90,`][i] + `${0.75 * fire})`;
+      ctx.beginPath(); ctx.moveTo(x - w, base); ctx.quadraticCurveTo(x - w * 0.4, base - h * 0.6, x, base - h);
+      ctx.quadraticCurveTo(x + w * 0.4, base - h * 0.6, x + w, base); ctx.closePath(); ctx.fill();
+    }
+    const g = ctx.createRadialGradient(cx, base - u, 0, cx, base - u, u * 4);
+    g.addColorStop(0, `rgba(255,200,120,${0.45 * flick})`); g.addColorStop(1, 'rgba(255,200,120,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx0, fy - fh, fw, fh);
+  }
+  ctx.fillStyle = 'rgba(60,44,36,0.95)'; // grate logs
+  ctx.fillRect(hx - u * 1.6, fy - u * 0.5, u * 3.2, u * 0.35);
+  for (let i = 0; i < Math.min(8, world.logs); i++) { // the woodpile
+    const col = i % 4, row = Math.floor(i / 4);
+    const lx = fx0 + fw + u * (1.3 + col * 0.72) + (row ? u * 0.36 : 0), ly = fy - u * (0.45 + row * 0.62);
+    ctx.fillStyle = rgb(mixC([140, 104, 70], [50, 38, 32], dark * 0.5));
+    ctx.beginPath(); ctx.arc(lx, ly, u * 0.36, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,40,30,0.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(lx, ly, u * 0.18, 0, 7); ctx.stroke();
+  }
+  // books on the mantel — what has been read
+  const nb = Math.min(12, world.books);
+  let bx0 = fx0 - u * 0.6;
+  for (let i = 0; i < nb; i++) {
+    const [c, hgt] = bookColours[i], bw = u * 0.42, bh = u * hgt;
+    ctx.fillStyle = rgb(mixC(c, [30, 26, 30], dark * 0.5));
+    ctx.fillRect(bx0, fy - fh - u * 1.2 - bh, bw, bh);
+    bx0 += bw + 1.5;
+  }
+
+  // the chair, facing the fire
+  const cx = W / 2 + L.chair, seat = fy - u * 1.6;
+  ctx.fillStyle = rgb(mixC([116, 78, 70], [40, 30, 34], dark * 0.55));
+  ctx.beginPath(); ctx.roundRect(cx - u * 1.9, seat - u * 3.6, u * 1.1, u * 3.6, u * 0.4); ctx.fill(); // back
+  ctx.beginPath(); ctx.roundRect(cx - u * 2.1, seat, u * 4.6, u * 0.9, u * 0.3); ctx.fill();          // seat
+  ctx.fillStyle = 'rgba(40,30,26,0.8)';
+  ctx.fillRect(cx - u * 1.8, seat + u * 0.9, u * 0.3, u * 0.7); ctx.fillRect(cx + u * 2.1, seat + u * 0.9, u * 0.3, u * 0.7);
+  // a rug between chair and fire
+  ctx.fillStyle = rgb(mixC([150, 72, 60], [48, 30, 32], dark * 0.55));
+  ctx.beginPath(); ctx.ellipse((cx + hx) / 2, fy + u * 0.9, u * 5.2, u * 0.75, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(217,179,106,0.35)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.ellipse((cx + hx) / 2, fy + u * 0.9, u * 4.2, u * 0.5, 0, 0, 7); ctx.stroke();
+
+  // notes above the desk — the day's moments, pinned
+  const dx = W / 2 + L.desk;
+  const nn = Math.min(9, world.notes);
+  for (let i = 0; i < nn; i++) {
+    const col = i % 3, row = Math.floor(i / 3);
+    const nx = dx - u * 1.7 + col * u * 1.5, ny = fy - u * 10 + row * u * 1.5;
+    ctx.fillStyle = rgb(mixC([240, 232, 210], [80, 74, 70], dark * 0.5));
+    ctx.save(); ctx.translate(nx, ny); ctx.rotate(((i * 37) % 7 - 3) * 0.04);
+    ctx.fillRect(-u * 0.55, -u * 0.55, u * 1.1, u * 1.1);
+    ctx.strokeStyle = 'rgba(40,30,26,0.35)'; ctx.lineWidth = 1;
+    for (let l = 0; l < 3; l++) { ctx.beginPath(); ctx.moveTo(-u * 0.35, -u * 0.25 + l * u * 0.3); ctx.lineTo(u * 0.3, -u * 0.25 + l * u * 0.3); ctx.stroke(); }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(190,62,58,0.95)'; ctx.beginPath(); ctx.arc(nx, ny - u * 0.5, u * 0.12, 0, 7); ctx.fill();
+  }
+
+  // the door, at the right
+  const ddx = W / 2 + L.doorIn;
+  ctx.fillStyle = frame;
+  ctx.fillRect(ddx - u * 2.4, fy - u * 10.4, u * 4.8, u * 10.4);
+  ctx.fillStyle = rgb(mixC([132, 98, 74], [40, 32, 36], dark * 0.6));
+  ctx.fillRect(ddx - u * 2, fy - u * 10, u * 4, u * 10);
+  ctx.strokeStyle = 'rgba(40,30,26,0.3)'; ctx.lineWidth = 1.2;
+  ctx.strokeRect(ddx - u * 1.4, fy - u * 9, u * 2.8, u * 3.4); ctx.strokeRect(ddx - u * 1.4, fy - u * 4.8, u * 2.8, u * 3.8);
+  ctx.fillStyle = 'rgba(217,179,106,0.9)'; ctx.beginPath(); ctx.arc(ddx - u * 1.5, fy - u * 5.4, u * 0.22, 0, 7); ctx.fill();
+}
+
+// the desk is drawn after him so he sits at it, not in front of it
+function drawDesk(t) {
+  const L = layout(), u = L.u, fy = L.floorY, dark = env.night;
+  const dx = W / 2 + L.desk, top = fy - u * 3.2;
+  const seated = (me.act === 'desk' || me.act === 'read') && me.pose.sit > 0.7;
+  ctx.fillStyle = rgb(mixC([116, 84, 60], [40, 30, 32], dark * 0.55));
+  ctx.fillRect(dx - u * 3.2, top, u * 6.4, u * 0.5);
+  ctx.fillRect(dx - u * 2.9, top + u * 0.5, u * 0.4, u * 2.7); ctx.fillRect(dx + u * 2.5, top + u * 0.5, u * 0.4, u * 2.7);
+  // the computer: a screen on a foot. dark until he sits down to it.
+  const sx = dx + u * 1.0, sy = top - u * 2.6;
+  ctx.fillStyle = 'rgba(40,36,40,0.95)';
+  ctx.fillRect(sx - u * 0.25, top - u * 0.5, u * 0.5, u * 0.5); ctx.fillRect(sx - u * 0.8, top - u * 0.15, u * 1.6, u * 0.15);
+  ctx.beginPath(); ctx.roundRect(sx - u * 1.5, sy - u * 1.1, u * 3, u * 2.2, u * 0.2); ctx.fill();
+  const on = seated ? 0.85 + 0.15 * Math.sin(t * 3) : 0;
+  ctx.fillStyle = rgb(mixC([60, 62, 70], [214, 228, 246], on));
+  ctx.fillRect(sx - u * 1.3, sy - u * 0.9, u * 2.6, u * 1.8);
+  if (on > 0.5) {
+    ctx.fillStyle = 'rgba(80,90,110,0.6)';
+    for (let l = 0; l < 4; l++) ctx.fillRect(sx - u * 1.1, sy - u * 0.6 + l * u * 0.38, u * (0.6 + ((l * 5) % 3) * 0.4), u * 0.12);
+    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 5);
+    g.addColorStop(0, `rgba(200,224,255,${0.22 * on})`); g.addColorStop(1, 'rgba(200,224,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, u * 5, 0, 7); ctx.fill();
+  }
+  // a lamp that comes on at night
+  const lx = dx - u * 2.4, ly = top - u * 2.4;
+  ctx.strokeStyle = 'rgba(40,30,26,0.9)'; ctx.lineWidth = u * 0.14;
+  ctx.beginPath(); ctx.moveTo(lx, top); ctx.lineTo(lx, ly); ctx.stroke();
+  ctx.fillStyle = rgb(mixC([84, 104, 132], [40, 44, 60], dark * 0.5));
+  ctx.beginPath(); ctx.moveTo(lx - u * 0.9, ly + u * 0.5); ctx.lineTo(lx + u * 0.9, ly + u * 0.5); ctx.lineTo(lx + u * 0.4, ly - u * 0.5); ctx.lineTo(lx - u * 0.4, ly - u * 0.5); ctx.closePath(); ctx.fill();
+  if (dark > 0.3) {
+    const g = ctx.createRadialGradient(lx, ly + u * 0.6, 0, lx, ly + u * 0.6, u * 4.5);
+    g.addColorStop(0, `rgba(255,224,160,${0.5 * dark})`); g.addColorStop(1, 'rgba(255,224,160,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(lx, ly + u * 0.6, u * 4.5, 0, 7); ctx.fill();
+  }
+}
+
 // an arm from the shoulder: angle 0 hangs down, π/2 points out, π up.
 function arm(sx, sy, ang, side, len) {
   const ex = sx + Math.sin(ang) * len * side * 0.55, ey = sy + Math.cos(ang) * len * 0.5;
@@ -412,14 +809,15 @@ function arm(sx, sy, ang, side, len) {
 }
 
 function drawHim(t) {
-  const u = Math.max(7, Math.min(10, H / 38));
+  const u = layout().u;
   const p = me.pose;
   const jx = p.jitter ? (Math.random() - 0.5) * 2.2 : 0;
-  const bx = W / 2 + me.x + jx, by = groundY(W / 2 + me.x);
+  const bx = W / 2 + me.x + jx, by = floorAt(W / 2 + me.x);
   const bob = me.walking * Math.abs(Math.sin(me.phase)) * -u * 0.35;
-  const hipY = by - u * 3.2 + p.sit * u * 1.9 + bob;
+  const hipY = by - u * 3.2 + p.sit * u * 1.6 + bob;
   const skin = [232, 220, 196], coat = [176, 101, 63];
   const lineC = 'rgba(40,30,26,0.85)';
+  ctx.globalAlpha = me.fade;
 
   // shadow
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -508,16 +906,18 @@ function drawHim(t) {
   }
   ctx.restore();
 
-  // the slate — his phone. glows; the text arrives on it.
-  if (p.slate > 0.05) {
-    const sx = (handL[0] + handR[0]) / 2, sy = (handL[1] + handR[1]) / 2 - u * 0.6;
-    ctx.fillStyle = `rgba(30,32,40,${p.slate})`;
-    ctx.fillRect(sx - u * 1.3, sy - u * 0.9, u * 2.6, u * 1.7);
-    ctx.fillStyle = `rgba(220,236,255,${0.85 * p.slate * (0.8 + 0.2 * Math.sin(t * 4))})`;
-    ctx.fillRect(sx - u * 1.1, sy - u * 0.7, u * 2.2, u * 1.3);
-    const lg = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 5);
-    lg.addColorStop(0, `rgba(200,224,255,${0.25 * p.slate})`); lg.addColorStop(1, 'rgba(200,224,255,0)');
-    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(sx, sy, u * 5, 0, 7); ctx.fill();
+  // the letter: an envelope in hand on the way in, a sheet held up to read
+  if (p.paper > 0.05) {
+    const sx = (handL[0] + handR[0]) / 2, sy = (handL[1] + handR[1]) / 2 - u * 0.7;
+    ctx.fillStyle = `rgba(242,236,218,${p.paper})`;
+    ctx.fillRect(sx - u * 1.2, sy - u * 1.0, u * 2.4, u * 1.9);
+    ctx.strokeStyle = `rgba(40,30,26,${0.4 * p.paper})`; ctx.lineWidth = 1;
+    for (let l = 0; l < 4; l++) { ctx.beginPath(); ctx.moveTo(sx - u * 0.9, sy - u * 0.6 + l * u * 0.38); ctx.lineTo(sx + u * (0.2 + ((l * 3) % 4) * 0.2), sy - u * 0.6 + l * u * 0.38); ctx.stroke(); }
+  } else if (me.carrying) {
+    ctx.fillStyle = 'rgba(242,236,218,0.98)';
+    ctx.fillRect(handR[0] - u * 0.2, handR[1] - u * 0.5, u * 1.5, u * 1);
+    ctx.strokeStyle = 'rgba(40,30,26,0.5)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(handR[0] - u * 0.2, handR[1] - u * 0.5); ctx.lineTo(handR[0] + u * 0.55, handR[1] + u * 0.1); ctx.lineTo(handR[0] + u * 1.3, handR[1] - u * 0.5); ctx.stroke();
   }
 
   // the lantern, swinging from the left hand
@@ -555,21 +955,28 @@ function drawHim(t) {
     ctx.fillStyle = 'rgba(240,236,220,0.7)'; ctx.font = `italic ${u * 1.3}px Georgia`;
     for (let i = 0; i < 3; i++) {
       const k = (t * 0.4 + i / 3) % 1;
-      ctx.globalAlpha = 1 - k;
+      ctx.globalAlpha = me.fade * (1 - k);
       ctx.fillText('z', bx + u * 1.6 + k * u * 2.4, hipY - u * 5.6 - k * u * 4);
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = me.fade;
   }
 
   // what he says, set in the world's italic
   if (me.sayT > 0) {
-    ctx.globalAlpha = Math.min(1, me.sayT * 2);
+    ctx.globalAlpha = me.fade * Math.min(1, me.sayT * 2);
     ctx.font = `italic ${Math.round(u * 1.6)}px Georgia`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = env.night > 0.5 ? 'rgba(240,236,220,0.92)' : 'rgba(40,30,26,0.88)';
-    ctx.fillText(me.say, bx, hipY - u * 9.5 - (me.wear.umbrella > 0.5 ? u * 2.5 : 0));
-    ctx.textAlign = 'start'; ctx.globalAlpha = 1;
+    const darkBg = me.place === 'in' ? env.night > 0.6 : env.night > 0.5;
+    const tx = Math.max(u * 6, Math.min(W - u * 6, bx));
+    const ty = hipY - u * 9.5 - (me.wear.umbrella > 0.5 ? u * 2.5 : 0);
+    ctx.lineJoin = 'round'; ctx.lineWidth = u * 0.5; // a halo, so the words read on any ground
+    ctx.strokeStyle = darkBg ? 'rgba(20,22,28,0.55)' : 'rgba(244,240,230,0.55)';
+    ctx.strokeText(me.say, tx, ty);
+    ctx.fillStyle = darkBg ? 'rgba(240,236,220,0.92)' : 'rgba(40,30,26,0.88)';
+    ctx.fillText(me.say, tx, ty);
+    ctx.textAlign = 'start';
   }
+  ctx.globalAlpha = 1;
 }
 
 // ------------------------------------------------------------------- loop
@@ -582,11 +989,16 @@ function frame(now) {
   env.rain = mix(env.rain, world.rain ? 1 : 0, k);
   env.cold = mix(env.cold, Math.max(0, Math.min(1, (12 - world.temp) / 18)), k);
   env.heat = mix(env.heat, Math.max(0, Math.min(1, (world.temp - 24) / 10)), k);
+  env.fire = mix(env.fire, fireLevel(world), k);
+  env.flag = mix(env.flag, world.mail ? 1 : 0, 1 - Math.exp(-dt * 5));
+  env.scene = mix(env.scene, me.place === 'in' ? 1 : 0, 1 - Math.exp(-dt * 6));
+  if (seasonK < 1) { seasonK = Math.min(1, seasonK + dt * 0.5); env.seasonHues = seasonFrom.map((c, i) => mixC(c, seasonTo[i], seasonK)); }
 
   thinkT -= dt;
   if (thinkT <= 0) { think(); thinkT = 1.1 + Math.random() * 1.4; }
-  me.actT += dt; me.sayT -= dt;
+  me.actT += dt; me.sayT -= dt; me.placeT += dt;
   me.blinkT -= dt; if (me.blinkT < 0) me.blinkT = 2 + Math.random() * 3;
+  if (me.pose.sit > 0.8) me.sitT += dt;
 
   // gear goes on one thing at a time, slowly, like dressing
   for (const g of Object.keys(me.wear)) {
@@ -596,12 +1008,35 @@ function frame(now) {
 
   // walking
   const dx = me.targetX - me.x;
-  const speed = (me.act === 'read' ? 60 : 34) * (world.tired ? 0.6 : 1) * (env.cold > 0.8 ? 0.8 : 1);
-  if (Math.abs(dx) > 3 && me.pose.sit < 0.2) {
+  const speed = (['fetch', 'read', 'goIn'].includes(me.act) ? 64 : 44) * (world.tired ? 0.75 : 1) * (env.cold > 0.8 && me.place === 'out' ? 0.8 : 1);
+  if (Math.abs(dx) > 3 && me.pose.sit < 0.2 && !me.passing) {
     me.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
     me.facing = Math.sign(dx); me.walking = Math.min(1, me.walking + dt * 4);
     me.phase += dt * speed * 0.18;
   } else me.walking = Math.max(0, me.walking - dt * 4);
+
+  // the door: at it, he goes through — a fade, a step, and he is on the other side
+  const L = layout();
+  if ((me.act === 'goIn' || me.act === 'goOut') && Math.abs(dx) <= 3 && !me.passing) me.passing = true;
+  if (me.passing) {
+    me.fade = Math.max(0, me.fade - dt * 2.4);
+    if (me.fade === 0) {
+      const goingIn = me.act === 'goIn';
+      me.place = goingIn ? 'in' : 'out'; me.placeT = 0; me.passing = false;
+      me.x = goingIn ? L.doorIn : L.doorOut;
+      me.targetX = me.x + (goingIn ? -L.u * 4 : L.u * 4);
+      me.act = 'idle'; me.actT = 0; me.hold = 0.8; thinkT = 1.0;
+      if (goingIn && world.night) me.wearing.lantern = false;
+      renderThinking();
+    }
+  } else me.fade = Math.min(1, me.fade + dt * 2.4);
+
+  // at the box: the post is taken, the flag drops
+  if (me.act === 'fetch' && Math.abs(dx) <= 6 && me.actT > 1.0 && world.mail) {
+    me.carrying += world.mail; world.mail = 0;
+    me.say = me.carrying > 1 ? `${me.carrying} letters.` : 'post!'; me.sayT = 2.2;
+    thinkT = 0.6;
+  }
 
   const tp = targetPose(t), pk = 1 - Math.exp(-dt * 7);
   for (const key of Object.keys(tp)) me.pose[key] = mix(me.pose[key], tp[key], pk);
@@ -610,9 +1045,17 @@ function frame(now) {
   readStep();
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  drawSky(t); drawGround(t); drawHim(t); drawWeather(dt);
+  if (me.place === 'in') {
+    drawRoom(t); drawHim(t); drawDesk(t);
+  } else {
+    drawSky(t); drawGround(t); drawHut(t); drawHim(t); drawWeather(dt);
+  }
+  // a breath of dark between the two places
+  const between = 1 - Math.abs(env.scene - 0.5) * 2;
+  if (between > 0.02) { ctx.fillStyle = `rgba(20,22,28,${between * 0.9})`; ctx.fillRect(0, 0, W, H); }
   requestAnimationFrame(frame);
 }
+me.x = layout().chair; me.targetX = me.x;
 requestAnimationFrame(frame);
 
 // ----------------------------------------------------------------- dials
@@ -620,34 +1063,52 @@ requestAnimationFrame(frame);
 // through the app's own store, so the sandbox or the base, whichever the
 // app is using) or the dials by hand. touching a dial takes the world into
 // your hands; the source line hands it back.
-const tempEl = document.getElementById('temp'), tempVal = document.getElementById('tempVal');
+const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const sourceEl = document.getElementById('source');
 let live = false, book = null, store = null, worldjs = null;
+const ranges = ['temp', 'logs', 'notes', 'books', 'days'];
 
+function setSeason(s) {
+  if (!SEASON_HUES[s]) return;
+  if (s !== world.season) { seasonFrom = env.seasonHues; seasonTo = SEASON_HUES[s]; seasonK = 0; }
+  world.season = s;
+}
 function showDials() {
-  tempEl.value = world.temp; tempVal.textContent = `${world.temp}°`;
+  for (const id of ranges) {
+    document.getElementById(id).value = world[id];
+    document.getElementById(id + 'Val').textContent = id === 'temp' ? `${world.temp}°` : world[id];
+  }
   for (const id of ['night', 'rain', 'tired']) {
     document.getElementById(id).setAttribute('aria-pressed', String(world[id]));
   }
+  document.getElementById('season').textContent = `season · ${world.season}`;
 }
 function byHand() {
   if (!live) return;
   live = false; renderSource();
 }
-tempEl.addEventListener('input', () => {
-  byHand(); world.temp = +tempEl.value; showDials(); thinkT = Math.min(thinkT, 0.25);
-});
+for (const id of ranges) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    byHand(); world[id] = +e.target.value; showDials(); thinkT = Math.min(thinkT, 0.25);
+  });
+}
 for (const id of ['night', 'rain', 'tired']) {
   document.getElementById(id).addEventListener('click', () => {
     byHand(); world[id] = !world[id]; showDials(); thinkT = 0.15;
   });
 }
+document.getElementById('season').addEventListener('click', () => {
+  byHand(); setSeason(SEASONS[(SEASONS.indexOf(world.season) + 1) % 4]); showDials();
+});
 showDials();
 
 // the mapping, day-book → his world. a low day is weather he dresses
 // for, never a punishment: mood is the warmth, fog comes in as rain,
 // a short night (the plate's two suns) or low energy makes him tired,
-// and the real clock brings the dark.
+// and the real clock brings the dark. the rest of the page furnishes
+// the room: habits done are logs for the fire, moments are notes pinned
+// above the desk, readings are books on the mantel, the days kept grow
+// the sill plant, and the season colours the field.
 function latest(date, tag) {
   const ms = store.momentsFor(date).filter(
     m => m.f.Value != null && String(m.f.Tag || '').trim().toLowerCase() === tag);
@@ -669,12 +1130,15 @@ function readBook() {
     rain: fog != null && fog >= 3,
     tired: !!w.twoSuns || (sleep != null && sleep < 6) || (energy != null && energy <= 1),
     night: hour < 6 || hour >= 20,
+    logs: d.HabitsDone || 0, notes: d.Moments || 0, books: store.readings().length,
+    days: d.DaysTracked || 0, season: d.Season,
     mood, fog, sleep, energy,
   };
 }
 function applyBook() {
   if (!live || !book) return;
-  for (const k of ['temp', 'rain', 'tired', 'night']) world[k] = book[k];
+  for (const k of ['temp', 'rain', 'tired', 'night', 'logs', 'notes', 'books', 'days']) world[k] = book[k];
+  setSeason(book.season);
   showDials(); thinkT = Math.min(thinkT, 0.25);
 }
 function renderSource() {
@@ -685,9 +1149,10 @@ function renderSource() {
   if (book.energy != null) parts.push(`energy ${book.energy}`);
   if (book.fog != null) parts.push(`fog ${+book.fog.toFixed(1)}`);
   if (book.sleep != null) parts.push(`sleep ${book.sleep}h`);
+  const house = `${book.logs} habit${book.logs === 1 ? '' : 's'} done · ${book.notes} moment${book.notes === 1 ? '' : 's'} · ${book.books} read · day ${book.days}`;
   const said = book.any
-    ? `today's book — ${parts.join(' · ') || 'a short night'}.`
-    : 'nothing measured in the book today; he keeps a mild day.';
+    ? `today's book — ${parts.join(' · ') || 'a short night'}; ${house}.`
+    : `nothing measured in the book today, so he keeps a mild day; ${house}.`;
   const span = document.createElement('span');
   span.textContent = live ? (book.any ? `following ${said}` : said) : `by hand. ${said} `;
   sourceEl.append(span);
@@ -719,8 +1184,9 @@ setInterval(() => { if (store && book) { book = readBook(); renderSource(); appl
 
 document.getElementById('text').addEventListener('click', () => {
   world.inbox.push(TEXTS[textIx++ % TEXTS.length]);
-  me.say = world.inbox.length > 1 ? `${world.inbox.length} waiting.` : 'oh — a text.';
-  me.sayT = 2.4; thinkT = 0;
+  world.mail += 1;
+  if (me.place === 'in') { me.say = 'was that the box?'; me.sayT = 2.4; }
+  thinkT = Math.min(thinkT, 0.4);
 });
 document.getElementById('send').addEventListener('click', () => finishText(true));
 document.getElementById('skip').addEventListener('click', () => finishText(false));
