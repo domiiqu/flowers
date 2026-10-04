@@ -625,6 +625,34 @@ count plainly. A one-line warning that the token lives in this browser only.
 > world-state is flattened onto its `Days` row (`world.dayStateFields`,
 > written by the day page) so the base can paint the plate from a formula.
 
+## the inhabitant (study — `inhabitant/`)
+
+A reactive counterpart to the deterministic plate: the world stays a
+function of the day, and **he** is the part that answers it. Split in two:
+
+- **body** — a fixed repertoire drawn in code (wander, idle, shiver, fan,
+  yawn, sleep, read) plus gear that eases on and off (sweater, scarf,
+  umbrella, lantern). No Blender, no generated imagery.
+- **brain** — one function, `decide(world, him) → { wear, act, say }`,
+  run every second or so. Rules today; the seam a model (Jev, Claude)
+  replaces later. The model only ever *chooses from the repertoire* — it
+  never draws.
+
+The study also mocks the text-reply loop: a text arrives, he walks out and
+reads it on his slate, hands you a draft, and you send or skip. Nothing
+sends; the drafts are canned.
+
+**The world follows the book.** The page reads today through the app's
+own `store`/`world.js` (sandbox or base, whichever the app uses): mood is
+the warmth (`-4° + 5° × mood`, nudged by energy), fog ≥ 3 comes in as
+rain, a short night (the plate's two suns, sleep < 6h) or energy ≤ 1
+makes him tired, and the real clock brings the dark. A low day is weather
+he dresses for — never a punishment. Touching a dial takes the world into
+your hands; one link hands it back.
+
+Still open: the real message relay (Mac `chat.db` or an iOS Shortcuts
+automation — iOS gives apps no direct read of Messages).
+
 ## first run
 No auth wall, no title screen. The sandbox seeds itself
 (`seedSandboxIfBare`) and the day is already alive. One whisper across the

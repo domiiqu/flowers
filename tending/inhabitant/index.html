@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="the inhabitant — a small being who lives on the far side and answers to the weather.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='11' r='5' fill='%23e8dcc4'/%3E%3Cellipse cx='16' cy='22' rx='6' ry='7' fill='%23b0653f'/%3E%3C/svg%3E">
+<title>the inhabitant</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --ink: rgba(244, 240, 230, 0.62);
+    --ink-strong: rgba(244, 240, 230, 0.92);
+    --ink-dim: rgba(244, 240, 230, 0.4);
+    --line: rgba(244, 240, 230, 0.14);
+    --gold: #d9b36a;
+    --accent: #c98d84;
+  }
+  * { margin: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--ink);
+    padding: 28px 16px 60px;
+  }
+  h1 {
+    font-weight: normal; font-style: italic; letter-spacing: 0.14em;
+    font-size: 1.3rem; text-align: center; color: var(--ink-strong);
+  }
+  .sub {
+    text-align: center; font-style: italic; font-size: 0.8rem; color: var(--ink-dim);
+    margin: 10px auto 0; max-width: 620px; line-height: 1.7;
+  }
+
+  .stage {
+    margin: 28px auto 0; max-width: 760px; border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; position: relative;
+  }
+  #world { display: block; width: 100%; height: 360px; touch-action: manipulation; }
+  .thinking {
+    position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px);
+    font-style: italic; font-size: 0.72rem; color: rgba(244, 240, 230, 0.78);
+    background: rgba(20, 22, 28, 0.42); border-radius: 6px; padding: 3px 8px;
+    pointer-events: none;
+  }
+
+  /* ---- the dials: the world's inputs, flipped by hand for now ------- */
+  .dials {
+    margin: 22px auto 0; max-width: 760px; display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px 22px;
+  }
+  .dial label {
+    display: flex; justify-content: space-between; font-style: italic; font-size: 0.76rem;
+    color: var(--ink-dim); margin-bottom: 6px;
+  }
+  .dial .val { color: var(--gold); }
+  .dial input[type="range"] { width: 100%; accent-color: var(--gold); }
+  .toggle {
+    width: 100%; background: none; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); font-family: inherit; font-style: italic; font-size: 0.84rem;
+    padding: 9px 10px; min-height: 40px; cursor: pointer; text-align: left;
+  }
+  .toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--ink-strong); }
+  .toggle[aria-pressed="true"]::after { content: ' · on'; color: var(--gold); }
+  .toggle.text { border-style: dashed; }
+  .source {
+    margin: 18px auto 0; max-width: 760px; font-style: italic; font-size: 0.78rem;
+    color: var(--ink-dim); line-height: 1.6;
+  }
+  .source button {
+    background: none; border: none; padding: 0 0 0 4px; color: var(--gold);
+    font-family: inherit; font-style: italic; font-size: inherit; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+
+  /* ---- the reply desk: he drafts, you decide ------------------------ */
+  .desk {
+    margin: 22px auto 0; max-width: 760px; border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px; display: none;
+  }
+  .desk.open { display: block; }
+  .desk .from { font-size: 0.72rem; font-style: italic; color: var(--ink-dim); }
+  .desk .msg { margin-top: 4px; color: var(--ink-strong); line-height: 1.5; }
+  .desk .draft-label { margin-top: 14px; font-size: 0.72rem; font-style: italic; color: var(--gold); }
+  .desk textarea {
+    margin-top: 6px; width: 100%; min-height: 64px; resize: vertical;
+    background: rgba(244, 240, 230, 0.04); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink-strong); font-family: inherit; font-size: 0.95rem; padding: 10px;
+  }
+  .desk .row { display: flex; gap: 10px; margin-top: 10px; }
+  .desk .row button {
+    flex: 1; min-height: 42px; border-radius: 8px; font-family: inherit; font-style: italic;
+    font-size: 0.9rem; cursor: pointer; background: none; color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .desk .row button.send { border-color: var(--gold); color: var(--ink-strong); }
+  .desk .note { margin-top: 10px; font-size: 0.7rem; font-style: italic; color: var(--ink-dim); }
+
+  footer {
+    max-width: 680px; margin: 48px auto 0; padding-top: 22px; border-top: 1px solid var(--line);
+    font-style: italic; font-size: 0.74rem; color: var(--ink-dim); line-height: 1.85; text-align: center;
+  }
+  footer strong { color: var(--ink); font-weight: normal; }
+</style>
+</head>
+<body>
+  <h1>the inhabitant</h1>
+  <p class="sub">he lives here. the world is the only thing you touch — turn the cold, bring the
+    night, let it rain, tell him you slept badly — and he decides what to do about it.
+    his world follows today's page in the day-book — or take the dials and set it by hand.</p>
+
+  <div class="stage">
+    <canvas id="world"></canvas>
+    <div class="thinking" id="thinking"></div>
+  </div>
+
+  <div class="source" id="source"></div>
+  <div class="dials">
+    <div class="dial">
+      <label for="temp">the cold <span class="val" id="tempVal"></span></label>
+      <input type="range" id="temp" min="-10" max="35" step="1" value="16">
+    </div>
+    <div class="dial"><button class="toggle" id="night" aria-pressed="false">night</button></div>
+    <div class="dial"><button class="toggle" id="rain" aria-pressed="false">rain</button></div>
+    <div class="dial"><button class="toggle" id="tired" aria-pressed="false">slept badly</button></div>
+    <div class="dial"><button class="toggle text" id="text">a text arrives</button></div>
+  </div>
+
+  <div class="desk" id="desk">
+    <div class="from" id="deskFrom"></div>
+    <div class="msg" id="deskMsg"></div>
+    <div class="draft-label">his draft</div>
+    <textarea id="deskDraft" aria-label="his draft reply"></textarea>
+    <div class="row">
+      <button id="skip">skip</button>
+      <button class="send" id="send">send</button>
+    </div>
+    <div class="note" id="deskNote">a prototype — nothing leaves this page. the drafts are canned.</div>
+  </div>
+
+  <footer>
+    <strong>how he works.</strong> a brain and a body, kept apart. the <strong>body</strong> is a
+    fixed repertoire, drawn in code — wander, shiver, bundle up, open the umbrella, light the
+    lantern, yawn, sleep, read. the <strong>brain</strong> is one function, <em>decide(world, him)</em>,
+    that looks at the world every second or so and picks from the repertoire. today it is a
+    handful of rules; it is the one seam a model (jev, claude) would replace. the model never
+    draws — it only chooses.
+  </footer>
+
+<script type="module">
+// ------------------------------------------------------------------ world
+// the inputs. in the real thing these come from the day-book (and the
+// texts from a relay); here the dials set them by hand.
+const world = { temp: 16, night: false, rain: false, tired: false, inbox: [] };
+
+const TEXTS = [
+  { from: 'sam', text: 'are we still on for friday?', draft: 'yes! friday still works — 7 at the usual?' },
+  { from: 'mum', text: 'did you eat today', draft: "i did, promise. soup. call you sunday?" },
+  { from: 'jules', text: 'can you send me that recipe', draft: "on it — i'll dig it out tonight." },
+  { from: 'ray', text: 'running 10 min late sorry!!', draft: 'no rush at all, see you soon.' },
+];
+let textIx = 0;
+
+// ------------------------------------------------------------------ brain
+// the seam. given the world and his current state, return what he wears,
+// what he does, and (only when something changed) what he says. a model
+// replaces this function and nothing else — it must answer from the same
+// fixed repertoire, so the body can always play it.
+const REPERTOIRE = ['wander', 'idle', 'shiver', 'fan', 'yawn', 'sleep', 'read'];
+
+function decide(w, me) {
+  const wear = {
+    sweater: w.temp < 10,
+    scarf: w.temp < 2,
+    umbrella: w.rain,
+    lantern: w.night,
+  };
+
+  let act;
+  if (w.inbox.length || me.act === 'read') act = 'read';
+  else if (w.night && w.tired) act = 'sleep';
+  else if (w.temp < 0 && !(wear.sweater && wear.scarf && Math.random() < 0.5)) act = 'shiver';
+  else if (w.temp > 29) act = Math.random() < 0.6 ? 'fan' : 'idle';
+  else if (w.tired) act = Math.random() < 0.35 ? 'yawn' : 'idle';
+  else if (w.night) act = Math.random() < 0.3 ? 'wander' : 'idle';
+  else act = Math.random() < 0.55 ? 'wander' : 'idle';
+
+  // he only speaks when something changes — a running commentary is noise
+  let say = null;
+  const was = me.wearing;
+  if (wear.sweater && !was.sweater) say = 'bit nippy.';
+  else if (wear.scarf && !was.scarf) say = 'properly cold now.';
+  else if (wear.umbrella && !was.umbrella) say = 'ah. rain.';
+  else if (!wear.umbrella && was.umbrella) say = "that's passed.";
+  else if (wear.lantern && !was.lantern) say = 'getting dark.';
+  else if (!wear.lantern && was.lantern) say = 'morning.';
+  else if (!wear.sweater && was.sweater) say = 'better.';
+  else if (act === 'sleep' && me.act !== 'sleep') say = 'just resting my eyes.';
+  else if (act === 'fan' && me.act !== 'fan') say = 'too warm.';
+  else if (act === 'yawn' && me.act !== 'yawn' && Math.random() < 0.4) say = 'long night.';
+
+  return { wear, act, say };
+}
+
+// ------------------------------------------------------------------- body
+// his state. `wear` values ease 0→1 so every change is a small motion —
+// the sweater pulls down, the umbrella opens — never a cut.
+const me = {
+  x: 0, targetX: 0, facing: 1, walking: 0,
+  act: 'idle', actT: 0,
+  wearing: { sweater: false, scarf: false, umbrella: false, lantern: false },
+  wear: { sweater: 0, scarf: 0, umbrella: 0, lantern: 0 },
+  say: '', sayT: 0,
+  blinkT: 2, phase: 0,
+  pose: { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, slate: 0, jitter: 0, head: 0 },
+};
+
+function think() {
+  const d = decide(world, me);
+  for (const k of Object.keys(d.wear)) me.wearing[k] = d.wear[k];
+  if (d.act !== me.act) { me.act = d.act; me.actT = 0; }
+  if (d.say) { me.say = d.say; me.sayT = 3.2; }
+  if (me.act === 'wander' && Math.abs(me.targetX - me.x) < 4) {
+    me.targetX = (Math.random() * 2 - 1) * W * 0.32;
+  }
+  if (me.act !== 'wander') me.targetX = me.act === 'read' ? 0 : me.x;
+  renderThinking();
+}
+
+function renderThinking() {
+  const worn = Object.keys(me.wearing).filter(k => me.wearing[k]);
+  const doing = {
+    wander: 'wandering', idle: 'standing about', shiver: 'shivering', fan: 'fanning himself',
+    yawn: 'yawning', sleep: 'asleep', read: 'reading a text',
+  }[me.act];
+  document.getElementById('thinking').textContent =
+    `he is ${doing}` + (worn.length ? ` · wearing ${worn.join(', ')}` : '');
+}
+
+// the reading sequence: walk to the middle, take out the slate, read,
+// then hand the draft to you. he waits until you decide.
+let deskShown = false;
+function readStep() {
+  if (me.act !== 'read') return;
+  if (Math.abs(me.x) > 6 || me.actT < 1.8 || deskShown || !world.inbox.length) return;
+  const t = world.inbox[0];
+  document.getElementById('deskFrom').textContent = `from ${t.from}`;
+  document.getElementById('deskMsg').textContent = t.text;
+  document.getElementById('deskDraft').value = t.draft;
+  document.getElementById('deskNote').textContent = 'a prototype — nothing leaves this page. the drafts are canned.';
+  document.getElementById('desk').classList.add('open');
+  deskShown = true;
+}
+
+function finishText(sent) {
+  world.inbox.shift();
+  deskShown = false;
+  document.getElementById('desk').classList.remove('open');
+  me.say = sent ? 'sent.' : 'later, then.';
+  me.sayT = 2.4;
+  if (!world.inbox.length) { me.act = 'idle'; me.actT = 0; think(); }
+  else { me.actT = 0; }
+}
+
+// target pose for each act at time t. the drawn pose eases toward it.
+function targetPose(t) {
+  const p = { armL: 0.15, armR: 0.15, sit: 0, lean: 0, eyes: 1, mouth: 0, slate: 0, jitter: 0, head: 0 };
+  const breathe = Math.sin(t * 1.6) * 0.04;
+  p.armL += breathe; p.armR += breathe;
+  switch (me.act) {
+    case 'wander': p.lean = 0.06 * me.facing; break;
+    case 'shiver': p.armL = 0.9; p.armR = 0.9; p.jitter = 1; p.mouth = -0.3; break;
+    case 'fan': p.armR = 2.2 + Math.sin(t * 9) * 0.35; p.mouth = 0.15; p.head = 0.1; break;
+    case 'yawn': {
+      const y = Math.max(0, Math.sin(Math.min(me.actT, 2.6) / 2.6 * Math.PI));
+      p.armL = 0.15 + y * 2.6; p.armR = 0.15 + y * 2.6; p.mouth = y; p.eyes = 1 - y * 0.8; break;
+    }
+    case 'sleep': p.sit = 1; p.eyes = 0; p.head = 0.35; p.armL = 0.5; p.armR = 0.5; break;
+    case 'read': if (Math.abs(me.x) < 8) { p.armL = 0.55; p.armR = 0.55; p.slate = 1; p.head = 0.12; } break;
+  }
+  // gear overrides a hand: the umbrella takes the right, the lantern the left
+  if (me.wear.umbrella > 0.05 && me.act !== 'fan') p.armR = Math.max(p.armR, 2.0 * me.wear.umbrella);
+  if (me.wear.lantern > 0.05 && me.act !== 'yawn' && me.act !== 'read') p.armL = Math.max(p.armL, 0.35);
+  return p;
+}
+
+// ------------------------------------------------------------------- draw
+const canvas = document.getElementById('world');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// the far side's flora: a few odd stalks with bulbs, rooted along the ground.
+const flora = Array.from({ length: 11 }, (_, i) => ({
+  u: (i + 0.5) / 11 + (Math.random() - 0.5) * 0.05,
+  h: 30 + Math.random() * 46, bulb: 3 + Math.random() * 4, ph: Math.random() * 6,
+  hue: Math.random() < 0.5 ? [176, 120, 168] : [120, 168, 150],
+}));
+const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.6, s: Math.random() }));
+const drops = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), v: 0.6 + Math.random() * 0.6 }));
+
+// eased world values, so the sky turns rather than snaps
+const env = { night: 0, rain: 0, cold: 0, heat: 0 };
+
+const mix = (a, b, t) => a + (b - a) * t;
+const mixC = (a, b, t) => a.map((v, i) => Math.round(mix(v, b[i], t)));
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+function groundY(x) { // a gentle planetary curve
+  const cx = W / 2, R = W * 2.2;
+  return H * 0.78 + (R - Math.sqrt(Math.max(0, R * R - (x - cx) * (x - cx))));
+}
+
+function drawSky(t) {
+  const dayTop = [214, 170, 140], dayBot = [236, 214, 180];
+  const nightTop = [14, 16, 34], nightBot = [44, 38, 70];
+  let top = mixC(dayTop, nightTop, env.night), bot = mixC(dayBot, nightBot, env.night);
+  top = mixC(top, [150, 172, 196], env.cold * 0.45 * (1 - env.night * 0.6));
+  bot = mixC(bot, [200, 214, 226], env.cold * 0.4 * (1 - env.night * 0.6));
+  top = mixC(top, [232, 140, 88], env.heat * 0.45 * (1 - env.night));
+  top = mixC(top, [110, 112, 120], env.rain * 0.55);
+  bot = mixC(bot, [150, 150, 156], env.rain * 0.5);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgb(top)); g.addColorStop(1, rgb(bot));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  if (env.night > 0.02) {
+    for (const s of stars) {
+      const tw = 0.5 + 0.5 * Math.sin(t * (1 + s.s * 2) + s.x * 40);
+      ctx.fillStyle = `rgba(240,236,220,${env.night * (1 - env.rain * 0.8) * (0.3 + tw * 0.6)})`;
+      ctx.fillRect(s.x * W, s.y * H, 1.4, 1.4);
+    }
+  }
+  // two moons by night; one swollen sun by day — it is another planet
+  const sunA = (1 - env.night) * (1 - env.rain * 0.7);
+  if (sunA > 0.02) {
+    const sx = W * 0.78, sy = H * 0.22, r = 26 + env.heat * 14;
+    const sg = ctx.createRadialGradient(sx, sy, r * 0.3, sx, sy, r * 3);
+    sg.addColorStop(0, `rgba(255,236,190,${0.9 * sunA})`); sg.addColorStop(1, 'rgba(255,236,190,0)');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, r * 3, 0, 7); ctx.fill();
+  }
+  const moonA = env.night * (1 - env.rain * 0.7);
+  if (moonA > 0.02) {
+    ctx.fillStyle = `rgba(232,226,206,${0.9 * moonA})`;
+    ctx.beginPath(); ctx.arc(W * 0.2, H * 0.2, 14, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(200,180,214,${0.7 * moonA})`;
+    ctx.beginPath(); ctx.arc(W * 0.27, H * 0.12, 6, 0, 7); ctx.fill();
+  }
+}
+
+function drawGround(t) {
+  const day = [86, 72, 62], night = [24, 22, 34];
+  let c = mixC(day, night, env.night);
+  c = mixC(c, [196, 204, 212], env.cold * 0.7 * (env.cold > 0.75 ? 1 : 0.4)); // frost, then snow
+  ctx.fillStyle = rgb(c);
+  ctx.beginPath(); ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 8) ctx.lineTo(x, groundY(x));
+  ctx.lineTo(W, groundY(W)); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+  for (const f of flora) {
+    const x = f.u * W, y = groundY(x);
+    const droop = env.heat * 0.5 + env.cold * 0.25;
+    const sway = Math.sin(t * 0.9 + f.ph) * (0.08 + env.rain * 0.12);
+    const ang = sway + droop * (f.u < 0.5 ? -1 : 1);
+    const tx = x + Math.sin(ang) * f.h, ty = y - Math.cos(ang) * f.h * (1 - droop * 0.4);
+    ctx.strokeStyle = rgb(mixC([70, 90, 76], [40, 44, 60], env.night), 0.9);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + Math.sin(ang) * f.h * 0.2, y - f.h * 0.6, tx, ty); ctx.stroke();
+    // the bulbs glow faintly at night, frost white in the cold
+    let bc = mixC(f.hue, [236, 240, 246], Math.min(1, env.cold * 1.2));
+    ctx.fillStyle = rgb(bc, 0.9);
+    ctx.beginPath(); ctx.arc(tx, ty, f.bulb, 0, 7); ctx.fill();
+    if (env.night > 0.1) {
+      const gg = ctx.createRadialGradient(tx, ty, 0, tx, ty, f.bulb * 4);
+      gg.addColorStop(0, rgb(f.hue, 0.35 * env.night)); gg.addColorStop(1, rgb(f.hue, 0));
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(tx, ty, f.bulb * 4, 0, 7); ctx.fill();
+    }
+  }
+}
+
+function drawWeather(dt) {
+  if (env.rain < 0.02) return;
+  const snow = env.cold > 0.75;
+  for (const d of drops) {
+    d.y += dt * (snow ? 0.08 : 1.1) * d.v;
+    if (snow) d.x += Math.sin(d.y * 12 + d.v * 9) * 0.0008;
+    if (d.y > 1) { d.y = 0; d.x = Math.random(); }
+    const x = d.x * W, y = d.y * H;
+    if (snow) {
+      ctx.fillStyle = `rgba(244,246,250,${0.8 * env.rain})`;
+      ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 7); ctx.fill();
+    } else {
+      ctx.strokeStyle = `rgba(210,220,236,${0.45 * env.rain})`;
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 10); ctx.stroke();
+    }
+  }
+}
+
+// an arm from the shoulder: angle 0 hangs down, π/2 points out, π up.
+function arm(sx, sy, ang, side, len) {
+  const ex = sx + Math.sin(ang) * len * side * 0.55, ey = sy + Math.cos(ang) * len * 0.5;
+  const hx = sx + Math.sin(ang) * len * side, hy = sy + Math.cos(ang) * len;
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(ex + side * 3, ey, hx, hy); ctx.stroke();
+  return [hx, hy];
+}
+
+function drawHim(t) {
+  const u = Math.max(7, Math.min(10, H / 38));
+  const p = me.pose;
+  const jx = p.jitter ? (Math.random() - 0.5) * 2.2 : 0;
+  const bx = W / 2 + me.x + jx, by = groundY(W / 2 + me.x);
+  const bob = me.walking * Math.abs(Math.sin(me.phase)) * -u * 0.35;
+  const hipY = by - u * 3.2 + p.sit * u * 1.9 + bob;
+  const skin = [232, 220, 196], coat = [176, 101, 63];
+  const lineC = 'rgba(40,30,26,0.85)';
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath(); ctx.ellipse(bx, by + 1, u * 2.2, u * 0.45, 0, 0, 7); ctx.fill();
+
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = lineC; ctx.lineWidth = u * 0.42;
+  // legs
+  const swing = Math.sin(me.phase) * u * 0.9 * me.walking;
+  for (const s of [-1, 1]) {
+    const fx = bx + s * u * 0.7 + swing * s + p.sit * s * u * 0.9;
+    const fy = by - p.sit * u * 0.2;
+    ctx.beginPath(); ctx.moveTo(bx + s * u * 0.55, hipY);
+    ctx.quadraticCurveTo(bx + s * u * (0.7 + p.sit * 1.4), hipY + (fy - hipY) * 0.5 - p.sit * u * 0.8, fx, fy);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(bx, hipY); ctx.rotate(p.lean); ctx.translate(-bx, -hipY);
+  const torsoY = hipY - u * 1.9, shY = hipY - u * 3.1;
+
+  // torso: his own coat, with the sweater pulling down over it
+  ctx.fillStyle = rgb(coat);
+  ctx.beginPath(); ctx.ellipse(bx, torsoY, u * 1.55, u * 2.15, 0, 0, 7); ctx.fill();
+  if (me.wear.sweater > 0.01) {
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(bx, torsoY, u * 1.62, u * 2.2, 0, 0, 7); ctx.clip();
+    const reveal = (torsoY - u * 2.2) + u * 4.4 * me.wear.sweater;
+    ctx.fillStyle = rgb([84, 104, 132]);
+    ctx.fillRect(bx - u * 2, torsoY - u * 2.3, u * 4, reveal - (torsoY - u * 2.3));
+    ctx.fillStyle = 'rgba(236,228,206,0.55)'; // a knit stripe
+    for (const k of [-0.6, 0.5]) {
+      const sy = torsoY + k * u;
+      if (sy < reveal) ctx.fillRect(bx - u * 2, sy, u * 4, u * 0.28);
+    }
+    ctx.restore();
+  }
+
+  // arms (the sweater sleeves follow the sweater)
+  const armC = me.wear.sweater > 0.6 ? 'rgba(70,88,114,0.95)' : lineC;
+  ctx.strokeStyle = armC; ctx.lineWidth = u * 0.42;
+  const handL = arm(bx - u * 1.2, shY, p.armL, -1, u * 2.6);
+  const handR = arm(bx + u * 1.2, shY, p.armR, 1, u * 2.6);
+
+  // head
+  const hx = bx + Math.sin(p.head) * u * 0.6, hy = shY - u * 1.55 + Math.abs(p.head) * u * 0.3;
+  ctx.fillStyle = rgb(skin);
+  ctx.beginPath(); ctx.arc(hx, hy, u * 1.45, 0, 7); ctx.fill();
+  // the sprout on his head — he is from here, after all
+  const sp = Math.sin(t * 2.1) * 0.25 + p.head;
+  const spx = hx + Math.sin(sp) * u * 1.4, spy = hy - u * 1.4 - Math.cos(sp) * u * 1.2;
+  ctx.strokeStyle = 'rgba(92,120,88,0.95)'; ctx.lineWidth = u * 0.18;
+  ctx.beginPath(); ctx.moveTo(hx, hy - u * 1.35); ctx.quadraticCurveTo(hx, spy, spx, spy); ctx.stroke();
+  ctx.fillStyle = env.night > 0.4 ? `rgba(196,236,170,${0.6 + 0.4 * Math.sin(t * 3)})` : 'rgba(140,176,112,1)';
+  ctx.beginPath(); ctx.arc(spx, spy, u * 0.38, 0, 7); ctx.fill();
+
+  // face
+  const blink = me.blinkT < 0.12 ? 0 : 1;
+  const open = p.eyes * blink;
+  ctx.strokeStyle = lineC; ctx.fillStyle = lineC; ctx.lineWidth = u * 0.16;
+  for (const s of [-1, 1]) {
+    const ex = hx + s * u * 0.5, ey = hy - u * 0.15;
+    if (open > 0.3) { ctx.beginPath(); ctx.ellipse(ex, ey, u * 0.17, u * 0.24 * open, 0, 0, 7); ctx.fill(); }
+    else { ctx.beginPath(); ctx.moveTo(ex - u * 0.22, ey); ctx.lineTo(ex + u * 0.22, ey); ctx.stroke(); }
+  }
+  if (p.mouth > 0.2) {
+    ctx.beginPath(); ctx.ellipse(hx, hy + u * 0.55, u * 0.3, u * 0.45 * p.mouth, 0, 0, 7); ctx.fill();
+  } else if (p.mouth < -0.1) { // chattering
+    ctx.beginPath(); ctx.moveTo(hx - u * 0.35, hy + u * 0.55);
+    for (let i = 1; i <= 4; i++) ctx.lineTo(hx - u * 0.35 + i * u * 0.175, hy + u * (i % 2 ? 0.45 : 0.62));
+    ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(hx, hy + u * 0.35, u * 0.32, 0.2, Math.PI - 0.2); ctx.stroke();
+  }
+  if (me.act === 'fan' || (me.act === 'shiver' && Math.random() < 0.02)) {
+    ctx.fillStyle = 'rgba(160,200,230,0.8)';
+    ctx.beginPath(); ctx.ellipse(hx + u * 1.1, hy - u * 0.6 + (t * 6 % 3), u * 0.15, u * 0.25, 0, 0, 7); ctx.fill();
+  }
+
+  // scarf
+  if (me.wear.scarf > 0.01) {
+    ctx.strokeStyle = `rgba(184,64,58,${me.wear.scarf})`; ctx.lineWidth = u * 0.55;
+    ctx.beginPath(); ctx.moveTo(hx - u * 1.0, shY - u * 0.15); ctx.lineTo(hx + u * 1.0, shY - u * 0.15); ctx.stroke();
+    const tail = Math.sin(t * 2.4) * u * 0.3;
+    ctx.beginPath(); ctx.moveTo(hx + u * 0.6, shY); ctx.lineTo(hx + u * 0.9 + tail, shY + u * 1.4 * me.wear.scarf); ctx.stroke();
+  }
+  ctx.restore();
+
+  // the slate — his phone. glows; the text arrives on it.
+  if (p.slate > 0.05) {
+    const sx = (handL[0] + handR[0]) / 2, sy = (handL[1] + handR[1]) / 2 - u * 0.6;
+    ctx.fillStyle = `rgba(30,32,40,${p.slate})`;
+    ctx.fillRect(sx - u * 1.3, sy - u * 0.9, u * 2.6, u * 1.7);
+    ctx.fillStyle = `rgba(220,236,255,${0.85 * p.slate * (0.8 + 0.2 * Math.sin(t * 4))})`;
+    ctx.fillRect(sx - u * 1.1, sy - u * 0.7, u * 2.2, u * 1.3);
+    const lg = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 5);
+    lg.addColorStop(0, `rgba(200,224,255,${0.25 * p.slate})`); lg.addColorStop(1, 'rgba(200,224,255,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(sx, sy, u * 5, 0, 7); ctx.fill();
+  }
+
+  // the lantern, swinging from the left hand
+  if (me.wear.lantern > 0.01) {
+    const a = me.wear.lantern, sw = Math.sin(t * 2 + me.phase * 0.5) * 0.2;
+    const lx = handL[0] + Math.sin(sw) * u * 1.2, ly = handL[1] + u * 1.4;
+    const lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, u * 9);
+    lg.addColorStop(0, `rgba(255,214,140,${0.45 * a})`); lg.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(lx, ly, u * 9, 0, 7); ctx.fill();
+    ctx.strokeStyle = `rgba(40,30,26,${a})`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(handL[0], handL[1]); ctx.lineTo(lx, ly - u * 0.6); ctx.stroke();
+    ctx.fillStyle = `rgba(255,220,150,${a})`;
+    ctx.fillRect(lx - u * 0.45, ly - u * 0.6, u * 0.9, u * 1.1);
+  }
+
+  // the umbrella, opening as it rises
+  if (me.wear.umbrella > 0.01) {
+    const a = me.wear.umbrella;
+    const topY = handR[1] - u * 3.2 * a, cx = handR[0] - u * 0.8 * a;
+    ctx.strokeStyle = `rgba(40,30,26,${a})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(handR[0], handR[1]); ctx.lineTo(cx, topY); ctx.stroke();
+    const r = u * 3.6 * a;
+    ctx.fillStyle = `rgba(122,74,112,${0.95 * a})`;
+    ctx.beginPath(); ctx.moveTo(cx - r, topY + u * 0.4);
+    ctx.quadraticCurveTo(cx, topY - r * 0.9, cx + r, topY + u * 0.4);
+    for (let i = 3; i >= 0; i--) {
+      const x0 = cx - r + (i + 0.5) * (2 * r / 4);
+      ctx.quadraticCurveTo(x0 + r / 4, topY + u * 0.1, x0 - r / 4, topY + u * 0.4);
+    }
+    ctx.fill();
+  }
+
+  // zzz
+  if (me.act === 'sleep' && p.sit > 0.8) {
+    ctx.fillStyle = 'rgba(240,236,220,0.7)'; ctx.font = `italic ${u * 1.3}px Georgia`;
+    for (let i = 0; i < 3; i++) {
+      const k = (t * 0.4 + i / 3) % 1;
+      ctx.globalAlpha = 1 - k;
+      ctx.fillText('z', bx + u * 1.6 + k * u * 2.4, hipY - u * 5.6 - k * u * 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // what he says, set in the world's italic
+  if (me.sayT > 0) {
+    ctx.globalAlpha = Math.min(1, me.sayT * 2);
+    ctx.font = `italic ${Math.round(u * 1.6)}px Georgia`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = env.night > 0.5 ? 'rgba(240,236,220,0.92)' : 'rgba(40,30,26,0.88)';
+    ctx.fillText(me.say, bx, hipY - u * 9.5 - (me.wear.umbrella > 0.5 ? u * 2.5 : 0));
+    ctx.textAlign = 'start'; ctx.globalAlpha = 1;
+  }
+}
+
+// ------------------------------------------------------------------- loop
+let last = performance.now(), thinkT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = now / 1000;
+  const k = 1 - Math.exp(-dt * 1.4);
+  env.night = mix(env.night, world.night ? 1 : 0, k);
+  env.rain = mix(env.rain, world.rain ? 1 : 0, k);
+  env.cold = mix(env.cold, Math.max(0, Math.min(1, (12 - world.temp) / 18)), k);
+  env.heat = mix(env.heat, Math.max(0, Math.min(1, (world.temp - 24) / 10)), k);
+
+  thinkT -= dt;
+  if (thinkT <= 0) { think(); thinkT = 1.1 + Math.random() * 1.4; }
+  me.actT += dt; me.sayT -= dt;
+  me.blinkT -= dt; if (me.blinkT < 0) me.blinkT = 2 + Math.random() * 3;
+
+  // gear goes on one thing at a time, slowly, like dressing
+  for (const g of Object.keys(me.wear)) {
+    const to = me.wearing[g] ? 1 : 0;
+    me.wear[g] += Math.sign(to - me.wear[g]) * Math.min(Math.abs(to - me.wear[g]), dt * 0.9);
+  }
+
+  // walking
+  const dx = me.targetX - me.x;
+  const speed = (me.act === 'read' ? 60 : 34) * (world.tired ? 0.6 : 1) * (env.cold > 0.8 ? 0.8 : 1);
+  if (Math.abs(dx) > 3 && me.pose.sit < 0.2) {
+    me.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+    me.facing = Math.sign(dx); me.walking = Math.min(1, me.walking + dt * 4);
+    me.phase += dt * speed * 0.18;
+  } else me.walking = Math.max(0, me.walking - dt * 4);
+
+  const tp = targetPose(t), pk = 1 - Math.exp(-dt * 7);
+  for (const key of Object.keys(tp)) me.pose[key] = mix(me.pose[key], tp[key], pk);
+  me.pose.jitter = tp.jitter;
+
+  readStep();
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawSky(t); drawGround(t); drawHim(t); drawWeather(dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ----------------------------------------------------------------- dials
+// two sources for the world: the day-book (live — today's moments, read
+// through the app's own store, so the sandbox or the base, whichever the
+// app is using) or the dials by hand. touching a dial takes the world into
+// your hands; the source line hands it back.
+const tempEl = document.getElementById('temp'), tempVal = document.getElementById('tempVal');
+const sourceEl = document.getElementById('source');
+let live = false, book = null, store = null, worldjs = null;
+
+function showDials() {
+  tempEl.value = world.temp; tempVal.textContent = `${world.temp}°`;
+  for (const id of ['night', 'rain', 'tired']) {
+    document.getElementById(id).setAttribute('aria-pressed', String(world[id]));
+  }
+}
+function byHand() {
+  if (!live) return;
+  live = false; renderSource();
+}
+tempEl.addEventListener('input', () => {
+  byHand(); world.temp = +tempEl.value; showDials(); thinkT = Math.min(thinkT, 0.25);
+});
+for (const id of ['night', 'rain', 'tired']) {
+  document.getElementById(id).addEventListener('click', () => {
+    byHand(); world[id] = !world[id]; showDials(); thinkT = 0.15;
+  });
+}
+showDials();
+
+// the mapping, day-book → his world. a low day is weather he dresses
+// for, never a punishment: mood is the warmth, fog comes in as rain,
+// a short night (the plate's two suns) or low energy makes him tired,
+// and the real clock brings the dark.
+function latest(date, tag) {
+  const ms = store.momentsFor(date).filter(
+    m => m.f.Value != null && String(m.f.Tag || '').trim().toLowerCase() === tag);
+  return ms.length ? Number(ms[ms.length - 1].f.Value) : null;
+}
+function readBook() {
+  const date = store.todayISO();
+  const d = worldjs.dayStateFields(date, store.S.data);
+  const w = worldjs.computeWorldState(date, store.S.data);
+  const energy = latest(date, 'energy');
+  const hour = new Date().getHours();
+  const mood = d.Mood, fog = d.Fog, sleep = d.Sleep;
+  let temp = 16;
+  if (mood != null) temp = -4 + mood * 5;
+  if (energy != null) temp += (energy - 2.5) * 1.6;
+  return {
+    any: mood != null || fog != null || sleep != null || energy != null || w.twoSuns,
+    temp: Math.round(Math.max(-10, Math.min(35, temp))),
+    rain: fog != null && fog >= 3,
+    tired: !!w.twoSuns || (sleep != null && sleep < 6) || (energy != null && energy <= 1),
+    night: hour < 6 || hour >= 20,
+    mood, fog, sleep, energy,
+  };
+}
+function applyBook() {
+  if (!live || !book) return;
+  for (const k of ['temp', 'rain', 'tired', 'night']) world[k] = book[k];
+  showDials(); thinkT = Math.min(thinkT, 0.25);
+}
+function renderSource() {
+  sourceEl.textContent = '';
+  if (!book) { sourceEl.textContent = 'the dials are his whole world for now.'; return; }
+  const parts = [];
+  if (book.mood != null) parts.push(`mood ${+book.mood.toFixed(1)}`);
+  if (book.energy != null) parts.push(`energy ${book.energy}`);
+  if (book.fog != null) parts.push(`fog ${+book.fog.toFixed(1)}`);
+  if (book.sleep != null) parts.push(`sleep ${book.sleep}h`);
+  const said = book.any
+    ? `today's book — ${parts.join(' · ') || 'a short night'}.`
+    : 'nothing measured in the book today; he keeps a mild day.';
+  const span = document.createElement('span');
+  span.textContent = live ? (book.any ? `following ${said}` : said) : `by hand. ${said} `;
+  sourceEl.append(span);
+  if (!live) {
+    const b = document.createElement('button');
+    b.textContent = 'follow the book again';
+    b.addEventListener('click', () => { live = true; applyBook(); renderSource(); });
+    sourceEl.append(b);
+  }
+}
+async function loadBook() {
+  try {
+    store = store || await import('../src/store.js?v=22');
+    worldjs = worldjs || await import('../src/world.js?v=22');
+    await store.loadAll();
+    book = readBook();
+  } catch (e) {
+    console.warn('the day-book could not be read:', e);
+    book = null;
+  }
+  renderSource(); applyBook();
+}
+live = true; renderSource();
+loadBook();
+// the book moves while he lives: re-read when the page comes back into
+// view, and every few minutes so the clock can bring the night.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBook(); });
+setInterval(() => { if (store && book) { book = readBook(); renderSource(); applyBook(); } }, 120000);
+
+document.getElementById('text').addEventListener('click', () => {
+  world.inbox.push(TEXTS[textIx++ % TEXTS.length]);
+  me.say = world.inbox.length > 1 ? `${world.inbox.length} waiting.` : 'oh — a text.';
+  me.sayT = 2.4; thinkT = 0;
+});
+document.getElementById('send').addEventListener('click', () => finishText(true));
+document.getElementById('skip').addEventListener('click', () => finishText(false));
+</script>
+</body>
+</html>
