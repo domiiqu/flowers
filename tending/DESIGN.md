@@ -640,9 +640,18 @@ function of the day, and **he** is the part that answers it. Split in two:
 
 The study also mocks the text-reply loop: a text arrives, he walks out and
 reads it on his slate, hands you a draft, and you send or skip. Nothing
-sends; the drafts are canned. Still open: feeding `world` from the day's
-Moments instead of dials, and the real message relay (Mac `chat.db` or an
-iOS Shortcuts automation — iOS gives apps no direct read of Messages).
+sends; the drafts are canned.
+
+**The world follows the book.** The page reads today through the app's
+own `store`/`world.js` (sandbox or base, whichever the app uses): mood is
+the warmth (`-4° + 5° × mood`, nudged by energy), fog ≥ 3 comes in as
+rain, a short night (the plate's two suns, sleep < 6h) or energy ≤ 1
+makes him tired, and the real clock brings the dark. A low day is weather
+he dresses for — never a punishment. Touching a dial takes the world into
+your hands; one link hands it back.
+
+Still open: the real message relay (Mac `chat.db` or an iOS Shortcuts
+automation — iOS gives apps no direct read of Messages).
 
 ## first run
 No auth wall, no title screen. The sandbox seeds itself

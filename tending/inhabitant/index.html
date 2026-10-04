@@ -63,6 +63,15 @@
   .toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--ink-strong); }
   .toggle[aria-pressed="true"]::after { content: ' · on'; color: var(--gold); }
   .toggle.text { border-style: dashed; }
+  .source {
+    margin: 18px auto 0; max-width: 760px; font-style: italic; font-size: 0.78rem;
+    color: var(--ink-dim); line-height: 1.6;
+  }
+  .source button {
+    background: none; border: none; padding: 0 0 0 4px; color: var(--gold);
+    font-family: inherit; font-style: italic; font-size: inherit; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
 
   /* ---- the reply desk: he drafts, you decide ------------------------ */
   .desk {
@@ -98,13 +107,14 @@
   <h1>the inhabitant</h1>
   <p class="sub">he lives here. the world is the only thing you touch — turn the cold, bring the
     night, let it rain, tell him you slept badly — and he decides what to do about it.
-    nothing here is wired into tending yet; the dials stand in for the day-book.</p>
+    his world follows today's page in the day-book — or take the dials and set it by hand.</p>
 
   <div class="stage">
     <canvas id="world"></canvas>
     <div class="thinking" id="thinking"></div>
   </div>
 
+  <div class="source" id="source"></div>
   <div class="dials">
     <div class="dial">
       <label for="temp">the cold <span class="val" id="tempVal"></span></label>
@@ -606,19 +616,107 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // ----------------------------------------------------------------- dials
+// two sources for the world: the day-book (live — today's moments, read
+// through the app's own store, so the sandbox or the base, whichever the
+// app is using) or the dials by hand. touching a dial takes the world into
+// your hands; the source line hands it back.
 const tempEl = document.getElementById('temp'), tempVal = document.getElementById('tempVal');
-function showTemp() { world.temp = +tempEl.value; tempVal.textContent = `${world.temp}°`; }
-tempEl.addEventListener('input', () => { showTemp(); thinkT = Math.min(thinkT, 0.25); });
-showTemp();
+const sourceEl = document.getElementById('source');
+let live = false, book = null, store = null, worldjs = null;
 
+function showDials() {
+  tempEl.value = world.temp; tempVal.textContent = `${world.temp}°`;
+  for (const id of ['night', 'rain', 'tired']) {
+    document.getElementById(id).setAttribute('aria-pressed', String(world[id]));
+  }
+}
+function byHand() {
+  if (!live) return;
+  live = false; renderSource();
+}
+tempEl.addEventListener('input', () => {
+  byHand(); world.temp = +tempEl.value; showDials(); thinkT = Math.min(thinkT, 0.25);
+});
 for (const id of ['night', 'rain', 'tired']) {
-  const b = document.getElementById(id);
-  b.addEventListener('click', () => {
-    world[id] = !world[id];
-    b.setAttribute('aria-pressed', String(world[id]));
-    thinkT = 0.15;
+  document.getElementById(id).addEventListener('click', () => {
+    byHand(); world[id] = !world[id]; showDials(); thinkT = 0.15;
   });
 }
+showDials();
+
+// the mapping, day-book → his world. a low day is weather he dresses
+// for, never a punishment: mood is the warmth, fog comes in as rain,
+// a short night (the plate's two suns) or low energy makes him tired,
+// and the real clock brings the dark.
+function latest(date, tag) {
+  const ms = store.momentsFor(date).filter(
+    m => m.f.Value != null && String(m.f.Tag || '').trim().toLowerCase() === tag);
+  return ms.length ? Number(ms[ms.length - 1].f.Value) : null;
+}
+function readBook() {
+  const date = store.todayISO();
+  const d = worldjs.dayStateFields(date, store.S.data);
+  const w = worldjs.computeWorldState(date, store.S.data);
+  const energy = latest(date, 'energy');
+  const hour = new Date().getHours();
+  const mood = d.Mood, fog = d.Fog, sleep = d.Sleep;
+  let temp = 16;
+  if (mood != null) temp = -4 + mood * 5;
+  if (energy != null) temp += (energy - 2.5) * 1.6;
+  return {
+    any: mood != null || fog != null || sleep != null || energy != null || w.twoSuns,
+    temp: Math.round(Math.max(-10, Math.min(35, temp))),
+    rain: fog != null && fog >= 3,
+    tired: !!w.twoSuns || (sleep != null && sleep < 6) || (energy != null && energy <= 1),
+    night: hour < 6 || hour >= 20,
+    mood, fog, sleep, energy,
+  };
+}
+function applyBook() {
+  if (!live || !book) return;
+  for (const k of ['temp', 'rain', 'tired', 'night']) world[k] = book[k];
+  showDials(); thinkT = Math.min(thinkT, 0.25);
+}
+function renderSource() {
+  sourceEl.textContent = '';
+  if (!book) { sourceEl.textContent = 'the dials are his whole world for now.'; return; }
+  const parts = [];
+  if (book.mood != null) parts.push(`mood ${+book.mood.toFixed(1)}`);
+  if (book.energy != null) parts.push(`energy ${book.energy}`);
+  if (book.fog != null) parts.push(`fog ${+book.fog.toFixed(1)}`);
+  if (book.sleep != null) parts.push(`sleep ${book.sleep}h`);
+  const said = book.any
+    ? `today's book — ${parts.join(' · ') || 'a short night'}.`
+    : 'nothing measured in the book today; he keeps a mild day.';
+  const span = document.createElement('span');
+  span.textContent = live ? (book.any ? `following ${said}` : said) : `by hand. ${said} `;
+  sourceEl.append(span);
+  if (!live) {
+    const b = document.createElement('button');
+    b.textContent = 'follow the book again';
+    b.addEventListener('click', () => { live = true; applyBook(); renderSource(); });
+    sourceEl.append(b);
+  }
+}
+async function loadBook() {
+  try {
+    store = store || await import('../src/store.js?v=22');
+    worldjs = worldjs || await import('../src/world.js?v=22');
+    await store.loadAll();
+    book = readBook();
+  } catch (e) {
+    console.warn('the day-book could not be read:', e);
+    book = null;
+  }
+  renderSource(); applyBook();
+}
+live = true; renderSource();
+loadBook();
+// the book moves while he lives: re-read when the page comes back into
+// view, and every few minutes so the clock can bring the night.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBook(); });
+setInterval(() => { if (store && book) { book = readBook(); renderSource(); applyBook(); } }, 120000);
+
 document.getElementById('text').addEventListener('click', () => {
   world.inbox.push(TEXTS[textIx++ % TEXTS.length]);
   me.say = world.inbox.length > 1 ? `${world.inbox.length} waiting.` : 'oh — a text.';
