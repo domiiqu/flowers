@@ -625,6 +625,25 @@ count plainly. A one-line warning that the token lives in this browser only.
 > world-state is flattened onto its `Days` row (`world.dayStateFields`,
 > written by the day page) so the base can paint the plate from a formula.
 
+## the inhabitant (study — `inhabitant/`)
+
+A reactive counterpart to the deterministic plate: the world stays a
+function of the day, and **he** is the part that answers it. Split in two:
+
+- **body** — a fixed repertoire drawn in code (wander, idle, shiver, fan,
+  yawn, sleep, read) plus gear that eases on and off (sweater, scarf,
+  umbrella, lantern). No Blender, no generated imagery.
+- **brain** — one function, `decide(world, him) → { wear, act, say }`,
+  run every second or so. Rules today; the seam a model (Jev, Claude)
+  replaces later. The model only ever *chooses from the repertoire* — it
+  never draws.
+
+The study also mocks the text-reply loop: a text arrives, he walks out and
+reads it on his slate, hands you a draft, and you send or skip. Nothing
+sends; the drafts are canned. Still open: feeding `world` from the day's
+Moments instead of dials, and the real message relay (Mac `chat.db` or an
+iOS Shortcuts automation — iOS gives apps no direct read of Messages).
+
 ## first run
 No auth wall, no title screen. The sandbox seeds itself
 (`seedSandboxIfBare`) and the day is already alive. One whisper across the
