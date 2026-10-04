@@ -630,28 +630,43 @@ count plainly. A one-line warning that the token lives in this browser only.
 A reactive counterpart to the deterministic plate: the world stays a
 function of the day, and **he** is the part that answers it. Split in two:
 
-- **body** — a fixed repertoire drawn in code (wander, idle, shiver, fan,
-  yawn, sleep, read) plus gear that eases on and off (sweater, scarf,
-  umbrella, lantern). No Blender, no generated imagery.
+- **body** — a fixed repertoire drawn in code: wander, potter, sit by the
+  fire, sit at the desk, look out the window, fetch the post, go in, go
+  out, shiver, fan, yawn, sleep, read — plus gear that eases on and off
+  (sweater, scarf, umbrella, lantern). No Blender, no generated imagery.
 - **brain** — one function, `decide(world, him) → { wear, act, say }`,
-  run every second or so. Rules today; the seam a model (Jev, Claude)
-  replaces later. The model only ever *chooses from the repertoire* — it
-  never draws.
+  run every second or so. Weighted rules today, with a *hold* so he stays
+  with a thing once chosen; it is the seam a model (Jev, Claude) replaces
+  later. The model only ever *chooses from the repertoire* — it never
+  draws.
 
-The study also mocks the text-reply loop: a text arrives, he walks out and
-reads it on his slate, hands you a draft, and you send or skip. Nothing
-sends; the drafts are canned.
+**Two places, one door.** Inside is the nook: fireplace, chair and rug,
+a window on the field (its real sky and weather), a desk with a computer
+(dark until he sits to it — the work happens there later) and a lamp.
+Outside is the field, with the hut's front and a **mailbox** by the path.
+He goes through the door of his own accord: a nice day pulls him out, rain
+and hard cold keep him by the fire (with the odd trip out anyway), night
+and a bad night's sleep put him to sleep in the chair.
+
+**The mailbox is the texts.** A text arriving raises the flag; he goes
+out, fetches the post, carries the letter in, sits at the desk and reads
+it — and that is when the reply desk opens with his draft, for you to
+edit, send or skip. Nothing sends yet; the drafts are canned.
 
 **The world follows the book.** The page reads today through the app's
 own `store`/`world.js` (sandbox or base, whichever the app uses): mood is
 the warmth (`-4° + 5° × mood`, nudged by energy), fog ≥ 3 comes in as
 rain, a short night (the plate's two suns, sleep < 6h) or energy ≤ 1
-makes him tired, and the real clock brings the dark. A low day is weather
-he dresses for — never a punishment. Touching a dial takes the world into
-your hands; one link hands it back.
+makes him tired, and the real clock brings the dark. The rest of the page
+**furnishes the room, never grades it**: habits done are the logs by the
+fire (a bare day is still embers, not a cold house), moments are notes
+pinned above the desk, readings are books on the mantel, the days kept
+grow the sill plant, and the season colours the field. Touching a dial
+takes the world into your hands; one link hands it back.
 
 Still open: the real message relay (Mac `chat.db` or an iOS Shortcuts
-automation — iOS gives apps no direct read of Messages).
+automation — iOS gives apps no direct read of Messages), and what he
+does at the computer.
 
 ## first run
 No auth wall, no title screen. The sandbox seeds itself
