@@ -678,8 +678,17 @@ watches `chat.db`, posts each text with a draft written in *her* voice
 rows through Messages. Written before the Mac existed; untested against a
 real `chat.db` — see `relay/README.md`, whose first run is a dry run.
 
-Still open: running the relay for real, and what he does at the
-computer.
+**At the computer he reads.** No post, and he sits to the screen and
+reads Wikipedia — a page at random, or the day in history (its REST API
+answers a browser directly, no key, no server). Now and then he brings
+one back: a card under the stage, at most five a day and never two
+within ten minutes. *Shelve it* puts it in the cupboard through
+`store.shelveReading`, so a find is a reading like any other; *leave it*
+lets it go. Finds live in the browser (`inhabitant.finds`) and clear with
+the day. The app links to him from the day page and the cupboard; he
+links back.
+
+Still open: running the relay for real.
 
 ## first run
 No auth wall, no title screen. The sandbox seeds itself

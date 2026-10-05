@@ -104,6 +104,32 @@
   .desk .row button.send { border-color: var(--gold); color: var(--ink-strong); }
   .desk .note { margin-top: 10px; font-size: 0.7rem; font-style: italic; color: var(--ink-dim); }
 
+  /* ---- the finds: what he brings back from the desk ------------------ */
+  .finds { margin: 22px auto 0; max-width: 760px; display: none; }
+  .finds.open { display: block; }
+  .finds h3 {
+    font-weight: normal; font-style: italic; font-size: 0.8rem; letter-spacing: 0.08em;
+    color: var(--ink-dim); margin-bottom: 8px;
+  }
+  .find {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .find .kind { font-size: 0.7rem; font-style: italic; color: var(--gold); }
+  .find .title { margin-top: 3px; color: var(--ink-strong); line-height: 1.4; }
+  .find .title a { color: inherit; text-decoration: none; }
+  .find .title a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .find .extract { margin-top: 6px; font-size: 0.88rem; line-height: 1.55; }
+  .find .row { display: flex; gap: 10px; margin-top: 10px; }
+  .find .row button {
+    background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--ink);
+    font-family: inherit; font-style: italic; font-size: 0.82rem; padding: 7px 12px; min-height: 36px; cursor: pointer;
+  }
+  .find .row button.shelve { border-color: var(--gold); color: var(--ink-strong); }
+  .find .row button:disabled { opacity: 0.5; cursor: default; }
+  .find.shelved { opacity: 0.6; }
+  .sub a { color: var(--gold); text-decoration: none; }
+  .sub a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
   footer {
     max-width: 680px; margin: 48px auto 0; padding-top: 22px; border-top: 1px solid var(--line);
     font-style: italic; font-size: 0.74rem; color: var(--ink-dim); line-height: 1.85; text-align: center;
@@ -115,7 +141,8 @@
   <h1>the inhabitant</h1>
   <p class="sub">he lives here — a nook with a fire, a desk, a window on the field, and a door he
     uses when he feels like it. the world is the only thing you touch, and it follows today's
-    page in the day-book; or take the dials and set it by hand. a text goes in the mailbox.</p>
+    page in the day-book; or take the dials and set it by hand. a text goes in the mailbox.
+    <a href="../">back to the day-book</a></p>
 
   <div class="stage">
     <canvas id="world"></canvas>
@@ -169,13 +196,20 @@
     <div class="note" id="deskNote">a prototype — nothing leaves this page. the drafts are canned.</div>
   </div>
 
+  <div class="finds" id="finds">
+    <h3>what he found at the desk today</h3>
+    <div id="findList"></div>
+  </div>
+
   <footer>
     <strong>how he works.</strong> a brain and a body, kept apart. the <strong>body</strong> is a
     fixed repertoire, drawn in code — wander, potter, sit by the fire, sit at the desk, look out
     the window, fetch the post, go in, go out, shiver, yawn, sleep, read. the <strong>brain</strong>
     is one function, <em>decide(world, him)</em>, that looks at the world every second or so and
     picks from the repertoire. today it is a handful of rules; it is the one seam a model (jev,
-    claude) would replace. the model never draws — it only chooses.
+    claude) would replace. the model never draws — it only chooses. at the desk he reads —
+    wikipedia, a page at random or the day in history — and now and then brings something back;
+    shelve it and it goes to the cupboard as a reading.
   </footer>
 
 <script type="module">
@@ -300,7 +334,7 @@ function decide(w, me) {
 const me = {
   place: 'in', placeT: 0, fade: 1, passing: false,
   x: 0, targetX: 0, facing: 1, walking: 0,
-  act: 'idle', actT: 0, hold: 0, sitT: 0,
+  act: 'idle', actT: 0, hold: 0, sitT: 0, reading: false,
   carrying: 0, taken: false,
   wearing: { sweater: false, scarf: false, umbrella: false, lantern: false },
   wear: { sweater: 0, scarf: 0, umbrella: 0, lantern: 0 },
@@ -349,7 +383,7 @@ function renderThinking() {
     wander: 'wandering', potter: 'pottering about', idle: 'standing about', shiver: 'shivering',
     fan: 'fanning himself', yawn: 'yawning', sleep: 'asleep in the chair', read: 'reading a letter at the desk',
     fetch: 'fetching the post', goIn: 'heading in', goOut: 'heading out', fire: 'by the fire',
-    desk: 'at the desk', window: 'at the window',
+    desk: me.reading ? 'reading at the desk' : 'at the desk', window: 'at the window',
   }[me.act];
   document.getElementById('thinking').textContent =
     `he is ${doing} · ${me.place === 'in' ? 'inside' : 'out'}` + (worn.length ? ` · wearing ${worn.join(', ')}` : '');
@@ -1052,7 +1086,7 @@ function frame(now) {
   for (const key of Object.keys(tp)) me.pose[key] = mix(me.pose[key], tp[key], pk);
   me.pose.jitter = tp.jitter;
 
-  readStep();
+  readStep(); findStep();
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (me.place === 'in') {
@@ -1067,6 +1101,91 @@ function frame(now) {
 }
 me.x = layout().chair; me.targetX = me.x;
 requestAnimationFrame(frame);
+
+// ----------------------------------------------------------------- finds
+// what he does at the computer when there is no post: he reads. wikipedia,
+// because it answers a browser directly with no key and no server — a page
+// at random, or the day in history. now and then he brings one back. a
+// find is a card below; shelving it puts it in the cupboard as a reading.
+const FIND_GAP = 10 * 60 * 1000, FINDS_A_DAY = 5;
+const WIKI = 'https://en.wikipedia.org/api/rest_v1';
+let finds = [], finding = false;
+try { finds = JSON.parse(localStorage.getItem('inhabitant.finds')) || []; } catch { finds = []; }
+const todayKey = () => new Date().toISOString().slice(0, 10);
+const todaysFinds = () => finds.filter(f => f.date === todayKey());
+function saveFinds() {
+  finds = finds.filter(f => f.date >= todayKey()).slice(-30);
+  try { localStorage.setItem('inhabitant.finds', JSON.stringify(finds)); } catch { /* a private window */ }
+}
+async function wiki(path) {
+  const res = await fetch(`${WIKI}${path}`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`wikipedia ${res.status}`);
+  return res.json();
+}
+async function fetchFind() {
+  if (Math.random() < 0.4) {
+    const d = new Date();
+    const feed = await wiki(`/feed/onthisday/events/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`);
+    const events = (feed.events || []).filter(e => e.pages && e.pages[0] && e.text);
+    if (events.length) {
+      const e = events[Math.floor(Math.random() * events.length)], pg = e.pages[0];
+      return { kind: 'the day in history', title: `${e.year} — ${e.text}`, extract: pg.extract || '', url: pg.content_urls.desktop.page, name: pg.titles.normalized };
+    }
+  }
+  for (let tries = 0; tries < 3; tries++) {
+    const pg = await wiki('/page/random/summary');
+    if (pg.type !== 'standard' || !pg.extract || pg.extract.length < 160) continue;
+    return { kind: 'a page at random', title: pg.titles.normalized, extract: pg.extract, url: pg.content_urls.desktop.page, name: pg.titles.normalized };
+  }
+  return null;
+}
+function findStep() {
+  if (finding || me.act !== 'desk' || me.place !== 'in' || me.sitT < 3) return;
+  const mine = todaysFinds();
+  if (mine.length >= FINDS_A_DAY) return;
+  const lastAt = mine.length ? mine[mine.length - 1].at : 0;
+  if (Date.now() - lastAt < FIND_GAP) return;
+  finding = true; me.reading = true; renderThinking();
+  fetchFind().then(f => {
+    if (!f) return;
+    finds.push({ ...f, date: todayKey(), at: Date.now(), shelved: false });
+    saveFinds(); renderFinds();
+    me.say = ['oh — look at this.', 'huh.', 'did you know this?', 'this one is for you.'][Math.floor(Math.random() * 4)];
+    me.sayT = 3.2;
+  }).catch(e => console.warn('nothing found:', e.message))
+    .finally(() => { finding = false; me.reading = false; renderThinking(); });
+}
+function renderFinds() {
+  const list = document.getElementById('findList'), box = document.getElementById('finds');
+  const mine = todaysFinds().slice().reverse();
+  box.classList.toggle('open', mine.length > 0);
+  list.textContent = '';
+  for (const f of mine) {
+    const card = document.createElement('div'); card.className = 'find' + (f.shelved ? ' shelved' : '');
+    const kind = document.createElement('div'); kind.className = 'kind'; kind.textContent = f.kind;
+    const title = document.createElement('div'); title.className = 'title';
+    const a = document.createElement('a'); a.href = f.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = f.title;
+    title.append(a);
+    const ex = document.createElement('div'); ex.className = 'extract';
+    ex.textContent = f.extract.length > 320 ? f.extract.slice(0, 300).replace(/\s+\S*$/, '') + '…' : f.extract;
+    const row = document.createElement('div'); row.className = 'row';
+    const shelve = document.createElement('button'); shelve.className = 'shelve';
+    shelve.textContent = f.shelved ? 'in the cupboard' : 'shelve it in the cupboard';
+    shelve.disabled = !!f.shelved;
+    shelve.addEventListener('click', async () => {
+      if (!store) { try { store = await import('../src/store.js?v=23'); } catch { return; } }
+      await store.shelveReading({ url: f.url, title: f.name || f.title });
+      f.shelved = true; saveFinds(); renderFinds();
+      me.say = 'shelved.'; me.sayT = 2;
+    });
+    const leave = document.createElement('button'); leave.textContent = 'leave it';
+    leave.addEventListener('click', () => { finds = finds.filter(x => x !== f); saveFinds(); renderFinds(); });
+    row.append(shelve, leave);
+    card.append(kind, title, ex, row);
+    list.append(card);
+  }
+}
+renderFinds();
 
 // ----------------------------------------------------------------- dials
 // two sources for the world: the day-book (live — today's moments, read
