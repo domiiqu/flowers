@@ -228,6 +228,29 @@ export const SCHEMA = [
     { name: 'Style', type: 'multilineText' },
     { name: 'Planet', type: 'multilineText' },
   ]},
+  // the mailbox — texts, as the inhabitant receives them. A relay (the
+  // Mac beside her Messages, see tending/relay/) writes the incoming rows
+  // and sends the approved ones; the page reads, drafts, and marks. Key
+  // is the message's own id in the relay's world (chat.db ROWID, or a
+  // timestamp for a sample), so a replayed write never doubles a text.
+  { name: 'Mail', fields: [
+    { name: 'Key', type: 'singleLineText' },
+    { name: 'From', type: 'singleLineText' },
+    { name: 'Handle', type: 'singleLineText',
+      description: 'The phone number or address the reply goes back to. Set by the relay; the page never edits it.' },
+    { name: 'Text', type: 'multilineText' },
+    { name: 'Received', type: 'singleLineText', description: 'ISO timestamp.' },
+    { name: 'Draft', type: 'multilineText',
+      description: 'His draft. Written by the relay or an AI field; the page shows whatever is here.' },
+    { name: 'Reply', type: 'multilineText', description: 'What she approved — the words that go out.' },
+    { name: 'Status', type: 'singleSelect', options: { choices: [
+      { name: 'waiting', color: 'yellowLight1' },
+      { name: 'approved', color: 'blueLight1' },
+      { name: 'sent', color: 'greenLight1' },
+      { name: 'skipped', color: 'grayLight1' },
+      { name: 'failed', color: 'redLight1' } ] } },
+    { name: 'Decided', type: 'singleLineText', description: 'ISO timestamp of the send/skip.' },
+  ]},
   { name: 'Specimens', fields: [
     // Key is the date, never the Name — Name is hers to overwrite, and
     // upserting on Name would fork a duplicate every time she renamed one.
@@ -585,7 +608,7 @@ export const S = {
   data: {
     Habits: [], Tags: [], Ticks: [], Shop: [], Redemptions: [], Days: [], Moments: [], Hours: [],
     Markers: [], DayMarks: [], Instruments: [], Timeline: [], Ratings: [],
-    Canon: [], World: [], Specimens: [], Readings: [],
+    Canon: [], World: [], Specimens: [], Readings: [], Mail: [],
   },
   loaded: false,
   problem: null,
@@ -1069,6 +1092,33 @@ export async function markRead(key, read = true) {
 export async function forgetReading(key) {
   S.data.Readings = S.data.Readings.filter((r) => r.f.Key !== key);
   write({ kind: 'destroyByKey', table: 'Readings', key });
+}
+
+// the mailbox. `waiting` is what the inhabitant has not fetched yet;
+// answering marks the row and leaves the sending to the relay.
+export function mailWaiting() {
+  return S.data.Mail
+    .filter((m) => m.f.Key && (m.f.Status || 'waiting') === 'waiting')
+    .sort((a, b) => String(a.f.Received || a.f.Key).localeCompare(String(b.f.Received || b.f.Key)));
+}
+
+// drop a text in the box by hand — a sample on the study page, or a
+// relay-less day. Key is the moment it arrived, like Readings.
+export async function postMail({ from, text, handle, draft }) {
+  const key = new Date().toISOString();
+  const fields = { Key: key, From: from || '', Text: text || '', Received: key, Status: 'waiting' };
+  if (handle) fields.Handle = handle;
+  if (draft) fields.Draft = draft;
+  await upsertRow('Mail', 'Key', fields);
+  return key;
+}
+
+// approved rows carry the words that go out; the relay sends them and
+// marks `sent`. A skip is final for the page but keeps the text.
+export async function answerMail(key, { reply, status }) {
+  const fields = { Key: key, Status: status, Decided: new Date().toISOString() };
+  if (status === 'approved') fields.Reply = String(reply || '');
+  await upsertRow('Mail', 'Key', fields);
 }
 
 export function specimenFor(date) {

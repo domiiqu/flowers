@@ -664,9 +664,22 @@ pinned above the desk, readings are books on the mantel, the days kept
 grow the sill plant, and the season colours the field. Touching a dial
 takes the world into your hands; one link hands it back.
 
-Still open: the real message relay (Mac `chat.db` or an iOS Shortcuts
-automation — iOS gives apps no direct read of Messages), and what he
-does at the computer.
+**The post is real now, on paper.** A `Mail` table in the base (text
+keys, upsert on `Key`, like everything else): `From / Handle / Text /
+Received / Draft / Reply / Status (waiting · approved · sent · skipped ·
+failed) / Decided`. The page reads `waiting` rows as the mailbox, and
+*send* writes `Reply` + `approved`; *skip* writes `skipped`. Nothing on
+the page ever sends. The sending — and the arriving — is the job of
+`tending/relay/mac-relay.mjs`, a script for a Mac signed into her
+Messages (iOS gives no app a read of Messages; a Shortcuts "Message"
+automation needs a confirmation tap per text, so it is no mailbox). It
+watches `chat.db`, posts each text with a draft written in *her* voice
+(the inhabitant carries it, he does not sign it), and sends approved
+rows through Messages. Written before the Mac existed; untested against a
+real `chat.db` — see `relay/README.md`, whose first run is a dry run.
+
+Still open: running the relay for real, and what he does at the
+computer.
 
 ## first run
 No auth wall, no title screen. The sandbox seeds itself

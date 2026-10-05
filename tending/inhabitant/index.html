@@ -188,13 +188,15 @@ const world = {
   logs: 3, notes: 2, books: 3, days: 12, season: 'autumn',
 };
 
-const TEXTS = [
+// samples for the button — they go into the real Mail table (sandbox or
+// base), exactly as the relay would put a text there.
+const SAMPLES = [
   { from: 'sam', text: 'are we still on for friday?', draft: 'yes! friday still works — 7 at the usual?' },
   { from: 'mum', text: 'did you eat today', draft: "i did, promise. soup. call you sunday?" },
   { from: 'jules', text: 'can you send me that recipe', draft: "on it — i'll dig it out tonight." },
   { from: 'ray', text: 'running 10 min late sorry!!', draft: 'no rush at all, see you soon.' },
 ];
-let textIx = 0;
+let sampleIx = 0;
 
 // the fire: lit when the house wants it, and the day's logs decide how
 // much of a fire it is. no logs is still embers — a bare day is not a
@@ -360,15 +362,23 @@ function readStep() {
   if (me.act !== 'read' || me.place !== 'in') return;
   if (me.sitT < 1.5 || deskShown || !world.inbox.length) return;
   const t = world.inbox[0];
-  document.getElementById('deskFrom').textContent = `from ${t.from}`;
+  document.getElementById('deskFrom').textContent = `from ${t.from}` + (t.handle ? ` · ${t.handle}` : '');
   document.getElementById('deskMsg').textContent = t.text;
-  document.getElementById('deskDraft').value = t.draft;
+  document.getElementById('deskDraft').value = t.draft || '';
+  document.getElementById('deskDraft').placeholder = t.draft ? '' : 'no draft came with this one — write it here';
+  document.getElementById('deskNote').textContent = store && store.connected()
+    ? 'send marks the row approved in the base; the relay on the mac sends it and marks it sent.'
+    : 'in the sandbox nothing leaves this page — a reply is marked approved and waits for a relay.';
   document.getElementById('desk').classList.add('open');
   deskShown = true;
 }
 
 function finishText(sent) {
-  world.inbox.shift();
+  const t = world.inbox.shift();
+  if (t && store) {
+    const reply = document.getElementById('deskDraft').value.trim();
+    store.answerMail(t.key, sent && reply ? { reply, status: 'approved' } : { status: 'skipped' });
+  }
   me.carrying = Math.max(0, me.carrying - 1);
   deskShown = false;
   document.getElementById('desk').classList.remove('open');
@@ -1165,10 +1175,11 @@ function renderSource() {
 }
 async function loadBook() {
   try {
-    store = store || await import('../src/store.js?v=22');
-    worldjs = worldjs || await import('../src/world.js?v=22');
+    store = store || await import('../src/store.js?v=23');
+    worldjs = worldjs || await import('../src/world.js?v=23');
     await store.loadAll();
     book = readBook();
+    checkBox();
   } catch (e) {
     console.warn('the day-book could not be read:', e);
     book = null;
@@ -1182,12 +1193,36 @@ loadBook();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBook(); });
 setInterval(() => { if (store && book) { book = readBook(); renderSource(); applyBook(); } }, 120000);
 
-document.getElementById('text').addEventListener('click', () => {
-  world.inbox.push(TEXTS[textIx++ % TEXTS.length]);
-  world.mail += 1;
+document.getElementById('text').addEventListener('click', async () => {
+  const sample = SAMPLES[sampleIx++ % SAMPLES.length];
+  if (!store) { try { store = await import('../src/store.js?v=23'); } catch { return; } }
+  await store.postMail(sample);
+  checkBox();
+});
+
+// the box: rows in the Mail table still waiting. new ones raise the flag
+// and go in his inbox once (keyed, so a re-read never doubles a letter).
+const known = new Set();
+function checkBox() {
+  if (!store) return;
+  let fresh = 0;
+  for (const m of store.mailWaiting()) {
+    const key = m.f.Key;
+    if (known.has(key)) continue;
+    known.add(key);
+    world.inbox.push({ key, from: m.f.From || 'someone', handle: m.f.Handle || '', text: m.f.Text || '', draft: m.f.Draft || '' });
+    fresh += 1;
+  }
+  if (!fresh) return;
+  world.mail += fresh;
   if (me.place === 'in') { me.say = 'was that the box?'; me.sayT = 2.4; }
   thinkT = Math.min(thinkT, 0.4);
-});
+}
+// the relay writes to the base from the mac; look in the box every half minute
+setInterval(async () => {
+  if (!store || !store.connected()) return;
+  if (await store.reloadTable('Mail')) checkBox();
+}, 30000);
 document.getElementById('send').addEventListener('click', () => finishText(true));
 document.getElementById('skip').addEventListener('click', () => finishText(false));
 </script>
