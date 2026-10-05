@@ -265,6 +265,7 @@ export function mountDay(app, date) {
     h('a', { href: '#/hour' }, 'the hour'),
     h('a', { href: '#/gallery' }, 'the gallery'),
     h('a', { href: '#/cupboard' }, 'the cupboard'),
+    h('a', { href: 'inhabitant/' }, 'the inhabitant'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   root.appendChild(hints);
@@ -1276,6 +1277,7 @@ export function mountCupboard(app) {
   const hints = h('div', { class: 'hints' }, [
     h('a', { href: '#/day/' }, 'the day'),
     h('a', { href: '#/gallery' }, 'the gallery'),
+    h('a', { href: 'inhabitant/' }, 'the inhabitant'),
     h('a', { href: '#/tend' }, 'tend'),
   ]);
   app.appendChild(hints);
